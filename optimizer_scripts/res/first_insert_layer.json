@@ -1,0 +1,27 @@
+{
+	"LAYERNAME" :
+	{
+		"bias_bitwidth" : 16,
+		"LAYERNAME_bias" : [15],
+		"LAYERNAME_weight" : [3,3,3],
+		"conv_coarse_shift" : [-4,-4,-4],
+		"conv_fine_shift" : [0,0,0],
+		"conv_total_shift" : [-4,-4,-4],
+		"cpu_mode" : false,
+		"delta_input_bitwidth" : [0],
+		"delta_output_bitwidth" : 8,
+		"flag_radix_bias_eq_output" : true,
+		"input_scale" : [[1.0,1.0,1.0]],
+		"output_scale" : [1.0, 1.0, 1.0],
+		"psum_bitwidth" : 16,
+		"weight_bitwidth" : 8,
+		"input_datapath_bitwidth" : [8],
+		"input_datapath_radix" : [7],
+		"working_input_bitwidth" : 8,
+		"working_input_radix" : [7],
+		"working_output_bitwidth" : 16,
+		"working_output_radix" : 15,
+		"output_datapath_bitwidth" : 8,
+		"output_datapath_radix" : 7
+	}
+}

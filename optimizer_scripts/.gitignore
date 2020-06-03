@@ -1,0 +1,7 @@
+__pycache__
+.vscode
+*.pyc
+models.py
+temp.py
+.ssh/
+docker/test_models/
