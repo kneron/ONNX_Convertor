@@ -10,7 +10,7 @@ Read an HDF5 format Keras model into Onnx.
 
 * **Python 3**. Python 3.5 is recommanded. You can use Anaconda to create the virtual environment.
   For example, run `conda create -n kmc python=3.5` and then run `conda activate kmc`.
-* **onnx**. Recommand installing with `pip install onnx==1.3.0`.
+* **onnx**. Recommand installing with `pip install onnx==1.4.1`.
 * **keras**. Recommand installing with `pip install keras==2.2.4`.
 * **tensorflow**. Recommand inhstalling with `conda install -c conda-forge tensorflow`.
 
@@ -63,6 +63,10 @@ After that, you can play with the Onnx object as your with. And you can save the
 ```python
 converter.saveToFile(YOUR_PATH_HERE)
 ```
+
+## Supported Operators
+
+Please check [supported operators](Operators.md).
 
 ## Developer
 

@@ -7,7 +7,7 @@ This guide will give your some idea before diving into the codes. The basic prin
 ## NOTICE
 
 1. Please **clear the outputs** before committing ipython notebooks.
-2. **DO NOT** commit data large model files.
+2. **DO NOT** commit data large model files. If it is needed by certain test process, commit it using Git LFS.
 3. Onnx CNTK backend does not support Reshape operation.
 4. Onnx CNTK backend does not support BN with `epsilon != 1e-5`.
 5. Use np.tolist() to convert numpy array to list instead of list().
@@ -24,7 +24,7 @@ This guide will give your some idea before diving into the codes. The basic prin
 
 ## Modifications
 
-1. Duplicate shared layers to meet the SSA requirement.
+1. Duplicate shared layers.
 2. Share weights for shared layers.
 3. Extract the weight from the model into a node.
 4. The pad layer only cares about the H*W part.
@@ -71,10 +71,3 @@ class Conv2D(Layer):
 The `node_list` is a list, which contains the generated nodes. The `value_infos` is a list which contains the value informations between nodes.
 
 After your modification, you should run `refresh_layers.py` which generate a new `layer.py` to apply your changes.
-
-## Branch usage
-
-* master: the stable version.
-* dev: the branch based on master for debug usage.
-* new_op: the branch based on master for developing new operators
-* debug: the branch based on new_op for debug usage.

@@ -17,7 +17,7 @@ Models | CNTK | Tensorflow
 [MobileNet V2]|   √   |   o   |
 
 #### Problems
-However, there are still some flaws in CNTK and Tensorflow. So there might be some difference between the inferences. Here we list the problems.
+However, there are still some flaws in the CNTK. So there might be some difference between the inferences. Here we list the problems.
 1.	CNTK cannot deal with epsilon other than 1e-5 in the BatchNorm layer.
 2. In caffe, the output size of pooling layer is calculated by formular
 		*ceil((bottom_size + 2\*pad - kernel_size) / stride) + 1*
