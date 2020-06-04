@@ -172,14 +172,18 @@ Convert and optimize tensorflow models. If input file is frozen tensorflow .pb m
 convert to onnx model and do the custmized optimization afterwards. If input model is already
 onnx model, apply optimization and save optimized model.
 
-### 5.2. Basic Usage
+### 5.2 Dependency
+
+This scripts depends on the tensorflow-onnx project. Please [check and install it](https://github.com/onnx/tensorflow-onnx/tree/r1.5) before using this script. We currently support up to version 1.5.5. For other versions, you may need to try it our yourself.
+
+### 5.3. Basic Usage
 ```bash
 python tensorflow2onnx.py in_file out_file -t=True/False
 
 # -t --test, is the option for test mode, if True, shape change after input will not be eliminated.
 ```
 
-### 5.3. Model Save Paths
+### 5.4. Model Save Paths
 `in_file` is the input model path, `out_file` specifies output optimized model path.
 If input file is `.pb` model, an unoptimized onnx model will be saved to the output directory as well.
 
