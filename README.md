@@ -16,15 +16,15 @@ Note that what we support here is Keras, not `tf.Keras`. `tf.Keras` is actually 
 
 ## Caffe to ONNX
 
-The Caffe to ONNX converter support convert Caffe to ONNX. Since Caffe is an old platform which is using C++, our support for the Caffe is based on [`intel-caffe`](https://github.com/intel/caffe). Customized operators may not be supported. Please check folder` caffe-onnx`.
+The Caffe to ONNX converter support convert Caffe to ONNX. Since Caffe is an old platform which is using C++, our support for the Caffe is based on [`intel-caffe`](https://github.com/intel/caffe). We are currently using version 1.1.3. You may need to test other versions yourself.  Customized operators may not be supported. Please check folder` caffe-onnx`.
 
 ## Pytorch to ONNX
 
-Pytorch to onnx is achieved through the combination of the [`torch.onnx`](https://pytorch.org/docs/stable/onnx.html) and our optimizer under `optimizer_scripts` folder. Note that you may need to specify opset to 9 and set `keep_initializers_as_inputs=True` while you are exporting the model using `torch.onnx`. Please check `optimizer_scripts` folder.
+Pytorch to onnx is achieved through the combination of the [`torch.onnx`](https://pytorch.org/docs/stable/onnx.html) and our optimizer under `optimizer_scripts` folder. Note that you may need to specify opset to 9 and set `keep_initializers_as_inputs=True` while you are exporting the model using `torch.onnx`. Please check `optimizer_scripts` folder. We are currently using version 1.3.1. Other version's which has `torch.onnx` may also works. But versions earlier than 1.1.0 are not recommended.
 
 ## Tensorflow to ONNX
 
-Tensorflow to onnx is based on the open source project [`tensorflow-onnx`](https://github.com/onnx/tensorflow-onnx). Our `tensorflow2onnx.py` use the open source project to generate the ONNX file and optimize the generated ONNX. Currently, the Tensorflow model support is pretty limited. It is still under development. Please check `optimizer_scripts` folder.
+Tensorflow to onnx is based on the open source project [`tensorflow-onnx`](https://github.com/onnx/tensorflow-onnx). Our `tensorflow2onnx.py` use the open source project to generate the ONNX file and optimize the generated ONNX. Currently, the Tensorflow model support is pretty limited. It is still under development. Please check `optimizer_scripts` folder. We are currently using version 1.6.0. You can use the latest version of `tensorflow-onnx`. Just remember to set the onnx opset version to 9.
 
 ## Optimizers
 
