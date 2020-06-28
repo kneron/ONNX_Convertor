@@ -802,3 +802,50 @@ def fuse_conv_and_add_into_conv(g):
     
     topological_sort(g)
 
+
+def fuse_consecutive_reducemean(g):
+    node_to_del = []
+    for node in g.node:
+        # Find consecutive ReduceMean
+        if node.op_type != 'ReduceMean':
+            continue
+        pre_node = helper.find_node_by_output_name(g, node.input[0])
+        if pre_node is None or pre_node.op_type != 'ReduceMean':
+            continue
+        # Check attributes
+        pre_keepdims = helper.get_var_attribute_by_name(pre_node, 'keepdims', 'int')
+        pre_axes = helper.get_list_attribute_by_name(pre_node, 'axes', 'int')
+        cur_keepdims = helper.get_var_attribute_by_name(node, 'keepdims', 'int')
+        cur_axes = helper.get_list_attribute_by_name(node, 'axes', 'int')
+        if pre_keepdims != 0 or cur_keepdims != 0:
+            continue
+        axes = sorted(pre_axes + cur_axes)
+        if axes != [2, 3]:
+            continue
+        # Merge two ReduceMean into GlobalAveragePool.
+        new_gap_node = onnx.helper.make_node(
+            'GlobalAveragePool',
+            [pre_node.input[0]],
+            [node.output[0] + '_intermedia'],
+            name = node.name + '_gap'
+        )
+        new_flatten_node = onnx.helper.make_node(
+            'Flatten',
+            [node.output[0] + '_intermedia'],
+            [node.output[0]],
+            name = node.name + '_flatten',
+            axis = 1
+        )
+
+        # Clean up
+        g.node.extend([new_gap_node, new_flatten_node])
+        node_to_del.extend([pre_node, node])
+        mid_val_info = helper.find_value_by_name(g, node.input[0])
+        if mid_val_info:
+            g.value_info.remove(mid_val_info)
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    topological_sort(g)
