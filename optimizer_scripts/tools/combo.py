@@ -178,8 +178,6 @@ def postprocess(m):
 
     m = onnx.utils.polish_model(m)
 
-    eliminating.remove_useless_last_nodes(m.graph)
-    m = onnx.utils.polish_model(m)
     replacing.replace_depthwise_1x1_with_bn(m.graph)
     m = onnx.utils.polish_model(m)
 
