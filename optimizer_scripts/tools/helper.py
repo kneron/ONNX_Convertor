@@ -266,7 +266,10 @@ def get_var_attribute_by_name(node, attr_name: str, attr_type: str):
     elif attr_type == "float":
         return attr_proto.f
     elif attr_type == "string":
-        return attr_proto.s
+        if type(attr_proto.s) == type(b'abc'):
+            return attr_proto.s.decode("utf-8")
+        else:
+            return attr_proto.s
     elif attr_type == "tensor":
         return attr_proto.t
     else:

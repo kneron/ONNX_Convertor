@@ -262,7 +262,11 @@ def inference_upsample_shape(g):
         # Get input shape
         input_value = helper.find_value_by_name(g, node.input[0])
         if input_value is None:
-            raise RuntimeError("Shape for {} has not been generated.".format(node.input[0]))
+            continue
+            #raise RuntimeError("Shape for {} has not been generated.".format(node.input[0]))
+        if not helper.get_shape_from_value_info(input_value):
+            continue
+            #raise RuntimeError("Shape for {} is empty.".format(node.input[0]))
         input_shape = helper.get_shape_from_value_info(input_value)
         # Get upsample weight
         weight_node = helper.find_node_by_output_name(g, node.input[1])
@@ -284,29 +288,53 @@ def inference_upsample_shape(g):
 def inference_cov_shape(g):
     processed = False
     for node in g.node:
+        # Check for Conv output shape need to be inferrenced.
         if node.op_type != 'Conv':
             continue
+        # Input shape is not ready yet. Skip.
         input_value_info = helper.find_value_by_name(g, node.input[0])
         if not input_value_info:
             input_value_info = helper.find_input_by_name(g, node.input[0])
         if not input_value_info:
             continue
-
-        kernel_value_info = helper.find_value_by_name(g, node.input[1])
+        _, input_shape = helper.find_size_shape_from_value(input_value_info)
+        if not input_shape:
+            continue
+        # Output shape is already there. Skip.
         output_value_info = helper.find_value_by_name(g, node.output[0])
         if not output_value_info:
             output_value_info = helper.find_output_by_name(g, node.output[0])
-
         if output_value_info and \
             helper.get_shape_from_value_info(output_value_info):
             continue
 
+        # Now start the inference.
+        # If auto_pad is set, use the auto_pad.
+        auto_pad = helper.get_var_attribute_by_name(node, 'auto_pad', 'string')
+        if auto_pad is not None and auto_pad != 'NOTSET':
+            if auto_pad == 'SAME_LOWER' or auto_pad == 'SAME_UPPER':
+                new_output_value_info = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    input_value_info.type.tensor_type.elem_type,
+                    input_shape
+                )
+                if output_value_info:
+                    g.value_info.remove(output_value_info)
+                g.value_info.extend([new_output_value_info])
+                processed = True
+                continue
+            elif auto_pad == 'VALID':
+                pads = [0, 0, 0, 0]
+            else:
+                print("Unrecognized auto_pad value: " + str(auto_pad))
+                exit(1)
+        kernel_value_info = helper.find_value_by_name(g, node.input[1])
         _, kernel_shape = helper.find_size_shape_from_value(kernel_value_info)
-        _, input_shape = helper.find_size_shape_from_value(input_value_info)
         if not input_shape or not kernel_shape:
             continue
         strides = helper.get_attribute_by_name(node, 'strides').ints
-        pads = helper.get_attribute_by_name(node, 'pads').ints
+        if not pads:
+            pads = helper.get_attribute_by_name(node, 'pads').ints
         dilation = helper.get_attribute_by_name(node, 'dilations').ints
 
         # Pytorch model has the case where strides only have one number
@@ -332,7 +360,7 @@ def inference_cov_shape(g):
         if output_value_info:
             g.value_info.remove(output_value_info)
         g.value_info.extend([new_output_value_info])
-    
+
     return processed
 
 
