@@ -39,7 +39,7 @@ if len(sys.argv) == 6:
     # model = torchvision.models.resnet34(pretrained=True)
     # Invoke export.
     # torch.save(model, "resnet34.pth")
-    if torch.__version__ == '1.0.0':
+    if torch.__version__ < '1.3.0':
         torch.onnx.export(model, dummy_input, sys.argv[5])
         torch.onnx.export(model, dummy_input,
                           sys.argv[5][:-5] + "_backup.onnx")
