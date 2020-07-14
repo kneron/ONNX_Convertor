@@ -2,8 +2,7 @@ import os
 import argparse
 import sys
 
-# change working directory
-os.chdir(os.path.abspath('./onnx_tflite/'))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
@@ -11,9 +10,11 @@ if __name__ == '__main__':
     parser.add_argument('-save_path', metavar='saved model path', help='an output onnx file')
     args = parser.parse_args()
 
-    model_path = args.tflite
+    model_path = os.path.abspath(args.tflite)
     model_save_path = os.path.abspath(args.save_path)
 
+    # change working directory
+    os.chdir(os.path.abspath('./onnx_tflite/'))
     os.system("python ./tflite2onnx.py -tflite " + model_path + " -save_path " + model_save_path)
 
     print('model_path: ' + model_path)
