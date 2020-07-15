@@ -5,7 +5,7 @@ from onnx import AttributeProto, TensorProto
 
 from conv_layers import Convolution,DepthwiseConvolution
 from aact_layers import Relu,Relu6,Softmax,LOGISTIC
-from core_layers import Dense,Reshape,Pad
+from core_layers import Dense,Reshape,Pad,Squeeze
 from merg_layers import Add,Mul,Concatenation
 from pool_layers import MaxPooling2D,AveragePooling2D,Mean
 import utils
@@ -18,8 +18,14 @@ import tensorflow as tf
 
 def set_end_node(onnx_end_node, tflite_out_info):
 
+    out_value_info = None
     out_value_info_name = "out_" + onnx_end_node.name
-    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(tflite_out_info['shape'].tolist()))
+    if len(tflite_out_info['shape'].tolist()) == 4:
+        out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(tflite_out_info['shape'].tolist()))
+    elif len(tflite_out_info['shape'].tolist()) == 2:
+        out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, tflite_out_info['shape'].tolist())
+    else:
+        raise ValueError('unexpected output dimension')
     onnx_end_node.output[:] = [out_value_info_name]
 
     return out_value_info
@@ -156,6 +162,8 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
             nodes, val, weight = MaxPooling2D( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'AVERAGE_POOL_2D':
             nodes, val, weight = AveragePooling2D( [prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == 'SQUEEZE':
+            nodes, val, weight = Squeeze( [prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 
@@ -206,7 +214,8 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
     )
 
     cnn_model = helper.make_model(graph_cnn, producer_name='onnx-tflite-examples')
-    cnn_model = onnx.utils.polish_model(cnn_model)
+    if add_transpose_for_channel_last_first_issue is True:
+        cnn_model = onnx.utils.polish_model(cnn_model)
     onnx.save(cnn_model, model_save_path)
 
 
@@ -214,13 +223,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
     parser.add_argument('-tflite', metavar='tflite model path', help='an input tflite file')
     parser.add_argument('-save_path', metavar='saved model path', help='an output folder path')
+    parser.add_argument('-release_mode', metavar='is release mode', help='True if no traspose front end needed')
     args = parser.parse_args()
 
     model_path = args.tflite
     model_json_path = "./" + os.path.basename(model_path[:-7]) + ".json"
     model_save_path = os.path.abspath(args.save_path) + '/' +os.path.basename(model_path[:-7]) + ".onnx"
+    is_release_mode = True if args.release_mode == 'True' else False
 
     os.system("./flatc/flatc -t --strict-json --defaults-json -o ./ ./flatc/schema.fbs -- " + model_path)
 
-    main(model_path, model_json_path, model_save_path)
+    main(model_path, model_json_path, model_save_path, not is_release_mode)
     os.system("rm " + model_json_path)

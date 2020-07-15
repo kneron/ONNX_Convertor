@@ -212,3 +212,23 @@ class Pad(Layer):
       self.node_list.append(pad_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
+
+class Squeeze(Layer):
+
+  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+  def generate(self):
+      squeeze_node_name = self.onnx_node_name
+      squeeze_node = onnx.helper.make_node(
+          'Squeeze',
+          inputs=self.previous_onnx_node_names,
+          outputs=[squeeze_node_name],
+          axes= utils.channel_last_2_channel_first_axis_mapping( self.op_info['builtin_options']['squeeze_dims'] ),
+          name=squeeze_node_name
+      )
+
+      # update tables
+      self.node_list.append(squeeze_node)
+
+      return self.node_list, self.value_infos, self.weight_node_list
