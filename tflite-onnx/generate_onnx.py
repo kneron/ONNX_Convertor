@@ -1,8 +1,5 @@
-import os
 import argparse
-import sys
-
-
+import os
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
