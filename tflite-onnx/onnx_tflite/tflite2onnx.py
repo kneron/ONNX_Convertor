@@ -24,7 +24,7 @@ def set_end_node(onnx_end_node, tflite_out_info):
 
     return out_value_info
 
-def build_transpose_node_for_channel_first_2_channel_last(onnx_end_node, tflite_out_info):
+def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, tflite_out_info):
     transpose_node = None
 
     out_value_info_name = "out_" + onnx_end_node.name
@@ -69,7 +69,7 @@ def get_op_info_from_json(model_json_path):
 
     return ops, op_types
 
-def build_transpose_node_for_channel_last_2_channel_first(input_name):
+def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
     transpose_node_name = 'transpose_node_input_' + input_name
     transpose_node = onnx.helper.make_node(
         'Transpose',
@@ -101,7 +101,7 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
     if add_transpose_for_channel_last_first_issue is True:
         input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, input_details[0]['shape'].tolist())
         # transpose for channel last to channel first
-        transpose_node = build_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name)
+        transpose_node = build_head_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name)
 
         # update tables
         onnx_node_list = [transpose_node]
@@ -174,7 +174,7 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
             out_value_info = None
             transpose_node = None
             if add_transpose_for_channel_last_first_issue is True:
-                out_value_info, transpose_node = build_transpose_node_for_channel_first_2_channel_last(sub_op_node_list[-1],output_node_info)
+                out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last(sub_op_node_list[-1],output_node_info)
             else:
                 out_value_info = set_end_node(sub_op_node_list[-1],output_node_info)
             output_tensor_value_info.append(out_value_info)
