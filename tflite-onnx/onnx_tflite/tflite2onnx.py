@@ -6,7 +6,7 @@ from onnx import AttributeProto, TensorProto
 from conv_layers import Convolution,DepthwiseConvolution
 from aact_layers import Relu,Relu6,Softmax,LOGISTIC
 from core_layers import Dense,Reshape,Pad
-from merg_layers import Add
+from merg_layers import Add,Mul,Concatenation
 from pool_layers import MaxPooling2D,AveragePooling2D,Mean
 import utils
 
@@ -146,8 +146,16 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
             nodes, val, weight = Pad( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'ADD':
             nodes, val, weight = Add( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
+        elif op_type == 'MUL':
+            nodes, val, weight = Mul( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
+        elif op_type == 'CONCATENATION':
+            nodes, val, weight = Concatenation( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
         elif op_type == 'MEAN':
             nodes, val, weight = Mean( [prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == 'MAX_POOL_2D':
+            nodes, val, weight = MaxPooling2D( [prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == 'AVERAGE_POOL_2D':
+            nodes, val, weight = AveragePooling2D( [prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 
