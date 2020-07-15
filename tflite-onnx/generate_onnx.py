@@ -7,7 +7,7 @@ import sys
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
     parser.add_argument('-tflite', metavar='tflite model path', help='an input tflite file')
-    parser.add_argument('-save_path', metavar='saved model path', help='an output onnx file')
+    parser.add_argument('-save_path', metavar='saved model path', help='an output folder path')
     args = parser.parse_args()
 
     model_path = os.path.abspath(args.tflite)

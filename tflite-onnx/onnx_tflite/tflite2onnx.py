@@ -16,19 +16,47 @@ import json
 import tensorflow as tf
 
 
-def check_end_node(node, interpreter):
+def set_end_node(onnx_end_node, tflite_out_info):
 
-    output_tensor_value_info = None
-    # if is output node, change this node's output 
-    output_node_info = utils.get_output_node_info_by_name_if_exist(node.name,interpreter)
-    if output_node_info != None:
-        out_value_info_name = node.name
-        out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, output_node_info['shape'].tolist())
-        output_tensor_value_info = out_value_info
-        node.output[:] = [node.name]
+    out_value_info_name = "out_" + onnx_end_node.name
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(tflite_out_info['shape'].tolist()))
+    onnx_end_node.output[:] = [out_value_info_name]
 
-    return output_tensor_value_info
+    return out_value_info
 
+def build_transpose_node_for_channel_first_2_channel_last(onnx_end_node, tflite_out_info):
+    transpose_node = None
+
+    out_value_info_name = "out_" + onnx_end_node.name
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, tflite_out_info['shape'].tolist())
+
+    if len(tflite_out_info['shape'].tolist()) == 4:
+        # add transpose if it is 4 dimension output
+
+        transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
+        transpose_node = onnx.helper.make_node(
+            'Transpose',
+            inputs=[onnx_end_node.name],
+            outputs=[out_value_info_name],
+            perm=[0, 2, 3, 1],
+            name=transpose_node_name
+        )
+    elif len(tflite_out_info['shape'].tolist()) == 3:
+        # add transpose if it is 3 dimension output
+
+        transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
+        transpose_node = onnx.helper.make_node(
+            'Transpose',
+            inputs=[onnx_end_node.name],
+            outputs=[out_value_info_name],
+            perm=[0, 2, 1],
+            name=transpose_node_name
+        )
+    else:
+        # no need transpose, set it as output
+        onnx_end_node.output[:] = [out_value_info_name]
+
+    return out_value_info, transpose_node
 
 def get_op_info_from_json(model_json_path):
     op_types = []
@@ -41,10 +69,18 @@ def get_op_info_from_json(model_json_path):
 
     return ops, op_types
 
+def build_transpose_node_for_channel_last_2_channel_first(input_name):
+    transpose_node_name = 'transpose_node_input_' + input_name
+    transpose_node = onnx.helper.make_node(
+        'Transpose',
+        inputs=[input_name],
+        outputs=[transpose_node_name],
+        perm=[0, 3, 1, 2],
+        name=transpose_node_name
+    )
+    return transpose_node
 
-
-
-def main(model_path, model_json_path, model_save_path, add_transpose_for_channel_last_first_issue = False):
+def main(model_path, model_json_path, model_save_path, add_transpose_for_channel_last_first_issue = True):
     ops, op_types = get_op_info_from_json(model_json_path)
 
     # some nodes are merged as one node, we need a table to store this information
@@ -60,22 +96,16 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
 
     # get input info
     input_details = interpreter.get_input_details()
-    input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, input_details[0]['shape'].tolist())
+    input_tensor_value_info = None
 
-    if add_transpose_for_channel_last_first_issue:
+    if add_transpose_for_channel_last_first_issue is True:
+        input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, input_details[0]['shape'].tolist())
         # transpose for channel last to channel first
-        transpose_node_name = 'transpose_node_input'
-        transpose_node = onnx.helper.make_node(
-            'Transpose',
-            inputs=[input_tensor_value_info.name],
-            outputs=[transpose_node_name],
-            perm=[0, 3, 1, 2],
-            name=transpose_node_name
-        )
+        transpose_node = build_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name)
 
         # update tables
         onnx_node_list = [transpose_node]
-        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],transpose_node_name]   
+        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],transpose_node.name]   
     else: 
         onnx_node_list = []
         input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, utils.tflite2onnx_shape_map(input_details[0]['shape'].tolist()))
@@ -121,22 +151,37 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
         else:
             raise ValueError(op_type)
 
-        sub_op_name_list = []
+        sub_op_node_list = []
         for node in nodes:
             if node.op_type != 'Constant':
-                sub_op_name_list.append(node.name)
+                sub_op_node_list.append(node)
 
         # update tables        
-        op_name__sub_op_name__table[node_name] = sub_op_name_list
-        out_value_info = check_end_node(nodes[-1],interpreter)
-        if out_value_info != None:
-            output_tensor_value_info.append(out_value_info)
+        op_name__sub_op_name__table[node_name] = [sub_op_node.name for sub_op_node in sub_op_node_list]
+
         if len(val) != 0:
             inner_node_shape_value_info.extend(val)
         if len(weight) != 0:
             onnx_weight_node_list.extend(weight)
         if len(nodes) != 0:
             onnx_node_list.extend(nodes)
+
+        # check if it is output node use original node name
+        output_node_info = utils.get_output_node_info_by_name_if_exist(node_name, interpreter)
+
+        if output_node_info is not None:
+            # it's output node
+            out_value_info = None
+            transpose_node = None
+            if add_transpose_for_channel_last_first_issue is True:
+                out_value_info, transpose_node = build_transpose_node_for_channel_first_2_channel_last(sub_op_node_list[-1],output_node_info)
+            else:
+                out_value_info = set_end_node(sub_op_node_list[-1],output_node_info)
+            output_tensor_value_info.append(out_value_info)
+            if transpose_node != None: 
+                onnx_node_list.append(transpose_node)
+
+
 
 
     input_init = [input_tensor_value_info]
@@ -160,7 +205,7 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
     parser.add_argument('-tflite', metavar='tflite model path', help='an input tflite file')
-    parser.add_argument('-save_path', metavar='saved model path', help='an output onnx file')
+    parser.add_argument('-save_path', metavar='saved model path', help='an output folder path')
     args = parser.parse_args()
 
     model_path = args.tflite
