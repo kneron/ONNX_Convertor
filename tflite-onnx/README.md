@@ -23,13 +23,14 @@ We test these script using:
 
 ## Tested Model Table
 
-### tensorflow model zoo:
+### tensorflow object detection model zoo:
 #### https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf1_detection_zoo.md
+#### ( use export_tflite_ssd_graph.py with --add_postprocessing_op=false )
 * Mobile_models/ssd_mobiledet_cpu_coco
 * Mobile_models/ssd_mobilenet_v3_large_coco
 * Mobile_models/ssd_mobilenet_v3_small_coco
 
-### tflite model hub:
+### tflite model hub (Floating point models):
 #### https://www.tensorflow.org/lite/guide/hosted_models
 * Mobilenet_V1 series
 * Mobilenet_V2 series
