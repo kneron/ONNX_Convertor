@@ -221,17 +221,30 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
-    parser.add_argument('-tflite', metavar='tflite model path', help='an input tflite file')
-    parser.add_argument('-save_path', metavar='saved model path', help='an output folder path')
-    parser.add_argument('-release_mode', metavar='is release mode', help='True if no traspose front end needed')
+    parser.add_argument('-tflite', metavar='tflite model path', help='an input tflite file path')
+    parser.add_argument('-save_path', metavar='saved model path', help='an output onnx file path')
+    parser.add_argument('-release_mode', metavar='is release mode', help='True if no transpose front end needed')
     args = parser.parse_args()
 
-    model_path = args.tflite
-    model_json_path = "./" + os.path.basename(model_path[:-7]) + ".json"
-    model_save_path = os.path.abspath(args.save_path) + '/' +os.path.basename(model_path[:-7]) + ".onnx"
+    this_dir_path = os.path.dirname(os.path.abspath(__file__))
+    if args.tflite[-7:] != ".tflite":
+        raise UserWarning('\n' + args.tflite + " should be .tflite")
+    if args.save_path[-5:] != ".onnx":
+        raise UserWarning('\n' + args.save_path + " should be .onnx")
+
+    model_path = os.path.abspath(args.tflite)
+    model_json_path = os.path.join(this_dir_path, os.path.basename(model_path[:-7]) + ".json")
+    model_save_path = os.path.abspath(args.save_path)
     is_release_mode = True if args.release_mode == 'True' else False
 
-    os.system("./flatc/flatc -t --strict-json --defaults-json -o ./ ./flatc/schema.fbs -- " + model_path)
+    flatc_folder_path = os.path.join(this_dir_path,'flatc')
+    os.system( os.path.join(flatc_folder_path,'flatc') + " -t --strict-json --defaults-json -o " + os.path.dirname(model_json_path) + " " + os.path.join(flatc_folder_path,'schema.fbs') + " -- " + model_path)
 
-    main(model_path, model_json_path, model_save_path, not is_release_mode)
-    os.system("rm " + model_json_path)
+    try:
+        main(model_path, model_json_path, model_save_path, not is_release_mode)
+    except Exception as e:
+        print(e)
+        if os.path.isfile(model_json_path): 
+            os.system("rm " + model_json_path)
+    if os.path.isfile(model_json_path): 
+        os.system("rm " + model_json_path)

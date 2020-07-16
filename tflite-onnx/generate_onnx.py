@@ -12,11 +12,16 @@ if __name__ == '__main__':
     model_save_path = os.path.abspath(args.save_path)
     is_release_mode = True if args.release_mode == 'True' else False
 
-    # change working directory
-    os.chdir(os.path.abspath('./onnx_tflite/'))
-    os.system("python ./tflite2onnx.py -tflite " + model_path + " -save_path " + model_save_path + " -release_mode " + str(is_release_mode))
-
+    print('-----------   information   ----------------')
     print('is_release_mode: ' + str(is_release_mode))
     print('model_path: ' + model_path)
     print('model_save_path: ' + model_save_path)
-    print('done!')
+
+    print('-----------    start to generate  -----------')
+    print('generating...')
+    # get this file directory
+    this_dir_path = os.path.dirname(os.path.abspath(__file__))
+    main_script_path = os.path.join(this_dir_path,"onnx_tflite","tflite2onnx.py")
+    os.system("python "  + main_script_path + " -tflite " + model_path + " -save_path " + model_save_path + " -release_mode " + str(is_release_mode))
+
+    print('------------   end   ------------------------')
