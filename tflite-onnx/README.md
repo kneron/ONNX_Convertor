@@ -58,6 +58,6 @@ We test these script using:
 
 ## Example
 1. Convert tflite to onnx 
-* python generate_onnx.py -tflite ./example/example.tflite -save_path ./example -release_mode True
+* python generate_onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True
 2. Convert onnx to the onnx which is optimized for Kneron Toolchain
 * python ../optimizer_scripts/onnx2onnx.py ./example/example.onnx
