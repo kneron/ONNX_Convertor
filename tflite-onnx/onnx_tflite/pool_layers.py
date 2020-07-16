@@ -3,12 +3,8 @@
 import onnx 
 from onnx import helper
 from onnx import AttributeProto, TensorProto
-
 import numpy as np
-
-#from . import helper
 from base_layer import Layer
-#from .exceptions import FeatureNotImplemented, OnnxNotSupport
 import utils
 
 class MaxPooling2D(Layer):
@@ -17,7 +13,7 @@ class MaxPooling2D(Layer):
 
   def generate(self):
       kernel_shape = [self.op_info['builtin_options']['filter_width'],self.op_info['builtin_options']['filter_height']]
-      strides_len = [self.op_info['builtin_options']['stride_w'],op['builtin_options']['stride_h']]
+      strides_len = [self.op_info['builtin_options']['stride_w'],self.op_info['builtin_options']['stride_h']]
       padding_stradegy = self.op_info['builtin_options']['padding']
 
       input_feature_map_shape = self.node_input_detail['shape']

@@ -3,12 +3,8 @@
 import onnx 
 from onnx import helper
 from onnx import AttributeProto, TensorProto
-
 import numpy as np
-
-#from . import helper
 from base_layer import Layer
-#from .exceptions import FeatureNotImplemented, OnnxNotSupport
 import utils
 
 class Convolution(Layer):
