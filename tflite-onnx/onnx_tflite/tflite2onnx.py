@@ -243,6 +243,7 @@ if __name__ == '__main__':
     try:
         main(model_path, model_json_path, model_save_path, not is_release_mode)
     except Exception as e:
+        print('Error: Something Wrong')
         print(e)
         if os.path.isfile(model_json_path): 
             os.system("rm " + model_json_path)
