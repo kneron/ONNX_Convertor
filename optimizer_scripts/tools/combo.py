@@ -11,6 +11,7 @@ from . import eliminating
 from . import fusing
 from . import constant_folding
 from . import removing_transpose
+from . import modhelper
 
 
 def preprocess(model_proto):
@@ -119,7 +120,10 @@ def pytorch_constant_folding(m):
 
     # constant_folding
     while constant_folding.constant_folding(m.graph):
-        m = onnx.utils.polish_model(m)
+        logging.debug("After constant folding jobs.")
+        while len(m.graph.value_info) != 0:
+            m.graph.value_info.pop()
+        m = modhelper.inference_shapes(m)
         replacing.replace_shape_with_constant(m.graph)
 
     other.topological_sort(m.graph)

@@ -6,6 +6,7 @@ import collections
 import numpy as np
 import onnx.helper
 import math
+import logging
 from . import helper
 from .modhelper import replace_node_input
 
@@ -852,3 +853,22 @@ def add_bn_on_skip_branch(g):
 def pytorch_check_initializer_as_input(g):
     if len(g.input) < len(g.initializer):
         raise RuntimeError("You need to add option `keep_initializers_as_inputs=True` while exporting the model!")
+
+def rename_output_name(g, original_name, new_name):
+    # Output
+    output_value = helper.find_output_by_name(g, original_name)
+    if output_value is None:
+        logging.error("Cannot find output value named " + original_name)
+        return
+    output_value.name = new_name
+    # Value Info
+    value_info = helper.find_value_by_name(g, original_name)
+    if value_info is not None:
+        value_info.name = new_name
+    # Node output
+    node = helper.find_node_by_output_name(g, original_name)
+    node.output[0] = new_name
+    # Node input
+    nodes = helper.find_nodes_by_input_name(g, original_name)
+    for node in nodes:
+        replace_node_input(node, original_name, new_name)

@@ -20,6 +20,7 @@ parser.add_argument('-i', '--input', dest='input_change', type=str, nargs='+', h
 parser.add_argument('-o', '--output', dest='output_change', type=str, nargs='+', help="change output shape (e.g. -o 'input_0 1 3 224 224')")
 parser.add_argument('--add-conv', dest='add_conv', type=str, nargs='+', help='add nop conv using specific input')
 parser.add_argument('--add-bn', dest='add_bn', type=str, nargs='+', help='add nop bn using specific input')
+parser.add_argument('--rename-output', dest='rename_output', type=str, nargs='+', help='Rename the specific output(e.g. --rename-output old_name new_name)')
 
 args = parser.parse_args()
 
@@ -65,6 +66,14 @@ if args.cut_node is not None or args.cut_type is not None:
     else:
         other.remove_nodes(g, cut_nodes=args.cut_node, cut_types=args.cut_type)
     other.topological_sort(g)
+
+# Rename nodes
+if args.rename_output:
+    if len(args.rename_output) % 2 != 0:
+        print("Rename output should be paires of names.")
+    else:
+        for i in range(0, len(args.rename_output), 2):
+            other.rename_output_name(g, args.rename_output[i], args.rename_output[i + 1])
 
 # Remove useless nodes
 if args.delete_node or args.delete_input or args.input_change or args.output_change:

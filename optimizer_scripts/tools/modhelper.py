@@ -1,6 +1,9 @@
 """This module contains helper functions that do graph modifications.
 """
+
+import onnx
 from . import helper
+
 
 def replace_node_input(node, old_input, new_input):
     for i, input_name in enumerate(node.input):
@@ -62,3 +65,21 @@ def delete_output(g, target_list):
             print("Cannot find output {}".format(name))
             continue
         g.output.remove(output_value)
+
+def remove_zero_value_info(g):
+    value_info_list = list(g.value_info)
+    for vi in value_info_list:
+        if not vi.type.tensor_type.shape.dim:
+            g.value_info.remove(vi)
+        for dim in vi.type.tensor_type.shape.dim:
+            if dim.dim_value == 0:
+                g.value_info.remove(vi)
+                break
+
+def inference_shapes(m):
+    onnx.checker.check_model(m)
+    onnx.save(m, "debug.onnx")
+    remove_zero_value_info(m.graph)
+    m = onnx.shape_inference.infer_shapes(m)
+    onnx.checker.check_model(m)
+    return m
