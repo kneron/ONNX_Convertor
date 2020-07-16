@@ -77,7 +77,10 @@ def replace_Reshape_with_Flatten(g):
         shape_value = helper.find_value_by_name(g, shape_node.output[0])
         node.input.pop()
         node_to_remove.append(shape_node)
-        g.value_info.remove(shape_value)
+        # If found shape value_info, remove it
+        if shape_value != None:
+            g.value_info.remove(shape_value)
+            
     for node in node_to_remove:
         g.node.remove(node)
 
