@@ -7,10 +7,6 @@ We parse TFlite model use:
 1. flatc(https://google.github.io/flatbuffers/flatbuffers_guide_using_schema_compiler.html) 
 2. tensorflow lite schema file(https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema.fbs)
 
-## Installation
-
-We recommand using docker `kneron/intel-caffe` to get the full workable environment and the converter itself.
-
 ### Prerequisites
 
 We test these script using:
@@ -60,4 +56,8 @@ We test these script using:
 * AVERAGE_POOL_2D
 * SQUEEZE
 
-
+## Example
+1. Convert tflite to onnx 
+* python generate_onnx.py -tflite ./example/example.tflite -save_path ./example -release_mode True
+2. Convert onnx to the onnx which is optimized for Kneron Toolchain
+* python ../optimizer_scripts/onnx2onnx.py ./example/example.onnx
