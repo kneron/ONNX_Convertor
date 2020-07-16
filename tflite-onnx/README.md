@@ -40,21 +40,22 @@ We test these script using:
 
 ## Now Supported Operators List
 * ADD
-* MUL
-* PAD
-* RESHAPE
-* FULLY_CONNECTED
+* AVERAGE_POOL_2D
+* CONCATENATION
 * CONV_2D
 * DEPTHWISE_CONV_2D
-* SOFTMAX
-* RELU
-* RELU6
+* FULLY_CONNECTED
 * LOGISTIC
-* CONCATENATION
+* MUL
 * MEAN
 * MAX_POOL_2D
-* AVERAGE_POOL_2D
+* PAD
+* RELU
+* RELU6
+* RESHAPE
+* SOFTMAX
 * SQUEEZE
+
 
 ## Example
 1. Convert tflite to onnx 
