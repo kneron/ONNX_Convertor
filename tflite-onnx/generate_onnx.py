@@ -12,7 +12,7 @@ if __name__ == '__main__':
     model_save_path = os.path.abspath(args.save_path)
     is_release_mode = True if args.release_mode == 'True' else False
 
-    print('-----------   information   ----------------')
+    print('-----------   information    ----------------')
     print('is_release_mode: ' + str(is_release_mode))
     print('model_path: ' + model_path)
     print('model_save_path: ' + model_save_path)
