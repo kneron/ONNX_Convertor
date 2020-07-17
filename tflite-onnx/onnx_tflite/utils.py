@@ -1,6 +1,9 @@
 import onnx
 from onnx import helper
 from onnx import AttributeProto, TensorProto
+from onnx import onnx_pb as onnx_proto
+
+ONNX_VERSION_1_4_1 = '1.4.1'
 
 def tflite2onnx_shape_map(shape_list):
     # change dimension due to channel first-last issue
@@ -74,3 +77,12 @@ def make_kneron_valid_onnx_input(input_init):
             onnx_inputs.append(data)
     return onnx_inputs
 
+
+def get_value_from_dict(dict_obj, key):
+    if isinstance(dict_obj, dict):
+        if key in dict_obj.keys():
+            return dict_obj[key]
+        else:
+            return None
+    else:
+        raise TypeError('dict_obj is not type of ' + dict.__name__)
