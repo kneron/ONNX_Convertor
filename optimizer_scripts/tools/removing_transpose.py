@@ -32,7 +32,7 @@ def swap_transpose_with_single_next_node(g):
     if trans_node.op_type != 'Transpose':
       continue
     next_nodes = helper.find_nodes_by_input_name(g, trans_node.output[0])
-    if len(next_nodes) > 1:
+    if len(next_nodes) != 1:
       continue
     next_node = next_nodes[0]
     if next_node.op_type not in passable_nodes:
