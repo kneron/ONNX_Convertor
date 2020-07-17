@@ -3,7 +3,7 @@ import onnx.utils
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 
-from conv_layers import Convolution,DepthwiseConvolution
+from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor
 from aact_layers import Relu,Relu6,Softmax,LOGISTIC
 from core_layers import Dense,Reshape,Pad,Squeeze
 from merg_layers import Add,Mul,Concatenation
@@ -84,6 +84,7 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
         perm=[0, 3, 1, 2],
         name=transpose_node_name
     )
+
     return transpose_node
 
 def main(model_path, model_json_path, model_save_path, add_transpose_for_channel_last_first_issue = True):
@@ -164,6 +165,8 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
             nodes, val, weight = AveragePooling2D( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'SQUEEZE':
             nodes, val, weight = Squeeze( [prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == 'RESIZE_NEAREST_NEIGHBOR':
+            nodes, val, weight = ResizeNearestNeighbor([prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 
@@ -216,6 +219,7 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
     cnn_model = helper.make_model(graph_cnn, producer_name='onnx-tflite-examples')
     if add_transpose_for_channel_last_first_issue is True:
         cnn_model = onnx.utils.polish_model(cnn_model)
+
     onnx.save(cnn_model, model_save_path)
 
 
