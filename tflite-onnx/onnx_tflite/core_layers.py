@@ -212,26 +212,29 @@ class Pad(Layer):
 
   def generate(self):
       # tflite pad :[[0 0]
-      #             [0 1]           onnx pad :
-      #             [0 1]     ==       [0,0,0,0,0,0,1,1]         
+      #             [2 1]           onnx pad :
+      #             [2 1]     ==       [0,0,2,2,0,0,1,1]          
       #             [0 0]]          
 
       # create constant node
       pad_node_detail = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][1])
       pad_param = self.tflite_interpreter.get_tensor(pad_node_detail['index']).tolist()
 
+      pad_w0 = pad_param[1][0]
+      pad_h0 = pad_param[2][0]
+
       pad_w = pad_param[1][1]
       pad_h = pad_param[2][1]
 
-          # build node
+      # build node
       pad_name = self.onnx_node_name
       pad_node = helper.make_node(
-          'Pad', # op_type
-          self.previous_onnx_node_names, # 輸入
-          [pad_name], # 輸出
+          'Pad', 
+          self.previous_onnx_node_names, 
+          [pad_name], 
           mode='constant', 
-          value=0.0, #名為 value 的屬性，資料型別（AttributeType）為 FLOAT
-          pads=[0,0,0,0,0,0,pad_w,pad_h],#pad_param.flatten().tolist() #名為 pads 的屬性，資料型別（AttributeType）為 INTS 
+          value=0.0, 
+          pads=[0,0,pad_w0,pad_h0,0,0,pad_w,pad_h], 
           name=pad_name 
       )
 
