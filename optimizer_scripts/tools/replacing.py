@@ -5,6 +5,7 @@ import copy
 import onnx.helper
 import numpy as np
 from . import helper
+from . import modhelper
 from .other import topological_sort
 
 def replace_initializer_with_Constant(g):
@@ -13,6 +14,10 @@ def replace_initializer_with_Constant(g):
 
     :param g: the onnx graph
     """
+    # Creat a set of existed node names
+    node_names = set()
+    for node in g.node:
+        node_names.add(node.name)
     # Unused initializers should be removed
     unused_initializer = set()
     for tensor in g.initializer:
@@ -29,11 +34,18 @@ def replace_initializer_with_Constant(g):
             g.input.remove(value_info)
             continue
         # Convert init to a constant node
+        if tensor.name not in node_names:
+            new_name = tensor.name
+        else:
+            new_name = tensor.name + '_2'
+            following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
+            for node in following_nodes:
+                modhelper.replace_node_input(node, tensor.name, new_name)
         new_node = onnx.helper.make_node(
             "Constant",
             [],
-            [tensor.name],
-            name=tensor.name,
+            [new_name],
+            name=new_name,
             value=tensor
         )
         # Add node to lists
@@ -43,6 +55,10 @@ def replace_initializer_with_Constant(g):
         g.value_info.extend([value_info])
         # Remove original input value info
         g.input.remove(value_info)
+        # if value info exists, remove it as well.
+        value_info = helper.find_value_by_name(g, tensor.name)
+        if value_info is not None:
+            g.value_info.remove(value_info)
     # Remove original initializer
     while len(g.initializer) != 0:
         g.initializer.pop()

@@ -87,6 +87,7 @@ def common_optimization(m):
     - replace Squeeze/Unsqueeze with Reshape
     - replace Reshape with Flatten
     """
+    m = onnx.utils.polish_model(m)
     g = m.graph
     other.transpose_B_in_Gemm(g)
     fusing.fuse_BN_into_Gemm(g)
@@ -176,6 +177,7 @@ def postprocess(m):
     :param m: the original model input\\
     :return: the new model after preprocessing
     """
+    onnx.save(m, "debug.onnx")
     m = onnx.utils.polish_model(m)
     eliminating.eliminate_single_input_Concat(m.graph)
     eliminating.eliminate_nop_Maxpool_and_AveragePool(m.graph)
