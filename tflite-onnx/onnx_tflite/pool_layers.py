@@ -168,7 +168,8 @@ class Mean(Layer):
       mean_node = onnx.helper.make_node(
           'GlobalAveragePool',
           inputs=self.previous_onnx_node_names,
-          outputs=[mean_node_name]
+          outputs=[mean_node_name],
+          name=mean_node_name
       )
 
       # update tables

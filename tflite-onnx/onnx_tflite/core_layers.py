@@ -14,6 +14,28 @@ class Dense(Layer):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
   def generate(self):
+      
+      # if previous shape is looks like [1,1,1,x], we can do squeeze
+      previous_shape = self.node_input_detail['shape']
+      squeeze_node_name = 'squeeze_node_before_gemm_' + self.onnx_node_name
+      if previous_shape.size == 4:
+        if previous_shape[0] == 1 and previous_shape[1] == 1 and previous_shape[2] == 1: 
+
+            ##################  add squeeze  ###############
+            squeeze_node = onnx.helper.make_node(
+                'Squeeze',
+                inputs= self.previous_onnx_node_names,
+                outputs=[squeeze_node_name],
+                axes= [2,3],
+                name=squeeze_node_name
+            )
+
+            # update tables
+            self.node_list.append(squeeze_node)
+
+            # change squeeze to new input for gemm
+            self.previous_onnx_node_names = [squeeze_node_name]        
+
       fc_name = self.onnx_node_name
 
       weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][1])
@@ -45,10 +67,13 @@ class Dense(Layer):
       )
 
       # make FC onnx node
-      self.previous_onnx_node_names.extend([weight_onnx_node_name, bias_onnx_node_name])
+      node_name_before_fc = []
+      node_name_before_fc.extend(self.previous_onnx_node_names)
+      node_name_before_fc.append(weight_onnx_node_name)
+      node_name_before_fc.append(bias_onnx_node_name)
       fc_onnx_node = helper.make_node(
           op_type   = 'Gemm',
-          inputs    = self.previous_onnx_node_names,
+          inputs    = node_name_before_fc,
           outputs   = [fc_name],
           name      = fc_name,
           alpha     = 1.0,
@@ -141,7 +166,12 @@ class Reshape(Layer):
       shape_tensor_name = 'shape_tensor_' + self.onnx_node_name
       shape_node_name = 'shape_const_' + self.onnx_node_name
 
-      new_shape = np.array(self.op_info['builtin_options']['new_shape'], dtype='int64')
+
+      # no attribute 'new_shape', should be op 'squeeze'
+      if 'builtin_options' in self.op_info:
+        new_shape = np.array(self.op_info['builtin_options']['new_shape'], dtype='int64')
+      else:
+        new_shape = np.array(self.node_output_detail['shape'], dtype='int64')
       shape_tensor = onnx.helper.make_tensor(shape_tensor_name,TensorProto.INT64,new_shape.shape, new_shape)
       shape_node = helper.make_node("Constant",[],[shape_node_name],name=shape_node_name,value=shape_tensor)
 
@@ -151,25 +181,26 @@ class Reshape(Layer):
           outputs=[reshape_node_name],
           name=reshape_node_name
       )
-
       # update tables
       self.node_list.append(shape_node)
       self.node_list.append(reshape_node)
 
-      dims = list(range(len(out_dim)))
-      dims = dims[:1] + dims[-1:] + dims[1:-1]
-      # add transpose
-      transpose_after_node_name = 'transpose_node_after_reshape_' + self.onnx_node_name
-      transpose_after_node = onnx.helper.make_node(
-          'Transpose',
-          inputs=[reshape_node_name],
-          outputs=[transpose_after_node_name],
-          perm=dims,
-          name=transpose_after_node_name
-      )
+      # no attribute 'new_shape', 
+      if 'builtin_options' in self.op_info:
+        dims = list(range(len(out_dim)))
+        dims = dims[:1] + dims[-1:] + dims[1:-1]
+        # add transpose
+        transpose_after_node_name = 'transpose_node_after_reshape_' + self.onnx_node_name
+        transpose_after_node = onnx.helper.make_node(
+            'Transpose',
+            inputs=[reshape_node_name],
+            outputs=[transpose_after_node_name],
+            perm=dims,
+            name=transpose_after_node_name
+        )
 
-      # update tables
-      self.node_list.append(transpose_after_node)
+        # update tables
+        self.node_list.append(transpose_after_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
 
