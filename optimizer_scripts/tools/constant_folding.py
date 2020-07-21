@@ -51,6 +51,9 @@ def duplicate_constant_node(g):
         if node.op_type != 'Constant':
             continue
         output_val_info = helper.find_value_by_name(g, node.output[0])
+        if output_val_info is None:
+            print("Cannot inference the shape of Const node output: " + node.output[0])
+            exit(1)
         data_shape = helper.get_shape_from_value_info(output_val_info)
         output_nodes = helper.find_nodes_by_input_name(g, node.output[0])
 
