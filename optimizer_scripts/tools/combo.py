@@ -178,7 +178,6 @@ def postprocess(m):
     :param m: the original model input\\
     :return: the new model after preprocessing
     """
-    onnx.save(m, "debug.onnx")
     m = onnx.utils.polish_model(m)
     eliminating.eliminate_single_input_Concat(m.graph)
     eliminating.eliminate_nop_Maxpool_and_AveragePool(m.graph)
