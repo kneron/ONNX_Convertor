@@ -78,7 +78,6 @@ def remove_zero_value_info(g):
 
 def inference_shapes(m):
     onnx.checker.check_model(m)
-    onnx.save(m, "debug.onnx")
     remove_zero_value_info(m.graph)
     m = onnx.shape_inference.infer_shapes(m)
     onnx.checker.check_model(m)
