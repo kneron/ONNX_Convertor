@@ -123,6 +123,7 @@ def pytorch_constant_folding(m):
     m = modhelper.inference_shapes(m)
     while constant_folding.constant_folding(m.graph):
         logging.debug("After constant folding jobs.")
+        other.topological_sort(m.graph)
         while len(m.graph.value_info) != 0:
             m.graph.value_info.pop()
         m = modhelper.inference_shapes(m)
