@@ -18,14 +18,10 @@ import tensorflow as tf
 
 def set_end_node(onnx_end_node, tflite_out_info):
 
-    out_value_info = None
     out_value_info_name = "out_" + onnx_end_node.name
-    if len(tflite_out_info['shape'].tolist()) == 4:
-        out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(tflite_out_info['shape'].tolist()))
-    elif len(tflite_out_info['shape'].tolist()) == 2:
-        out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, tflite_out_info['shape'].tolist())
-    else:
-        raise ValueError('unexpected output dimension')
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(tflite_out_info['shape'].tolist()))
+
+    # change output
     onnx_end_node.output[:] = [out_value_info_name]
 
     return out_value_info

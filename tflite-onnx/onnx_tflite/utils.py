@@ -7,9 +7,18 @@ ONNX_VERSION_1_4_1 = '1.4.1'
 
 def tflite2onnx_shape_map(shape_list):
     # change dimension due to channel first-last issue
-    if len(shape_list) != 4:
-        return None
-    return [shape_list[0],shape_list[3],shape_list[1],shape_list[2]]
+    if len(shape_list) == 4:
+        return [shape_list[0],shape_list[3],shape_list[1],shape_list[2]]
+
+    elif len(shape_list) == 3:
+        return [shape_list[0],shape_list[2],shape_list[1]]
+        
+    elif len(shape_list) == 2:
+        # not change
+        return shape_list
+
+    raise ValueError('unexpected output dimension')
+
 
 def channel_last_2_channel_first_axis_mapping(axis_list):
     table = {'0':0,
