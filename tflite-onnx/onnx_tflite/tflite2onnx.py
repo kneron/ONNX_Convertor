@@ -237,6 +237,17 @@ if __name__ == '__main__':
     model_save_path = os.path.abspath(args.save_path)
     is_release_mode = True if args.release_mode == 'True' else False
 
+
+
+
+    print('-----------   information    ----------------')
+    print('is_release_mode: ' + str(is_release_mode))
+    print('model_path: ' + model_path)
+    print('model_save_path: ' + model_save_path)
+
+    print('-----------    start to generate  -----------')
+    print('generating...')
+
     flatc_folder_path = os.path.join(this_dir_path,'flatc')
     os.system( os.path.join(flatc_folder_path,'flatc') + " -t --strict-json --defaults-json -o " + os.path.dirname(model_json_path) + " " + os.path.join(flatc_folder_path,'schema.fbs') + " -- " + model_path)
 
@@ -249,3 +260,6 @@ if __name__ == '__main__':
             os.system("rm " + model_json_path)
     if os.path.isfile(model_json_path): 
         os.system("rm " + model_json_path)
+        
+    print('------------   end   ------------------------')
+

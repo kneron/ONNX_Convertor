@@ -16,10 +16,10 @@ We test these script using:
 
 ## Basic Usage
 
-1. run `python path/to/generate_onnx.py -h` to check the parameter.
+1. run `python path/to/tflite2onnx.py -h` to check the parameter.
 * 1.1. -tflite: the path to the tflite file
 * 1.2. -save_path: final onnx file path to save
-2. run `python generated_onnx.py -tflite YOUR_TFLITE_PATH -save_path ONNX_SAVE_PATH` to convert the model,
+2. run `python tflite2onnx.py -tflite YOUR_TFLITE_PATH -save_path ONNX_SAVE_PATH` to convert the model,
 
 ## Tested Model Table
 
@@ -29,12 +29,15 @@ We test these script using:
 * Mobile_models/ssd_mobiledet_cpu_coco
 * Mobile_models/ssd_mobilenet_v3_large_coco
 * Mobile_models/ssd_mobilenet_v3_small_coco
+* Mobile_models/ssd_mobilenet_v2_mnasfpn_coco
 
 ### tflite model hub (Floating point models):
 #### https://www.tensorflow.org/lite/guide/hosted_models
 * Mobilenet_V1 series
 * Mobilenet_V2 series
 * Inception_V3
+* Inception_V4
+* Inception_ResNet_V2
 * SqueezeNet
 * DenseNet
 
@@ -54,12 +57,13 @@ We test these script using:
 * RELU
 * RELU6
 * RESHAPE
+* RESIZE_NEAREST_NEIGHBOR
 * SOFTMAX
 * SQUEEZE
 
 
 ## Example
 1. Convert tflite to onnx 
-* python generate_onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True
+* python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True
 2. Convert onnx to the onnx which is optimized for Kneron Toolchain
 * python ../optimizer_scripts/onnx2onnx.py ./example/example.onnx
