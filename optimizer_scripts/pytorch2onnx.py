@@ -25,6 +25,9 @@ if len(sys.argv) != 3 and len(sys.argv) != 6:
     print("python pytorch2onnx.py ONNX_IN ONNX_OUT")
     exit(1)
 
+# Debug use
+# logging.basicConfig(level=logging.DEBUG)
+
 if len(sys.argv) == 6:
     logging.warning("Converting from pth to onnx is not recommended.")
     onnx_in = sys.argv[5]

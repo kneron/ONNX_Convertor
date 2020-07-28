@@ -11,6 +11,7 @@ from . import eliminating
 from . import fusing
 from . import constant_folding
 from . import removing_transpose
+from . import modhelper
 
 
 def preprocess(model_proto):
@@ -86,6 +87,7 @@ def common_optimization(m):
     - replace Squeeze/Unsqueeze with Reshape
     - replace Reshape with Flatten
     """
+    m = onnx.utils.polish_model(m)
     g = m.graph
     other.transpose_B_in_Gemm(g)
     fusing.fuse_BN_into_Gemm(g)
@@ -118,8 +120,13 @@ def pytorch_constant_folding(m):
     replacing.replace_shape_with_constant(m.graph)
 
     # constant_folding
+    m = modhelper.inference_shapes(m)
     while constant_folding.constant_folding(m.graph):
-        m = onnx.utils.polish_model(m)
+        logging.debug("After constant folding jobs.")
+        other.topological_sort(m.graph)
+        while len(m.graph.value_info) != 0:
+            m.graph.value_info.pop()
+        m = modhelper.inference_shapes(m)
         replacing.replace_shape_with_constant(m.graph)
 
     other.topological_sort(m.graph)
