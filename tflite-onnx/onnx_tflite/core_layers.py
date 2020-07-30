@@ -7,11 +7,18 @@ import numpy as np
 from base_layer import Layer
 import utils
 
+from tflite.ReshapeOptions import ReshapeOptions
+from tflite.SqueezeOptions import SqueezeOptions
+from tflite.FullyConnectedOptions import FullyConnectedOptions
+from tflite.ActivationFunctionType import ActivationFunctionType
 
 class Dense(Layer):
 
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_fc_parser = FullyConnectedOptions()
+      self.tflite_fc_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)  
 
   def generate(self):
       
@@ -38,8 +45,8 @@ class Dense(Layer):
 
       fc_name = self.onnx_node_name
 
-      weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][1])
-      bias_node_info = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][2])
+      weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
+      bias_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(2))
 
       weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
       bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
@@ -94,46 +101,32 @@ class Dense(Layer):
       self.weight_node_list.append(bias_onnx_node)
       self.node_list.append(fc_onnx_node)
 
-      if 'fused_activation_function' in self.op_info['builtin_options']:
+      activative_op = self.tflite_fc_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.onnx_node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-          activative_op = self.op_info['builtin_options']['fused_activation_function']
-          if activative_op == 'RELU6':
-              clip_name = 'clip_' + self.onnx_node_name
-              clip_node = onnx.helper.make_node(
-                  'Clip',
-                  inputs=[fc_name],
-                  outputs=[clip_name],
-                  min=0.0,
-                  max=6.0,
-                  name=clip_name
-              )
-              out_shape_info = helper.make_tensor_value_info(
-                  clip_name,
-                  TensorProto.FLOAT,
-                  self.node_output_detail['shape'].tolist()
-              )
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
 
-              # update tables
-              self.value_infos.append(out_shape_info)
-              self.node_list.append(clip_node)
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.onnx_node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-          elif activative_op == 'RELU':
-              relu_name = 'relu_' + self.onnx_node_name
-              relu_node = helper.make_node(
-                  "Relu",
-                  name=relu_name, 
-                  inputs=[fc_name], 
-                  outputs=[relu_name]
-              )
-              out_shape_info = helper.make_tensor_value_info(
-                  relu_name,
-                  TensorProto.FLOAT,
-                  self.node_output_detail['shape'].tolist()
-              )
-
-              # update tables
-              self.value_infos.append(out_shape_info)
-              self.node_list.append(relu_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
 
@@ -141,6 +134,9 @@ class Reshape(Layer):
 
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_reshape_parser = ReshapeOptions()
+      self.tflite_reshape_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)  
 
   def generate(self):
       out_dim = self.node_output_detail['shape']
@@ -168,10 +164,11 @@ class Reshape(Layer):
 
 
       # no attribute 'new_shape', should be op 'squeeze'
-      if 'builtin_options' in self.op_info:
-        new_shape = np.array(self.op_info['builtin_options']['new_shape'], dtype='int64')
+      if not self.tflite_reshape_parser.NewShapeIsNone:
+        new_shape = np.array(self.tflite_reshape_parser.NewShapeAsNumpy(), dtype='int64')
       else:
         new_shape = np.array(self.node_output_detail['shape'], dtype='int64')
+        
       shape_tensor = onnx.helper.make_tensor(shape_tensor_name,TensorProto.INT64,new_shape.shape, new_shape)
       shape_node = helper.make_node("Constant",[],[shape_node_name],name=shape_node_name,value=shape_tensor)
 
@@ -186,7 +183,7 @@ class Reshape(Layer):
       self.node_list.append(reshape_node)
 
       # no attribute 'new_shape', 
-      if 'builtin_options' in self.op_info:
+      if self.tflite_reshape_parser.NewShapeIsNone:
         dims = list(range(len(out_dim)))
         dims = dims[:1] + dims[-1:] + dims[1:-1]
         # add transpose
@@ -217,7 +214,7 @@ class Pad(Layer):
       #             [0 0]]          
 
       # create constant node
-      pad_node_detail = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][1])
+      pad_node_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
       pad_param = self.tflite_interpreter.get_tensor(pad_node_detail['index']).tolist()
 
       pad_w0 = pad_param[1][0]
@@ -248,13 +245,16 @@ class Squeeze(Layer):
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
+      self.tflite_squeeze_parser = SqueezeOptions()
+      self.tflite_squeeze_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+
   def generate(self):
       squeeze_node_name = self.onnx_node_name
       squeeze_node = onnx.helper.make_node(
           'Squeeze',
           inputs=self.previous_onnx_node_names,
           outputs=[squeeze_node_name],
-          axes= utils.channel_last_2_channel_first_axis_mapping( self.op_info['builtin_options']['squeeze_dims'] ),
+          axes= utils.channel_last_2_channel_first_axis_mapping( self.tflite_squeeze_parser.SqueezeDimsAsNumpy().tolist() ),
           name=squeeze_node_name
       )
 

@@ -8,24 +8,36 @@ from base_layer import Layer
 import utils
 import warnings
 
+from tflite.Conv2DOptions import Conv2DOptions
+from tflite.DepthwiseConv2DOptions import DepthwiseConv2DOptions
+from tflite.ActivationFunctionType import ActivationFunctionType
+from tflite.Padding import Padding
+
 class Convolution(Layer):
 
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
+      self.tflite_conv_parser = Conv2DOptions()
+      self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)   
 
   def generate(self):
 
-      weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][1])
-      bias_node_info = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][2])
+      weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
+      bias_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(2))
 
       weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
       bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
 
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
 
-      strides_len = [self.op_info['builtin_options']['stride_w'],self.op_info['builtin_options']['stride_h']]
-      padding_stradegy = self.op_info['builtin_options']['padding']
+      strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
+
+      padding_stradegy = 'NONE' 
+      if self.tflite_conv_parser.Padding() is Padding.SAME:
+          padding_stradegy = 'SAME' 
+      elif self.tflite_conv_parser.Padding() is Padding.VALID:
+          padding_stradegy = 'VALID' 
 
       input_feature_map_shape = self.node_input_detail['shape']
 
@@ -59,7 +71,7 @@ class Convolution(Layer):
           kernel_shape=kernel_shape,
           strides=strides_len,
           pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
-          dilations=[self.op_info['builtin_options']['dilation_w_factor'],self.op_info['builtin_options']['dilation_h_factor']],
+          dilations=[self.tflite_conv_parser.DilationWFactor(),self.tflite_conv_parser.DilationHFactor()],
           name=self.onnx_node_name,
           group=1
       )
@@ -77,34 +89,33 @@ class Convolution(Layer):
       self.weight_node_list.append(bias_onnx_node)
       self.node_list.append(conv_onnx_node)
 
-      if 'fused_activation_function' in self.op_info['builtin_options']:
 
-          activative_op = self.op_info['builtin_options']['fused_activation_function']
-          if activative_op == 'RELU6':
-              clip_name = 'fused_clip_' + self.onnx_node_name
-              clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
-              out_shape_info = onnx.helper.make_tensor_value_info(
-                  clip_name,
-                  TensorProto.FLOAT,
-                  utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
-              )
+      activative_op = self.tflite_conv_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.onnx_node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-              # update tables
-              self.value_infos.append(out_shape_info)
-              self.node_list.append(clip_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
 
-          elif activative_op == 'RELU':
-              relu_name = 'fused_relu_' + self.onnx_node_name
-              relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
-              out_shape_info = onnx.helper.make_tensor_value_info(
-                  relu_name,
-                  TensorProto.
-                  FLOAT,utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
-              )
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.onnx_node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-              # update tables
-              self.value_infos.append(out_shape_info)
-              self.node_list.append(relu_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
 
 
       return self.node_list, self.value_infos, self.weight_node_list
@@ -114,11 +125,14 @@ class DepthwiseConvolution(Layer):
 
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+      
+      self.tflite_conv_parser = DepthwiseConv2DOptions()
+      self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
 
   def generate(self):
 
-      weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][1])
-      bias_node_info = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][2])
+      weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
+      bias_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(2))
 
       weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
       bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
@@ -126,8 +140,13 @@ class DepthwiseConvolution(Layer):
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
       channel = weights_array.shape[3]
 
-      strides_len = [self.op_info['builtin_options']['stride_w'],self.op_info['builtin_options']['stride_h']]
-      padding_stradegy = self.op_info['builtin_options']['padding']
+      strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
+
+      padding_stradegy = 'NONE' 
+      if self.tflite_conv_parser.Padding() is Padding.SAME:
+          padding_stradegy = 'SAME' 
+      elif self.tflite_conv_parser.Padding() is Padding.VALID:
+          padding_stradegy = 'VALID' 
 
       input_feature_map_shape = self.node_input_detail['shape']
 
@@ -161,7 +180,7 @@ class DepthwiseConvolution(Layer):
           kernel_shape=kernel_shape,
           strides=strides_len,
           pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
-          dilations=[self.op_info['builtin_options']['dilation_w_factor'],self.op_info['builtin_options']['dilation_h_factor']],
+          dilations=[self.tflite_conv_parser.DilationWFactor(),self.tflite_conv_parser.DilationHFactor()],
           name=self.onnx_node_name,
 
           # goup conv as depthwise conv
@@ -181,34 +200,32 @@ class DepthwiseConvolution(Layer):
       self.weight_node_list.append(bias_onnx_node)
       self.node_list.append(conv_onnx_node)
 
-      if 'fused_activation_function' in self.op_info['builtin_options']:
+      activative_op = self.tflite_conv_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.onnx_node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-          activative_op = self.op_info['builtin_options']['fused_activation_function']
-          if activative_op == 'RELU6':
-              clip_name = 'fused_clip_' + self.onnx_node_name
-              clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
-              out_shape_info = onnx.helper.make_tensor_value_info(
-                  clip_name,
-                  TensorProto.FLOAT,
-                  utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
-              )
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
 
-              # update tables
-              self.value_infos.append(out_shape_info)
-              self.node_list.append(clip_node)
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.onnx_node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-          elif activative_op == 'RELU':
-              relu_name = 'fused_relu_' + self.onnx_node_name
-              relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
-              out_shape_info = onnx.helper.make_tensor_value_info(
-                  relu_name,
-                  TensorProto.FLOAT,
-                  utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
-              )
-
-              # update tables
-              self.value_infos.append(out_shape_info)
-              self.node_list.append(relu_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
 
@@ -225,8 +242,7 @@ class ResizeNearestNeighbor(Layer):
                           UserWarning)
 
             # create constant node
-            tensor_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][1])
-            align_corners, half_pixel_centers = self.__get_builtin_options()
+            tensor_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
 
             source_width, source_height = self.node_input_detail['shape'].tolist()[1:3]
             target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
@@ -278,12 +294,6 @@ class ResizeNearestNeighbor(Layer):
             self.node_list.append(resize_nearest_neighbor_node)
             self.value_infos.append(resize_nearest_neighbor_info)
         else:
-            NotImplementedError('Only Support ONNX ' + utils.ONNX_VERSION_1_4_1)
+            NotImplementedError('Partially Support ONNX ' + utils.ONNX_VERSION_1_4_1)
 
         return self.node_list, self.value_infos, self.weight_node_list
-
-    def __get_builtin_options(self):
-        align_corners = utils.get_value_from_dict(self.op_info['builtin_options'], 'align_corners')
-        half_pixel_centers = utils.get_value_from_dict(self.op_info['builtin_options'], 'half_pixel_centers')
-
-        return align_corners, half_pixel_centers

@@ -15,6 +15,29 @@ import argparse
 import json
 import tensorflow as tf
 
+import tflite
+from tflite.BuiltinOperator import BuiltinOperator
+from tflite.Model import Model
+
+def read_tflite_model(path):
+    data = open(path, "rb").read()
+    model = Model.GetRootAsModel(bytearray(data), 0)
+    return model
+    
+def get_op_info(model_path):
+    ops = [] 
+    op_types = []
+
+    raw_model = read_tflite_model(model_path)
+    tflite_graph = raw_model.Subgraphs(0)
+    for idx in range(tflite_graph.OperatorsLength()):
+        op = tflite_graph.Operators(idx)
+        op_type = raw_model.OperatorCodes(op.OpcodeIndex()).BuiltinCode()
+
+        ops.append(op)
+        op_types.append(op_type)
+
+    return ops, op_types
 
 def set_end_node(onnx_end_node, tflite_out_info):
 
@@ -60,17 +83,6 @@ def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, 
 
     return out_value_info, transpose_node
 
-def get_op_info_from_json(model_json_path):
-    op_types = []
-
-    json_data = json.load(open(model_json_path))
-    for element in json_data['operator_codes']:
-        if 'builtin_code' in element.keys():
-            op_types.append(element['builtin_code'])
-    ops = json_data['subgraphs'][0]['operators']
-
-    return ops, op_types
-
 def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
     transpose_node_name = 'transpose_node_input_' + input_name
     transpose_node = onnx.helper.make_node(
@@ -83,9 +95,8 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
 
     return transpose_node
 
-def main(model_path, model_json_path, model_save_path, add_transpose_for_channel_last_first_issue = True):
-    ops, op_types = get_op_info_from_json(model_json_path)
-
+def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True):
+    
     # some nodes are merged as one node, we need a table to store this information
     op_name__sub_op_name__table = {}
 
@@ -94,6 +105,10 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
     onnx_node_list = []
     inner_node_shape_value_info = []
 
+    # parse operator information through flatc python module
+    tflite_ops, tflite_op_types = get_op_info(model_path)
+
+    # parse node information through tflite interpreter (tflite interpreter can't parse operator information in our target tensorflow version 1.15)
     interpreter = tf.lite.Interpreter(model_path)
     interpreter.allocate_tensors()
 
@@ -118,9 +133,9 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
     ############################
     # build model node by node #
     ############################
-    for op in ops:
-        node_output_detail = interpreter._get_tensor_details(op['outputs'][0])
-        node_input_detail = interpreter._get_tensor_details(op['inputs'][0])
+    for idx,op in enumerate(tflite_ops):
+        node_output_detail = interpreter._get_tensor_details(op.Outputs(0))
+        node_input_detail = interpreter._get_tensor_details(op.Inputs(0))
 
         node_name = node_output_detail['name'] 
         prev_node_name = node_input_detail['name']
@@ -128,46 +143,47 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
         if prev_node_name in op_name__sub_op_name__table:
             prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
 
-        op_type = op_types[op['opcode_index']]
-        if op_type == 'CONV_2D':
+        op_type = tflite_op_types[idx]
+        if op_type == BuiltinOperator.CONV_2D:
             nodes, val, weight = Convolution( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'DEPTHWISE_CONV_2D':
+        elif op_type == BuiltinOperator.DEPTHWISE_CONV_2D:
             nodes, val, weight = DepthwiseConvolution( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'SOFTMAX':
+        elif op_type == BuiltinOperator.SOFTMAX:
             nodes, val, weight = Softmax( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'RELU':
+        elif op_type == BuiltinOperator.RELU:
             nodes, val, weight = Relu( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'RELU6':
+        elif op_type == BuiltinOperator.RELU6:
             nodes, val, weight = Relu6( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'LOGISTIC':
+        elif op_type == BuiltinOperator.LOGISTIC:
             nodes, val, weight = LOGISTIC( [prev_node_name], op_type, op, interpreter).generate()       
-        elif op_type == 'FULLY_CONNECTED':
+        elif op_type == BuiltinOperator.FULLY_CONNECTED:
             nodes, val, weight = Dense( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'RESHAPE':
+        elif op_type == BuiltinOperator.RESHAPE:
             nodes, val, weight = Reshape( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'PAD':
+        elif op_type == BuiltinOperator.PAD:
             nodes, val, weight = Pad( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'ADD':
+        elif op_type == BuiltinOperator.ADD:
             nodes, val, weight = Add( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == 'MUL':
+        elif op_type == BuiltinOperator.MUL:
             nodes, val, weight = Mul( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == 'CONCATENATION':
+        elif op_type == BuiltinOperator.CONCATENATION:
             nodes, val, weight = Concatenation( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == 'MEAN':
+        elif op_type == BuiltinOperator.MEAN:
             nodes, val, weight = Mean( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'MAX_POOL_2D':
+        elif op_type == BuiltinOperator.MAX_POOL_2D:
             nodes, val, weight = MaxPooling2D( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'AVERAGE_POOL_2D':
+        elif op_type == BuiltinOperator.AVERAGE_POOL_2D:
             nodes, val, weight = AveragePooling2D( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'SQUEEZE':
+        elif op_type == BuiltinOperator.SQUEEZE:
             nodes, val, weight = Squeeze( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == 'RESIZE_NEAREST_NEIGHBOR':
+        elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
             nodes, val, weight = ResizeNearestNeighbor([prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 
         sub_op_node_list = []
         for node in nodes:
+            # weight and bias node is onnx type Constant
             if node.op_type != 'Constant':
                 sub_op_node_list.append(node)
 
@@ -213,9 +229,9 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
     )
 
     cnn_model = helper.make_model(graph_cnn, producer_name='onnx-tflite-examples')
-    if add_transpose_for_channel_last_first_issue is True:
-        cnn_model = onnx.utils.polish_model(cnn_model)
+    cnn_model = onnx.utils.polish_model(cnn_model)
 
+    # save
     onnx.save(cnn_model, model_save_path)
 
 
@@ -233,7 +249,6 @@ if __name__ == '__main__':
         raise UserWarning('\n' + args.save_path + " should be .onnx")
 
     model_path = os.path.abspath(args.tflite)
-    model_json_path = os.path.join(this_dir_path, os.path.basename(model_path[:-7]) + ".json")
     model_save_path = os.path.abspath(args.save_path)
     is_release_mode = True if args.release_mode == 'True' else False
 
@@ -247,19 +262,12 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-
-    flatc_folder_path = os.path.join(this_dir_path,'flatc')
-    os.system( os.path.join(flatc_folder_path,'flatc') + " -t --strict-json --defaults-json -o " + os.path.dirname(model_json_path) + " " + os.path.join(flatc_folder_path,'schema.fbs') + " -- " + model_path)
-
+  
     try:
-        main(model_path, model_json_path, model_save_path, not is_release_mode)
+        main(model_path, model_save_path, not is_release_mode)
     except Exception as e:
         print('Error: Something Wrong')
         print(e)
-        if os.path.isfile(model_json_path): 
-            os.system("rm " + model_json_path)
-    if os.path.isfile(model_json_path): 
-        os.system("rm " + model_json_path)
-        
+
     print('------------   end   ------------------------')
 
