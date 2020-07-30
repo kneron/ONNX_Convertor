@@ -258,6 +258,8 @@ def inference_upsample_shape(g):
         if node.op_type != 'Upsample':
             continue
         output_value = helper.find_value_by_name(g, node.output[0])
+        if output_value is None:
+            output_value = helper.find_output_by_name(g, node.output[0])
         if output_value and helper.get_shape_from_value_info(output_value):
             continue
         # Get input shape
