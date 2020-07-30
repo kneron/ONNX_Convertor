@@ -12,7 +12,7 @@ from . import fusing
 from . import constant_folding
 from . import removing_transpose
 from . import modhelper
-
+from .torch_pattern import torch_pattern_match
 
 def preprocess(model_proto):
     """The most common used functions before other processing.
@@ -130,6 +130,7 @@ def pytorch_constant_folding(m):
         replacing.replace_shape_with_constant(m.graph)
 
     other.topological_sort(m.graph)
+    m = torch_pattern_match(m)
     return m
 
 
