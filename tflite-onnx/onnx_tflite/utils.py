@@ -1,12 +1,24 @@
 import onnx
 from onnx import helper
 from onnx import AttributeProto, TensorProto
+from onnx import onnx_pb as onnx_proto
+
+ONNX_VERSION_1_4_1 = '1.4.1'
 
 def tflite2onnx_shape_map(shape_list):
     # change dimension due to channel first-last issue
-    if len(shape_list) != 4:
-        return None
-    return [shape_list[0],shape_list[3],shape_list[1],shape_list[2]]
+    if len(shape_list) == 4:
+        return [shape_list[0],shape_list[3],shape_list[1],shape_list[2]]
+
+    elif len(shape_list) == 3:
+        return [shape_list[0],shape_list[2],shape_list[1]]
+        
+    elif len(shape_list) == 2:
+        # not change
+        return shape_list
+
+    raise ValueError('unexpected output dimension')
+
 
 def channel_last_2_channel_first_axis_mapping(axis_list):
     table = {'0':0,
@@ -74,3 +86,12 @@ def make_kneron_valid_onnx_input(input_init):
             onnx_inputs.append(data)
     return onnx_inputs
 
+
+def get_value_from_dict(dict_obj, key):
+    if isinstance(dict_obj, dict):
+        if key in dict_obj.keys():
+            return dict_obj[key]
+        else:
+            return None
+    else:
+        raise TypeError('dict_obj is not type of ' + dict.__name__)
