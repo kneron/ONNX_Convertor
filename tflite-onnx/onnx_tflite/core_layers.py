@@ -168,7 +168,7 @@ class Reshape(Layer):
         new_shape = np.array(self.tflite_reshape_parser.NewShapeAsNumpy(), dtype='int64')
       else:
         new_shape = np.array(self.node_output_detail['shape'], dtype='int64')
-        
+
       shape_tensor = onnx.helper.make_tensor(shape_tensor_name,TensorProto.INT64,new_shape.shape, new_shape)
       shape_node = helper.make_node("Constant",[],[shape_node_name],name=shape_node_name,value=shape_tensor)
 
@@ -210,8 +210,8 @@ class Pad(Layer):
   def generate(self):
       # tflite pad :[[0 0]
       #             [2 1]           onnx pad :
-      #             [2 1]     ==       [0,0,2,2,0,0,1,1]          
-      #             [0 0]]          
+      #             [2 1]     ==       [0,0,2,2,3,3,1,1]          
+      #             [3 3]]          
 
       # create constant node
       pad_node_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
@@ -223,6 +223,9 @@ class Pad(Layer):
       pad_w = pad_param[1][1]
       pad_h = pad_param[2][1]
 
+      pad_ch_w = pad_param[3][0]
+      pad_ch_h = pad_param[3][1]
+
       # build node
       pad_name = self.onnx_node_name
       pad_node = helper.make_node(
@@ -231,7 +234,7 @@ class Pad(Layer):
           [pad_name], 
           mode='constant', 
           value=0.0, 
-          pads=[0,0,pad_w0,pad_h0,0,0,pad_w,pad_h], 
+          pads=[0,0,pad_w0,pad_h0,pad_ch_w,pad_ch_h,pad_w,pad_h], 
           name=pad_name 
       )
 

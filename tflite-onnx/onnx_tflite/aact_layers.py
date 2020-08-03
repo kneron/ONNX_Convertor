@@ -94,4 +94,42 @@ class Softmax(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+class PRelu(Layer):
 
+  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+  def generate(self):
+
+      slope_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
+      slope_array = self.tflite_interpreter.get_tensor(slope_node_info['index'])
+      slope_array = np.transpose(slope_array, (2, 0, 1))
+
+      # make slope onnx node
+      slope_onnx_node_name = self.onnx_node_name + "_slope"
+      slope_onnx_node = onnx.helper.make_tensor(
+          slope_onnx_node_name,
+          TensorProto.FLOAT,
+          slope_array.shape,
+          slope_array.flatten().tolist()
+      )
+      self.weight_node_list.append(slope_onnx_node)
+
+      self.previous_onnx_node_names.extend([slope_onnx_node_name])
+      prelu_node = onnx.helper.make_node(
+          'PRelu',
+          inputs=self.previous_onnx_node_names,
+          outputs=[self.onnx_node_name],
+          name=self.onnx_node_name
+      )
+      self.node_list.append(prelu_node)
+      
+      # original layer output
+      out_shape_info = onnx.helper.make_tensor_value_info(
+          self.onnx_node_name, 
+          TensorProto.FLOAT, 
+          utils.tflite2onnx_shape_map(self.node_output_detail['shape'].tolist())
+      )
+      self.value_infos.append(out_shape_info)
+
+      return self.node_list, self.value_infos, self.weight_node_list

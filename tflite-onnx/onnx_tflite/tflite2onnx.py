@@ -4,7 +4,7 @@ from onnx import helper
 from onnx import AttributeProto, TensorProto
 
 from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor
-from aact_layers import Relu,Relu6,Softmax,LOGISTIC
+from aact_layers import Relu,Relu6,Softmax,LOGISTIC,PRelu
 from core_layers import Dense,Reshape,Pad,Squeeze
 from merg_layers import Add,Mul,Concatenation
 from pool_layers import MaxPooling2D,AveragePooling2D,Mean
@@ -154,6 +154,8 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             nodes, val, weight = Relu( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RELU6:
             nodes, val, weight = Relu6( [prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == BuiltinOperator.PRELU:
+            nodes, val, weight = PRelu( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.LOGISTIC:
             nodes, val, weight = LOGISTIC( [prev_node_name], op_type, op, interpreter).generate()       
         elif op_type == BuiltinOperator.FULLY_CONNECTED:
