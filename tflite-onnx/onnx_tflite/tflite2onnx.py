@@ -11,6 +11,7 @@ from pool_layers import MaxPooling2D,AveragePooling2D,Mean
 import utils
 
 import os
+from datetime import datetime
 import argparse
 import json
 import tensorflow as tf
@@ -230,7 +231,11 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
         value_info=inner_node_shape_value_info
     )
 
-    cnn_model = helper.make_model(graph_cnn, producer_name='onnx-tflite-examples')
+    cnn_model = helper.make_model(graph_cnn, producer_name='Kneron')
+
+    # add generated time to model meta data
+    helper.set_model_props(cnn_model, {'Generated Time': datetime.utcnow().strftime("%m/%d/%Y, %H:%M:%S") + " (UTC+0)"})
+    
     cnn_model = onnx.utils.polish_model(cnn_model)
 
     # save
