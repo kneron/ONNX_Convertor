@@ -7,6 +7,10 @@ import numpy as np
 from base_layer import Layer
 import utils
 
+from tflite.AddOptions import AddOptions
+from tflite.MulOptions import MulOptions
+from tflite.ConcatenationOptions import ConcatenationOptions
+from tflite.ActivationFunctionType import ActivationFunctionType
 
 
 def make_onnx_constant_number(tflite_interpreter, constant_details):
@@ -42,10 +46,13 @@ class Add(Layer):
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
+      self.tflite_add_parser = AddOptions()
+      self.tflite_add_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+
   def generate(self, op_name__sub_op_name__table):
       prev_node_names = []
-      for input_idx in range(len(self.op_info['inputs'])):
-          node_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][input_idx])
+      for input_idx in range(self.op_info.InputsLength()):
+          node_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(input_idx))
 
           prev_node_name = node_input_detail['name']
 
@@ -75,33 +82,32 @@ class Add(Layer):
       # update tables
       self.node_list.append(add_node)
 
-      if 'fused_activation_function' in self.op_info['builtin_options']:
-          activative_op = self.op_info['builtin_options']['fused_activation_function']
-          if activative_op == 'RELU6':
-              clip_name = 'fused_clip_' + self.onnx_node_name
-              clip_node = onnx.helper.make_node(
-                  'Clip',
-                  inputs=[add_node_name],
-                  outputs=[clip_name],
-                  min=0.0,
-                  max=6.0,
-                  name=clip_name
-              )
+      activative_op = self.tflite_add_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.onnx_node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-              # update tables
-              self.node_list.append(clip_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
 
-          elif activative_op == 'RELU':
-              relu_name = 'fused_relu_' + self.onnx_node_name
-              relu_node = helper.make_node(
-                  "Relu",
-                  name=relu_name, 
-                  inputs=[add_node_name], 
-                  outputs=[relu_name]
-              )
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.onnx_node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-              # update tables
-              self.node_list.append(relu_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
 
@@ -110,11 +116,14 @@ class Concatenation(Layer):
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
+      self.tflite_concat_parser = ConcatenationOptions()
+      self.tflite_concat_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+
   def generate(self,op_name__sub_op_name__table):
 
       prev_node_names = []
-      for input_idx in range(len(self.op_info['inputs'])):
-          node_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][input_idx])
+      for input_idx in range(self.op_info.InputsLength()):
+          node_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(input_idx))
           prev_node_name = node_input_detail['name']
           if node_input_detail['name'] in op_name__sub_op_name__table:
               prev_node_name = op_name__sub_op_name__table[node_input_detail['name']][-1] # last sub node
@@ -125,12 +134,39 @@ class Concatenation(Layer):
           'Concat',
           inputs=prev_node_names,
           outputs=[concat_node_name],
-          axis= utils.channel_last_2_channel_first_axis_mapping( [self.op_info['builtin_options']['axis']] )[0],
+          axis= utils.channel_last_2_channel_first_axis_mapping( [self.tflite_concat_parser.Axis()] )[0],
           name=concat_node_name
       )
 
       # update tables
       self.node_list.append(concat_node)
+
+      activative_op = self.tflite_concat_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.onnx_node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
+
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
+
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.onnx_node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
+
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
 
@@ -140,10 +176,13 @@ class Mul(Layer):
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
       Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
+      self.tflite_mul_parser = MulOptions()
+      self.tflite_mul_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+
   def generate(self, op_name__sub_op_name__table):
       prev_node_names = []
-      for input_idx in range(len(self.op_info['inputs'])):
-          node_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info['inputs'][input_idx])
+      for input_idx in range(self.op_info.InputsLength()):
+          node_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(input_idx))
 
           prev_node_name = node_input_detail['name']
 
@@ -173,32 +212,31 @@ class Mul(Layer):
       # update tables
       self.node_list.append(mul_node)
 
-      if 'fused_activation_function' in self.op_info['builtin_options']:
-          activative_op = self.op_info['builtin_options']['fused_activation_function']
-          if activative_op == 'RELU6':
-              clip_name = 'fused_clip_' + self.onnx_node_name
-              clip_node = onnx.helper.make_node(
-                  'Clip',
-                  inputs=[mul_node_name],
-                  outputs=[clip_name],
-                  min=0.0,
-                  max=6.0,
-                  name=clip_name
-              )
+      activative_op = self.tflite_mul_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.onnx_node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.onnx_node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-              # update tables
-              self.node_list.append(clip_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
 
-          elif activative_op == 'RELU':
-              relu_name = 'fused_relu_' + self.onnx_node_name
-              relu_node = helper.make_node(
-                  "Relu",
-                  name=relu_name, 
-                  inputs=[mul_node_name], 
-                  outputs=[relu_name]
-              )
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.onnx_node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.onnx_node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+          )
 
-              # update tables
-              self.node_list.append(relu_node)
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
