@@ -10,6 +10,7 @@ import warnings
 
 from tflite.Conv2DOptions import Conv2DOptions
 from tflite.DepthwiseConv2DOptions import DepthwiseConv2DOptions
+from tflite.TransposeConvOptions import TransposeConvOptions
 from tflite.ActivationFunctionType import ActivationFunctionType
 from tflite.Padding import Padding
 
@@ -298,3 +299,76 @@ class ResizeNearestNeighbor(Layer):
             NotImplementedError('Partially Support ONNX ' + utils.ONNX_VERSION_1_4_1)
 
         return self.node_list, self.value_infos, self.weight_node_list
+
+
+class TransposeConvolution(Layer):
+
+  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_tconv_parser = TransposeConvOptions()
+      self.tflite_tconv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)   
+
+  def generate(self):
+
+      self.node_output_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(0))
+      self.node_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(2))
+
+      output_shape_value = self.tflite_interpreter.get_tensor(self.node_output_detail['index'])
+
+      weights_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
+      weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
+
+      kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
+
+      strides_len = [self.tflite_tconv_parser.StrideW(),self.tflite_tconv_parser.StrideH()]
+
+      padding_stradegy = 'NONE' 
+      if self.tflite_tconv_parser.Padding() is Padding.SAME:
+          padding_stradegy = 'SAME' 
+      elif self.tflite_tconv_parser.Padding() is Padding.VALID:
+          padding_stradegy = 'VALID' 
+
+      input_feature_map_shape = self.node_input_detail['shape']
+
+      # transpose because shape define diffent between tflite and onnx
+      weights_array = np.transpose(weights_array, (3, 0, 1, 2))
+
+      # make weight onnx node
+      weight_onnx_node_name = self.onnx_node_name + "_weight"
+      weight_onnx_node = onnx.helper.make_tensor(
+          weight_onnx_node_name,
+          TensorProto.FLOAT,
+          weights_array.shape,
+          weights_array.flatten().tolist()
+      )
+
+      # make conv onnx node
+      self.previous_onnx_node_names.extend([weight_onnx_node_name])
+      tconv_onnx_node = onnx.helper.make_node(
+          'ConvTranspose',
+          inputs= self.previous_onnx_node_names,
+          outputs=[self.onnx_node_name],
+          kernel_shape=kernel_shape,
+          strides=strides_len,
+
+          # TODO: calculate padding for tanspose conv
+          #pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
+          name=self.onnx_node_name,
+          group=1
+      )
+
+      # original layer output
+      out_shape_info = onnx.helper.make_tensor_value_info(
+          self.onnx_node_name,
+          TensorProto.FLOAT,
+          utils.tflite2onnx_shape_map(output_shape_value.tolist())
+      )
+      self.value_infos.append(out_shape_info)
+
+      # add weight, bias node
+      self.weight_node_list.append(weight_onnx_node)
+      self.node_list.append(tconv_onnx_node)
+
+
+      return self.node_list, self.value_infos, self.weight_node_list

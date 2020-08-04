@@ -3,7 +3,7 @@ import onnx.utils
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 
-from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor
+from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor,TransposeConvolution
 from aact_layers import Relu,Relu6,Softmax,LOGISTIC,PRelu
 from core_layers import Dense,Reshape,Pad,Squeeze,L2Normalization
 from merg_layers import Add,Mul,Concatenation
@@ -145,6 +145,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
 
         op_type = tflite_op_types[idx]
+        print("converting node name: " + node_name) 
         if op_type == BuiltinOperator.CONV_2D:
             nodes, val, weight = Convolution( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.DEPTHWISE_CONV_2D:
@@ -183,6 +184,14 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             nodes, val, weight = ResizeNearestNeighbor([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.L2_NORMALIZATION:
             nodes, val, weight = L2Normalization([prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == BuiltinOperator.TRANSPOSE_CONV:
+            # transpose conv is very different from others of input position
+            prev_node_name = interpreter._get_tensor_details(op.Inputs(2))['name'] 
+
+            if prev_node_name in op_name__sub_op_name__table:
+                prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
+
+            nodes, val, weight = TransposeConvolution([prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 
@@ -271,7 +280,7 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-  
+
     try:
         main(model_path, model_save_path, not is_release_mode)
     except Exception as e:
