@@ -19,8 +19,12 @@ parser.add_argument('in_file', help='input ONNX FILE')
 parser.add_argument('-o', '--output', dest='out_file', type=str, help="ouput ONNX FILE")
 parser.add_argument('--bgr', action='store_true', default=False, help="set if the model is trained in BGR mode")
 parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
-parser.add_argument('--add-bn-on-skip', dest='bn_on_skip', action='store_true', default=False, help="set if you want to add BN on skip branches")
-parser.add_argument('-t', '--eliminate-tail-unsupported', dest='eliminate_tail', action='store_true', default=False, help='whether remove the last unsupported node for hardware')
+parser.add_argument('--add-bn-on-skip', dest='bn_on_skip', action='store_true', default=False,
+                    help="set if you want to add BN on skip branches")
+parser.add_argument('-t', '--eliminate-tail-unsupported', dest='eliminate_tail', action='store_true', default=False,
+                    help='whether remove the last unsupported node for hardware')
+parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
+                    help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
 
 args = parser.parse_args()
 
@@ -43,7 +47,7 @@ else:
 # Basic model organize
 m = onnx.load(args.in_file)
 # temp.weight_broadcast(m.graph)
-m = combo.preprocess(m)
+m = combo.preprocess(m, args.disable_fuse_bn)
 # temp.fuse_bias_in_consecutive_1x1_conv(m.graph)
 
 # Add BN on skip branch

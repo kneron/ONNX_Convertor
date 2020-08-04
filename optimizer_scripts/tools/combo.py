@@ -14,7 +14,7 @@ from . import removing_transpose
 from . import modhelper
 from .torch_pattern import torch_pattern_match
 
-def preprocess(model_proto):
+def preprocess(model_proto, disable_fuse_bn=False):
     """The most common used functions before other processing.
 
     :param model_proto: the original model input\\
@@ -50,11 +50,12 @@ def preprocess(model_proto):
     """
     m = onnx.utils.polish_model(model_proto)
     passes = ['extract_constant_to_initializer',
-              'fuse_bn_into_conv',
               'eliminate_nop_dropout',
               'eliminate_deadend',
               'fuse_matmul_add_bias_into_gemm',
               'fuse_pad_into_conv']
+    if not disable_fuse_bn:
+        passes.append('fuse_bn_into_conv')
     m = optimizer.optimize(m, passes)
     g = m.graph
     other.add_name_to_node(g)
