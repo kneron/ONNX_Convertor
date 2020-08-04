@@ -5,7 +5,7 @@ from onnx import AttributeProto, TensorProto
 
 from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor
 from aact_layers import Relu,Relu6,Softmax,LOGISTIC,PRelu
-from core_layers import Dense,Reshape,Pad,Squeeze
+from core_layers import Dense,Reshape,Pad,Squeeze,L2Normalization
 from merg_layers import Add,Mul,Concatenation
 from pool_layers import MaxPooling2D,AveragePooling2D,Mean
 import utils
@@ -181,6 +181,8 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             nodes, val, weight = Squeeze( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
             nodes, val, weight = ResizeNearestNeighbor([prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == BuiltinOperator.L2_NORMALIZATION:
+            nodes, val, weight = L2Normalization([prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 
@@ -235,7 +237,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
 
     # add generated time to model meta data
     helper.set_model_props(cnn_model, {'Generated Time': datetime.utcnow().strftime("%m/%d/%Y, %H:%M:%S") + " (UTC+0)"})
-    
+
     cnn_model = onnx.utils.polish_model(cnn_model)
 
     # save

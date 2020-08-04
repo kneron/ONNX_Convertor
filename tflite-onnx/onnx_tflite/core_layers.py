@@ -8,6 +8,7 @@ from base_layer import Layer
 import utils
 
 from tflite.ReshapeOptions import ReshapeOptions
+from tflite.L2NormOptions import L2NormOptions
 from tflite.SqueezeOptions import SqueezeOptions
 from tflite.FullyConnectedOptions import FullyConnectedOptions
 from tflite.ActivationFunctionType import ActivationFunctionType
@@ -263,5 +264,34 @@ class Squeeze(Layer):
 
       # update tables
       self.node_list.append(squeeze_node)
+
+      return self.node_list, self.value_infos, self.weight_node_list
+
+class L2Normalization(Layer):
+
+  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_l2norm_parser = L2NormOptions()
+      self.tflite_l2norm_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+
+  def generate(self):
+      l2norm_node_name = self.onnx_node_name
+      l2norm_node = onnx.helper.make_node(
+          'LpNormalization',
+          inputs=self.previous_onnx_node_names,
+          outputs=[l2norm_node_name],
+
+          # along last dimension
+          axis=-1,
+
+          # L2
+          p=2,
+
+          name=l2norm_node_name
+      )
+
+      # update tables
+      self.node_list.append(l2norm_node)
 
       return self.node_list, self.value_infos, self.weight_node_list

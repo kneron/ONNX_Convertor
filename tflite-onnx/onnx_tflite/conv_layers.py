@@ -149,6 +149,7 @@ class DepthwiseConvolution(Layer):
           padding_stradegy = 'VALID' 
 
       input_feature_map_shape = self.node_input_detail['shape']
+     
 
       # transpose because shape define diffent between tflite and onnx
       weights_array = np.transpose(weights_array, (3, 0, 1, 2))
@@ -184,7 +185,7 @@ class DepthwiseConvolution(Layer):
           name=self.onnx_node_name,
 
           # goup conv as depthwise conv
-          group=channel
+          group=int(channel/self.tflite_conv_parser.DepthMultiplier())
       )
 
        # original layer output
