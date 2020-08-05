@@ -2,10 +2,11 @@ import onnx
 import argparse
 import glob
 import csv
-import onnx_tester
 import numpy as np
 import matplotlib.pyplot as plt
+
 from tools import helper
+import onnx_vs_onnx as onnx_tester
 
 def compare_results(results_a, results_b):
   """ compare onnx model inference results
