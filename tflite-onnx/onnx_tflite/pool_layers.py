@@ -38,7 +38,7 @@ class MaxPooling2D(Layer):
           outputs=[max_pool_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
+          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, None, padding_stradegy),
           name=max_pool_name
       )
       out_shape_info = helper.make_tensor_value_info(
@@ -108,7 +108,7 @@ class AveragePooling2D(Layer):
           outputs=[avg_pool_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
+          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, None, padding_stradegy),
           name=avg_pool_name
       )
       out_shape_info = helper.make_tensor_value_info(
