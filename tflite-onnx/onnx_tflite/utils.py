@@ -38,7 +38,7 @@ def get_output_node_info_by_name_if_exist(node_name, interpreter):
             return node_info
     return None
 
-def getPadding(feat_map_size, kernel_size, strides, mode):
+def getPadding(feat_map_size, kernel_size, strides, dilation_factor, mode):
     # only support 'VALID' and 'SAME' mode
     if mode != 'VALID' and mode != 'SAME':
         return None
@@ -46,22 +46,30 @@ def getPadding(feat_map_size, kernel_size, strides, mode):
     # if mode is VALID
     if mode == 'VALID':
         return [0,0,0,0]
-    
+
+    if dilation_factor is None:
+        convolution_size = kernel_size
+    else:
+        convolution_size = [
+            kernel_size[0] + ((kernel_size[0] - 1) * (dilation_factor[0] - 1)),
+            kernel_size[1] + ((kernel_size[1] - 1) * (dilation_factor[1] - 1))
+        ]
+
     # else, mode is SAME 
     """ Calculate the padding array for same padding in the Tensorflow fashion.
     See https://www.tensorflow.org/api_guides/python/nn#Convolution for more.
     """
     if feat_map_size[1] % strides[0] == 0:
-        pad_h = max( kernel_size[0] - strides[0] , 0 )
+        pad_h = max(convolution_size[0] - strides[0], 0)
     else:
-        pad_h = max( kernel_size[0] - feat_map_size[1]%strides[0] , 0 )
+        pad_h = max(convolution_size[0] - feat_map_size[1] % strides[0], 0)
 
     if feat_map_size[2] % strides[1] == 0:
-        pad_w = max( kernel_size[1] - strides[1] , 0)
+        pad_w = max(convolution_size[1] - strides[1], 0)
     else:
-        pad_w = max( kernel_size[1] - feat_map_size[2] % strides[1] , 0 )
+        pad_w = max(convolution_size[1] - feat_map_size[2] % strides[1], 0)
 
-    return [ pad_h//2, pad_w//2, pad_h - pad_h//2, pad_w - pad_w//2 ]
+    return [pad_h//2, pad_w//2, pad_h - pad_h//2, pad_w - pad_w//2]
 
 def make_kneron_valid_onnx_input(input_init):
     onnx_inputs = []

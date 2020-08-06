@@ -3,7 +3,7 @@ import onnx.utils
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 
-from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor,TransposeConvolution
+from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor,ResizeBilinear,TransposeConvolution
 from aact_layers import Relu,Relu6,Softmax,LOGISTIC,PRelu
 from core_layers import Dense,Reshape,Pad,Squeeze,L2Normalization
 from merg_layers import Add,Mul,Concatenation
@@ -182,11 +182,13 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             nodes, val, weight = Squeeze( [prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
             nodes, val, weight = ResizeNearestNeighbor([prev_node_name], op_type, op, interpreter).generate()
+        elif op_type == BuiltinOperator.RESIZE_BILINEAR:
+            nodes, val, weight = ResizeBilinear([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.L2_NORMALIZATION:
             nodes, val, weight = L2Normalization([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.TRANSPOSE_CONV:
             # transpose conv is very different from others of input position
-            prev_node_name = interpreter._get_tensor_details(op.Inputs(2))['name'] 
+            prev_node_name = interpreter._get_tensor_details(op.Inputs(2))['name']
 
             if prev_node_name in op_name__sub_op_name__table:
                 prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node

@@ -33,6 +33,7 @@ class Convolution(Layer):
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
 
       strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
+      dilation_factor = [self.tflite_conv_parser.DilationWFactor(), self.tflite_conv_parser.DilationHFactor()]
 
       padding_stradegy = 'NONE' 
       if self.tflite_conv_parser.Padding() is Padding.SAME:
@@ -71,8 +72,8 @@ class Convolution(Layer):
           outputs=[self.onnx_node_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
-          dilations=[self.tflite_conv_parser.DilationWFactor(),self.tflite_conv_parser.DilationHFactor()],
+          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, dilation_factor, padding_stradegy),
+          dilations=dilation_factor,
           name=self.onnx_node_name,
           group=1
       )
@@ -142,6 +143,7 @@ class DepthwiseConvolution(Layer):
       channel = weights_array.shape[3]
 
       strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
+      dilation_factor = [self.tflite_conv_parser.DilationWFactor(),self.tflite_conv_parser.DilationHFactor()]
 
       padding_stradegy = 'NONE' 
       if self.tflite_conv_parser.Padding() is Padding.SAME:
@@ -181,8 +183,8 @@ class DepthwiseConvolution(Layer):
           outputs=[self.onnx_node_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
-          dilations=[self.tflite_conv_parser.DilationWFactor(),self.tflite_conv_parser.DilationHFactor()],
+          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, dilation_factor, padding_stradegy),
+          dilations=dilation_factor,
           name=self.onnx_node_name,
 
           # goup conv as depthwise conv
@@ -195,6 +197,7 @@ class DepthwiseConvolution(Layer):
           TensorProto.FLOAT,
           utils.tflite2onnx_shape_map(self.node_output_detail['shape'].tolist())
       )
+
       self.value_infos.append(out_shape_info)
 
       # add weight, bias node
@@ -300,6 +303,73 @@ class ResizeNearestNeighbor(Layer):
 
         return self.node_list, self.value_infos, self.weight_node_list
 
+class ResizeBilinear(Layer):
+
+    def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+        Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+    def generate(self):
+        if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
+            warnings.warn(self.__class__.__name__ + ' is implemented by `Upsample` op, and not support `align_corners`,'
+                                                    '`half_pixel_centers` attributes.',
+                          UserWarning)
+
+            # create constant node
+            tensor_input_detail = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
+
+            source_width, source_height = self.node_input_detail['shape'].tolist()[1:3]
+            target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
+
+            source_size = np.array([1.0, 1.0, source_width, source_height], dtype=np.int32)
+            target_siz = np.array([1.0, 1.0, target_width, targwt_height], dtype=np.int32)
+
+            constant_val = target_siz/source_size
+            constant_node_name = self.onnx_node_name + '_scales'
+
+            constant_tensor = onnx.helper.make_tensor(
+                name=tensor_input_detail['name'],
+                data_type=TensorProto.FLOAT,
+                dims=constant_val.shape,
+                vals=constant_val.ravel())
+
+            constant_node = onnx.helper.make_node(
+                op_type="Constant",
+                inputs=[],
+                outputs=[constant_node_name],
+                name=constant_node_name,
+                value=constant_tensor)
+
+            constant_info = onnx.helper.make_tensor_value_info(
+                name=constant_node_name,
+                elem_type=TensorProto.FLOAT,
+                shape=constant_val.shape)
+
+            # self.weight_node_list.append(constant_tensor)
+            self.node_list.append(constant_node)
+            self.value_infos.append(constant_info)
+
+            self.previous_onnx_node_names.extend([constant_node_name])
+            resize_nearest_neighbor_node = onnx.helper.make_node(
+                op_type='Upsample',
+                inputs=self.previous_onnx_node_names,
+                outputs=[self.onnx_node_name],
+                name=self.onnx_node_name,
+                mode='linear'
+            )
+
+            resize_nearest_neighbor_info = onnx.helper.make_tensor_value_info(
+                name=self.onnx_node_name,
+                elem_type=TensorProto.FLOAT,
+                shape=utils.tflite2onnx_shape_map(self.node_output_detail['shape'].tolist())
+            )
+
+            # update tables
+            self.node_list.append(resize_nearest_neighbor_node)
+            self.value_infos.append(resize_nearest_neighbor_info)
+        else:
+            NotImplementedError('Partially Support ONNX ' + utils.ONNX_VERSION_1_4_1)
+
+        return self.node_list, self.value_infos, self.weight_node_list
 
 class TransposeConvolution(Layer):
 
