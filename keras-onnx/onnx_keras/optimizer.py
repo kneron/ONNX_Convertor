@@ -102,6 +102,15 @@ def replace_average_pool(layer_tree):
     else:
       if node.klayer.input_shape[2:4] != node.klayer.pool_size or node.klayer.output_shape[1:3] != (1, 1):
         continue
+    # Check whether the next layer is Flatten
+    skip = False
+    if len(node.outputs[0].outputs) != 0:
+      for following_node in node.outputs[0].outputs:
+        if following_node.type != "Flatten":
+          skip = True
+          break
+    if skip:
+      continue
     # This node should be replaced
     helper.logger.debug("Replace AveragePooling layer " + node.name)
     node.type = "GlobalAveragePooling2D"
