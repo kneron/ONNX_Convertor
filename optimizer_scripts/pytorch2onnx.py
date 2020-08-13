@@ -12,6 +12,7 @@ from tools import fusing
 from tools import replacing
 from tools import other
 from tools import combo
+from tools import special
 
 # Debug use
 # logging.basicConfig(level=logging.DEBUG)
@@ -27,6 +28,8 @@ parser.add_argument('--input-size', dest='input_size', nargs=3,
                     help='if you using pth, please use this argument to set up the input size of the model. It should be in \'CH H W\' format, e.g. \'--input-size 3 256 512\'.')
 parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                     help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
+parser.add_argument('--align-corner', dest='align_corner', action='store_true', default=False,
+                    help="set if the Upsample nodes in your pytorch model have align_corner set to true.")
 
 args = parser.parse_args()
 
@@ -87,4 +90,8 @@ m = combo.pytorch_constant_folding(m)
 m = combo.common_optimization(m)
 
 m = combo.postprocess(m)
+
+if args.align_corner:
+    special.set_upsample_mode_to_align_corner(m.graph)
+
 onnx.save(m, onnx_out)
