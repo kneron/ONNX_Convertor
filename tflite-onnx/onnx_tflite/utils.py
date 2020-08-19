@@ -32,7 +32,6 @@ def channel_last_2_channel_first_axis_mapping(axis_list):
 
 def get_output_node_info_by_name_if_exist(node_name, interpreter):
     output_details = interpreter.get_output_details()
-    output_node_info_table = {}
     for node_info in output_details:
         if node_name == node_info['name']:
             return node_info
