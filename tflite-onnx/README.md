@@ -9,7 +9,7 @@ We parse TFlite model use:
 
 ### Prerequisites
 
-We test these script using:
+We test our script using:
 * **Python 3**:    Python==3.7.7
 * **ONNX**:    onnx==1.4.1
 * **Tensorflow**:    tensorflow==1.15.0
@@ -40,6 +40,8 @@ We test these script using:
 * Inception_ResNet_V2
 * SqueezeNet
 * DenseNet
+* ResNet_V2_101
+* EfficientNet-Lite
 
 
 ## Now Supported Operators List
@@ -49,21 +51,29 @@ We test these script using:
 * CONV_2D
 * DEPTHWISE_CONV_2D
 * FULLY_CONNECTED
+* L2_NORMALIZATION
 * LOGISTIC
 * MUL
 * MEAN
 * MAX_POOL_2D
 * PAD
+* PRELU
 * RELU
 * RELU6
 * RESHAPE
+* RESIZE_BILINEAR
 * RESIZE_NEAREST_NEIGHBOR
 * SOFTMAX
 * SQUEEZE
+* TRANSPOSE_CONV
 
 
-## Example
-1. Convert tflite to onnx 
+## Example 1: Convert model to the onnx optimized for Kneron Toolchain
+1. Convert tflite to onnx  
+(Originally, we add transpose nodes for the channel order difference between onnx and tflite. Use '-release_mode True' could ignore those transpose nodes)
 * python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True
 2. Convert onnx to the onnx which is optimized for Kneron Toolchain
 * python ../optimizer_scripts/onnx2onnx.py ./example/example.onnx
+
+## Example 2: Convert part of tflite model to onnx
+* python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True -bottom_nodes sequential_1/model1/block_14_add/add

@@ -2,17 +2,19 @@ import tensorflow as tf
 
 from conv_layers import Convolution, DepthwiseConvolution, ResizeNearestNeighbor, ResizeBilinear, TransposeConvolution
 from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu
-from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization
+from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization, NullLayer
 from merg_layers import Add, Mul, Concatenation
 from pool_layers import MaxPooling2D, AveragePooling2D, Mean
 
 from tflite.BuiltinOperator import BuiltinOperator
 from tflite.Model import Model
 
+from igraph import Graph
+
 # For Testing and Check Graph Visualization
-def make_graph(tree):
+def display_graph(tree):
     import networkx as nx
-    from networkx.drawing.nx_agraph import write_dot, graphviz_layout
+    from networkx.drawing.nx_agraph import graphviz_layout
     import matplotlib.pyplot as plt
 
     graph = nx.DiGraph(directed=True)
@@ -30,9 +32,16 @@ def make_graph(tree):
 
 # Core Tree Structure Class
 class Tree:
-    def __init__(self, model_path, defused=True):
+    def __init__(self, model_path, bottom_nodes_name: list = list(), defused=True):
+        # init convert function map
+        self.__init_op_convert_table()
+
         # parse operator information through flatc python module
         self.__init_op_info(model_path)
+
+        # check all ops are valid 
+        self.__check_all_op_valid( len(bottom_nodes_name) == 0 )
+
 
         # parse node information through tflite interpreter (tflite interpreter can't parse operator information in our target tensorflow version 1.15)
         self.__interpreter = tf.lite.Interpreter(model_path)
@@ -42,9 +51,40 @@ class Tree:
         self.__eliminate_side_input()
         self.__init_inputs_node_info()
         self.__init_outputs_node_info()
+
+        # cut tree if user assign target nodes
+        # currently only support setup sub-graph output node
+        self.__generate_subtree(head_nodes_name=[], bottom_nodes_name=bottom_nodes_name)
+
         self.__defused(enable_defuse=defused)
         self.__init_graph_inputs_node()
         self.__init_graph_outputs_node()
+
+    def __init_op_convert_table(self):
+        self.op_convert_table = {
+            BuiltinOperator.CONV_2D : Convolution,
+            BuiltinOperator.DEPTHWISE_CONV_2D : DepthwiseConvolution,
+            BuiltinOperator.SOFTMAX : Softmax,
+            BuiltinOperator.RELU : Relu,
+            BuiltinOperator.RELU6 : Relu6,
+            BuiltinOperator.PRELU : PRelu,
+            BuiltinOperator.LOGISTIC : LOGISTIC,
+            BuiltinOperator.FULLY_CONNECTED : Dense,
+            BuiltinOperator.RESHAPE : Reshape,
+            BuiltinOperator.PAD : Pad,
+            BuiltinOperator.ADD : Add,
+            BuiltinOperator.MUL : Mul,
+            BuiltinOperator.CONCATENATION : Concatenation,
+            BuiltinOperator.MEAN : Mean,
+            BuiltinOperator.MAX_POOL_2D : MaxPooling2D,
+            BuiltinOperator.AVERAGE_POOL_2D : AveragePooling2D,
+            BuiltinOperator.SQUEEZE : Squeeze,
+            BuiltinOperator.RESIZE_NEAREST_NEIGHBOR : ResizeNearestNeighbor,
+            BuiltinOperator.RESIZE_BILINEAR : ResizeBilinear,
+            BuiltinOperator.L2_NORMALIZATION : L2Normalization,
+            BuiltinOperator.TRANSPOSE_CONV : TransposeConvolution,
+            BuiltinOperator.CUSTOM : NullLayer
+        }
 
     def __init_op_info(self, model_path):
         self.__tflite_ops = []
@@ -61,6 +101,14 @@ class Tree:
 
             self.__tflite_ops.append(op)
             self.__tflite_op_types.append(op_type)
+
+    def __check_all_op_valid(self,is_subgraph_mode):
+        for idx, op in enumerate(self.__tflite_ops):
+            if is_subgraph_mode:
+                if self.__tflite_op_types[idx] is BuiltinOperator.CUSTOM:
+                    raise ValueError("custom node found, if the node is at buttom, we recommend you use '-bottom' to delete this node")
+            if not self.__tflite_op_types[idx] in self.op_convert_table:
+                raise ValueError("unsupported op id " + str(self.__tflite_op_types[idx]))
 
     def __parse_graph(self):
         self.__nodes = dict()
@@ -120,7 +168,7 @@ class Tree:
         for idx in nodes_idx_dict:
             node = nodes_idx_dict[idx]
             for input_node_idx in node.input_nodes_idx:
-                if not(idx in nodes_idx_dict[input_node_idx].output_nodes_idx):
+                if not (idx in nodes_idx_dict[input_node_idx].output_nodes_idx):
                     nodes_idx_dict[input_node_idx].output_nodes_idx.append(idx)
 
         for idx in nodes_idx_dict:
@@ -235,57 +283,113 @@ class Tree:
 
 
     def __node_generator(self, op, op_type, tflite_interpreter):
-        if op_type == BuiltinOperator.CONV_2D:
-            layer_obj = Convolution(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.DEPTHWISE_CONV_2D:
-            layer_obj = DepthwiseConvolution(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.SOFTMAX:
-            layer_obj = Softmax(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RELU:
-            layer_obj = Relu(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RELU6:
-            layer_obj = Relu6(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.PRELU:
-            layer_obj = PRelu(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.LOGISTIC:
-            layer_obj = LOGISTIC(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.FULLY_CONNECTED:
-            layer_obj = Dense(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RESHAPE:
-            layer_obj = Reshape(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.PAD:
-            layer_obj = Pad(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.ADD:
-            layer_obj = Add(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.MUL:
-            layer_obj = Mul(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.CONCATENATION:
-            layer_obj = Concatenation(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.MEAN:
-            layer_obj = Mean(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.MAX_POOL_2D:
-            layer_obj = MaxPooling2D(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.AVERAGE_POOL_2D:
-            layer_obj = AveragePooling2D(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.SQUEEZE:
-            layer_obj = Squeeze(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
-            layer_obj = ResizeNearestNeighbor(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RESIZE_BILINEAR:
-            layer_obj = ResizeBilinear(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.L2_NORMALIZATION:
-            layer_obj = L2Normalization(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.TRANSPOSE_CONV:
-            layer_obj = TransposeConvolution(op, op_type, tflite_interpreter)
+        if op_type in self.op_convert_table: 
+            layer_obj = self.op_convert_table[op_type](op, op_type, tflite_interpreter)
         else:
             raise ValueError(op_type)
 
         return layer_obj
 
+    def __get_sub_graph_nodes_name(self, source_nodes, target_nodes):
+
+        nodes = self.get_nodes()
+        node_id_dict = {}
+        node_list = []
+
+        source_bfs_set = set()
+        target_bfs_set = set()
+
+        for idx, node_name in enumerate(nodes):
+            node_id_dict[node_name] = idx
+            node_list.append(node_name)
+
+        # init graph
+        edges = []
+        for node_name in nodes:
+            for output_node_name in nodes[node_name].output_nodes_name:
+                edges.append((node_id_dict[node_name], node_id_dict[output_node_name]))
+
+        graph = Graph(vertex_attrs={"label": node_id_dict.keys()}, edges=edges, directed=True)
+
+        # do source bfs and union
+        for source_node in source_nodes:
+            bfs_set = set(graph.subcomponent(node_id_dict[source_node], mode='out'))
+            source_bfs_set = source_bfs_set.union(bfs_set)
+
+        # do target bfs and union
+        for target_node in target_nodes:
+            bfs_set = set(graph.subcomponent(node_id_dict[target_node], mode='in'))
+            target_bfs_set = target_bfs_set.union(bfs_set)
+
+        sub_graph_nodes_set = source_bfs_set.intersection(target_bfs_set)
+
+        sub_graph_nodes = [node_list[idx] for idx in sub_graph_nodes_set]
+
+        return sub_graph_nodes
+
+    def __generate_subtree(self, head_nodes_name: list, bottom_nodes_name: list):
+        # return when not setup sub-graph
+        if (0 == len(head_nodes_name)) and (0 == len(bottom_nodes_name)):
+            return
+        else:
+            # init sub-graph necessary head_nodes_name/bottom_nodes_name
+            if 0 == len(head_nodes_name):
+                head_nodes_name = [node.node_name for node in self.get_head_nodes()]
+
+            if 0 == len(bottom_nodes_name):
+                bottom_nodes_name = [node.node_name for node in self.get_bottom_nodes()]
+
+        # check setup sub-graph is legal
+        for node_name in (head_nodes_name + bottom_nodes_name):
+            if not self.__check_node_in_tree(node_name):
+                raise ValueError('Sub-Graph Error: Node {} not exist in tflite model'.format(node_name))
+
+        # find sub-graph nodes
+        sub_graph_nodes_name = self.__get_sub_graph_nodes_name(source_nodes=head_nodes_name, target_nodes=bottom_nodes_name)
+
+        # generate subtree
+        sub_tree = dict()
+        for node_name in sub_graph_nodes_name:
+            sub_tree[node_name] = self.__nodes[node_name]
+            output_nodes_name = sub_tree[node_name].output_nodes_name.copy()
+            input_nodes_name = sub_tree[node_name].input_nodes_name.copy()
+
+            # update output/input nodes information
+            for o_n in output_nodes_name:
+                if o_n not in sub_graph_nodes_name:
+                    sub_tree[node_name].output_nodes_idx.remove(self.__nodes[o_n].node_idx)
+                    sub_tree[node_name].output_nodes.remove(self.__nodes[o_n])
+                    sub_tree[node_name].output_nodes_name.remove(o_n)
+            for i_n in input_nodes_name:
+                if i_n not in sub_graph_nodes_name:
+                    sub_tree[node_name].input_nodes_idx.remove(self.__nodes[i_n].node_idx)
+                    sub_tree[node_name].input_nodes.remove(self.__nodes[i_n])
+                    sub_tree[node_name].input_nodes_name.remove(i_n)
+
+        self.__nodes = sub_tree
+
+        for head_node_name in head_nodes_name:
+            self.__nodes[head_node_name].is_head_node = True
+
+        for bottom_node_name in bottom_nodes_name:
+            self.__nodes[bottom_node_name].is_bottom_node = True
+
+        # remove unused node in sequential key
+        new_sequential_nodes_key = []
+        for s_o_n in self.__sequential_nodes_key:
+            if s_o_n in sub_graph_nodes_name:
+                new_sequential_nodes_key.append(s_o_n)
+        self.__sequential_nodes_key = new_sequential_nodes_key
+
+    def __check_node_in_tree(self, node_name):
+        return node_name in self.__nodes.keys()
+
     def get_head_nodes(self):
+        self.__init_graph_inputs_node()
         return self.__head_nodes
 
     def get_bottom_nodes(self):
+        self.__init_graph_outputs_node()
         return self.__bottom_nodes
 
     def get_sequential_nodes_key(self):
@@ -294,15 +398,18 @@ class Tree:
     def get_nodes(self):
         return self.__nodes
 
+
 ## Example:
 ####################
 # tree_graph = Tree(
 #     model_path='/home/andy_huang/data/tf_detection_model_zoo/coco_trained_models/ssd_inception_v2_coco/ssd_inception_v2_coco_2018_01_28/saved_model_ssd/model.tflite',
+#     bottom_nodes_name=['FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_1/Conv2d_0a_1x1/Relu6', 'FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_3/Conv2d_0b_1x1/Relu6'],
 #     defused=True
-#     )
-# # print(tree_graph.get_nodes())
-# make_graph(tree_graph)
-#
+# )
+# print(tree_graph.get_nodes())
+
+# display_graph(tree_graph)
+
 # node_list = tree_graph.get_head_nodes()
 #
 # for node in node_list:
