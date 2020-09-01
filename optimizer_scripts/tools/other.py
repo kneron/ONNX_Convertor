@@ -806,7 +806,7 @@ def split_ConvTranspose(model):
 def add_bn_on_skip_branch(g):
     for n in g.node:
         # Find merge node (Add)
-        if n.op_type != 'Add':
+        if n.op_type != 'Add' and n.op_type != 'Concat':
             continue
         # TODO: Still need to consider more cases
         # Check if skip branch exist
