@@ -242,12 +242,12 @@ class Tree:
                 # modify output node
                 for output_node_name in fused_node_outputs_name:
                     output_node = self.__nodes[output_node_name]
-                    output_node.input_nodes_name.remove(output_node_inputs_remove_node_name)
-                    output_node.input_nodes_name.append(output_node_inputs_add_node_name)
+                    replace_idx = output_node.input_nodes_name.index(output_node_inputs_remove_node_name)
+                    output_node.input_nodes_name[replace_idx] = output_node_inputs_add_node_name
 
                 for output_node in fused_node_outputs_node:
-                    output_node.input_nodes.remove(output_node_inputs_remove_node)
-                    output_node.input_nodes.append(output_node_inputs_add_node)
+                    replace_idx = output_node.input_nodes.index(output_node_inputs_remove_node)
+                    output_node.input_nodes[replace_idx] = output_node_inputs_add_node
 
                 # defused node is not head node
                 defused_activation_node.is_head_node = False
