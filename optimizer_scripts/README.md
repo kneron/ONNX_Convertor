@@ -52,7 +52,7 @@ compatible ONNX files. This script include most of the optimizations in
 
 ```bash
 # Take Pytorch model name, input channel number, input height, input width
-python pytorch2onnx.py input.pth 3 224 224 output.onnx
+python pytorch2onnx.py input.pth output.onnx --input-size 3 224 224
 # Or take Pytorch exported ONNX.
 python pytorch2onnx.py input.onnx output.onnx
 ```
