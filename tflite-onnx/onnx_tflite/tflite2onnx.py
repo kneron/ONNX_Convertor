@@ -141,7 +141,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
 
         nodes, val, weight = tree_dict[key].generate()
 
-        if len(val) != 0:
+        if (len(val) != 0) and (tree_dict[key].is_bottom_node is False):
             inner_node_shape_value_info.extend(val)
         if len(weight) != 0:
             onnx_weight_node_list.extend(weight)
