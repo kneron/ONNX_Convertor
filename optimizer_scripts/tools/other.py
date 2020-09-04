@@ -808,6 +808,8 @@ def add_bn_on_skip_branch(g):
         # Find merge node (Add)
         if n.op_type != 'Add' and n.op_type != 'Concat':
             continue
+        if len(n.input) != 2:
+            continue
         # TODO: Still need to consider more cases
         # Check if skip branch exist
         input_node_a = helper.find_node_by_output_name(g, n.input[0])
