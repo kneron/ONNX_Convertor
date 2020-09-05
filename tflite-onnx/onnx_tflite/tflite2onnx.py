@@ -3,21 +3,16 @@ import onnx.utils
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 
-from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor
-from aact_layers import Relu,Relu6,Softmax,LOGISTIC
-from core_layers import Dense,Reshape,Pad,Squeeze
-from merg_layers import Add,Mul,Concatenation
-from pool_layers import MaxPooling2D,AveragePooling2D,Mean
 import utils
 
 import os
+from datetime import datetime
 import argparse
-import json
 import tensorflow as tf
 
-import tflite
-from tflite.BuiltinOperator import BuiltinOperator
 from tflite.Model import Model
+
+from tree_structure import Tree
 
 def read_tflite_model(path):
     data = open(path, "rb").read()
@@ -39,26 +34,26 @@ def get_op_info(model_path):
 
     return ops, op_types
 
-def set_end_node(onnx_end_node, tflite_out_info):
+def set_end_node(onnx_end_node, onnx_end_node_shape):
 
     out_value_info_name = "out_" + onnx_end_node.name
-    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(tflite_out_info['shape'].tolist()))
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(onnx_end_node_shape))
 
     # change output
     onnx_end_node.output[:] = [out_value_info_name]
 
     return out_value_info
 
-def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, tflite_out_info):
+def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, onnx_end_node_shape):
     transpose_node = None
 
     out_value_info_name = "out_" + onnx_end_node.name
-    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, tflite_out_info['shape'].tolist())
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, onnx_end_node_shape)
 
-    if len(tflite_out_info['shape'].tolist()) == 4:
+    if len(onnx_end_node_shape) == 4:
         # add transpose if it is 4 dimension output
 
-        transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
+        transpose_node_name = 'transpose_node_bottom_' + onnx_end_node.name
         transpose_node = onnx.helper.make_node(
             'Transpose',
             inputs=[onnx_end_node.name],
@@ -66,10 +61,10 @@ def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, 
             perm=[0, 2, 3, 1],
             name=transpose_node_name
         )
-    elif len(tflite_out_info['shape'].tolist()) == 3:
+    elif len(onnx_end_node_shape) == 3:
         # add transpose if it is 3 dimension output
 
-        transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
+        transpose_node_name = 'transpose_node_bottom_' + onnx_end_node.name
         transpose_node = onnx.helper.make_node(
             'Transpose',
             inputs=[onnx_end_node.name],
@@ -83,136 +78,96 @@ def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, 
 
     return out_value_info, transpose_node
 
-def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
-    transpose_node_name = 'transpose_node_input_' + input_name
+def build_head_transpose_node_for_channel_last_2_channel_first(input_name, transpose_node_name):
+    this_node_name = 'transpose_node_head_' + transpose_node_name
     transpose_node = onnx.helper.make_node(
         'Transpose',
         inputs=[input_name],
-        outputs=[transpose_node_name],
+        outputs=[this_node_name],
         perm=[0, 3, 1, 2],
-        name=transpose_node_name
+        name=this_node_name
     )
 
     return transpose_node
 
-def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True):
-    
-    # some nodes are merged as one node, we need a table to store this information
-    op_name__sub_op_name__table = {}
+def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
 
     onnx_weight_node_list = []
     output_tensor_value_info = []
     onnx_node_list = []
     inner_node_shape_value_info = []
 
-    # parse operator information through flatc python module
-    tflite_ops, tflite_op_types = get_op_info(model_path)
-
     # parse node information through tflite interpreter (tflite interpreter can't parse operator information in our target tensorflow version 1.15)
     interpreter = tf.lite.Interpreter(model_path)
     interpreter.allocate_tensors()
 
-    # get input info
+    # get model input info(assume there is only one input)
     input_details = interpreter.get_input_details()
+    model_input_name  = input_details[0]['name']
     input_tensor_value_info = None
 
-    if add_transpose_for_channel_last_first_issue is True:
-        input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, input_details[0]['shape'].tolist())
-        # transpose for channel last to channel first
-        transpose_node = build_head_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name)
+    # generate tree
+    tree_graph = Tree(model_path=model_path, bottom_nodes_name=bottom_nodes_name, defused=True)
 
-        # update tables
-        onnx_node_list = [transpose_node]
-        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],transpose_node.name]   
-    else: 
-        onnx_node_list = []
-        input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, utils.tflite2onnx_shape_map(input_details[0]['shape'].tolist()))
-        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],input_tensor_value_info.name]  
+
+    # get sequential node name
+    sequential_keys = tree_graph.get_sequential_nodes_key()
+
+    # get tree node in the form of {node_name: op_node_obj}
+    tree_dict = tree_graph.get_nodes()
+
+
+    #############################
+    # build head transpose node #
+    #############################
+    for h_node in tree_graph.get_head_nodes():
+        # transpose for channel last to channel first
+        if add_transpose_for_channel_last_first_issue is True:
+            input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, h_node.node_input_shape.tolist())
+            h_transpose_node = build_head_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name, h_node.node_name)
+            
+            onnx_node_list.append(h_transpose_node)
+            h_node.input_nodes_name = [h_transpose_node.name]
+        else:
+            input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(h_node.node_input_shape.tolist()))
+            h_node.input_nodes_name = [input_tensor_value_info.name]
+                 
 
 
     ############################
     # build model node by node #
     ############################
-    for idx,op in enumerate(tflite_ops):
-        node_output_detail = interpreter._get_tensor_details(op.Outputs(0))
-        node_input_detail = interpreter._get_tensor_details(op.Inputs(0))
+    for key in sequential_keys:
 
-        node_name = node_output_detail['name'] 
-        prev_node_name = node_input_detail['name']
+        nodes, val, weight = tree_dict[key].generate()
 
-        if prev_node_name in op_name__sub_op_name__table:
-            prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
-
-        op_type = tflite_op_types[idx]
-        if op_type == BuiltinOperator.CONV_2D:
-            nodes, val, weight = Convolution( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.DEPTHWISE_CONV_2D:
-            nodes, val, weight = DepthwiseConvolution( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.SOFTMAX:
-            nodes, val, weight = Softmax( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RELU:
-            nodes, val, weight = Relu( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RELU6:
-            nodes, val, weight = Relu6( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.LOGISTIC:
-            nodes, val, weight = LOGISTIC( [prev_node_name], op_type, op, interpreter).generate()       
-        elif op_type == BuiltinOperator.FULLY_CONNECTED:
-            nodes, val, weight = Dense( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RESHAPE:
-            nodes, val, weight = Reshape( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.PAD:
-            nodes, val, weight = Pad( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.ADD:
-            nodes, val, weight = Add( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == BuiltinOperator.MUL:
-            nodes, val, weight = Mul( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == BuiltinOperator.CONCATENATION:
-            nodes, val, weight = Concatenation( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == BuiltinOperator.MEAN:
-            nodes, val, weight = Mean( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.MAX_POOL_2D:
-            nodes, val, weight = MaxPooling2D( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.AVERAGE_POOL_2D:
-            nodes, val, weight = AveragePooling2D( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.SQUEEZE:
-            nodes, val, weight = Squeeze( [prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
-            nodes, val, weight = ResizeNearestNeighbor([prev_node_name], op_type, op, interpreter).generate()
-        else:
-            raise ValueError(op_type)
-
-        sub_op_node_list = []
-        for node in nodes:
-            # weight and bias node is onnx type Constant
-            if node.op_type != 'Constant':
-                sub_op_node_list.append(node)
-
-        # update tables        
-        op_name__sub_op_name__table[node_name] = [sub_op_node.name for sub_op_node in sub_op_node_list]
-
-        if len(val) != 0:
+        if (len(val) != 0) and (tree_dict[key].is_bottom_node is False):
             inner_node_shape_value_info.extend(val)
         if len(weight) != 0:
             onnx_weight_node_list.extend(weight)
         if len(nodes) != 0:
             onnx_node_list.extend(nodes)
 
-        # check if it is output node use original node name
-        output_node_info = utils.get_output_node_info_by_name_if_exist(node_name, interpreter)
 
-        if output_node_info is not None:
-            # it's output node
-            out_value_info = None
-            transpose_node = None
-            if add_transpose_for_channel_last_first_issue is True:
-                out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last(sub_op_node_list[-1],output_node_info)
-            else:
-                out_value_info = set_end_node(sub_op_node_list[-1],output_node_info)
-            output_tensor_value_info.append(out_value_info)
-            if transpose_node != None: 
+
+    # sometimes, there are sub-node in one tree node, we need to find the last one
+    b_nodes = [ node for node in tree_graph.get_bottom_nodes() ]
+    
+    ###############################
+    # build bottom transpose node #
+    ###############################
+    for b_node in b_nodes:
+
+        out_value_info = None
+        if add_transpose_for_channel_last_first_issue is True:
+            out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last( b_node.node_list[-1], b_node.node_output_shape.tolist() )
+            if transpose_node != None:
                 onnx_node_list.append(transpose_node)
+        else:
+            out_value_info = set_end_node(b_node.node_list[-1], b_node.node_output_shape.tolist())
+        output_tensor_value_info.append(out_value_info)
 
-
+                
 
 
     input_init = [input_tensor_value_info]
@@ -228,7 +183,11 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
         value_info=inner_node_shape_value_info
     )
 
-    cnn_model = helper.make_model(graph_cnn, producer_name='onnx-tflite-examples')
+    cnn_model = helper.make_model(graph_cnn, producer_name='Kneron')
+
+    # add generated time to model meta data
+    helper.set_model_props(cnn_model, {'Generated Time': datetime.utcnow().strftime("%m/%d/%Y, %H:%M:%S") + " (UTC+0)"})
+
     cnn_model = onnx.utils.polish_model(cnn_model)
 
     # save
@@ -239,6 +198,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
     parser.add_argument('-tflite', metavar='tflite model path', help='an input tflite file path')
     parser.add_argument('-save_path', metavar='saved model path', help='an output onnx file path')
+    parser.add_argument('-bottom_nodes', metavar='bottom node you want', help='nodes name in tflite model which is the bottom node of sub-graph, use "," to add multiple nodes. ex:"con1,softmax2" ')
     parser.add_argument('-release_mode', metavar='is release mode', help='True if no transpose front end needed')
     args = parser.parse_args()
 
@@ -262,9 +222,10 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-  
+
     try:
-        main(model_path, model_save_path, not is_release_mode)
+        bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
+        main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
     except Exception as e:
         print('Error: Something Wrong')
         print(e)
