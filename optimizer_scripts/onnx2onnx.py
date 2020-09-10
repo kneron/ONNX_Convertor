@@ -21,6 +21,8 @@ parser.add_argument('--bgr', action='store_true', default=False, help="set if th
 parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
 parser.add_argument('--add-bn-on-skip', dest='bn_on_skip', action='store_true', default=False,
                     help="set if you want to add BN on skip branches")
+parser.add_argument('--add-bn-before-merge', dest='bn_before_merge', action='store_true', default=False,
+                    help="set if you want to add BN before Add or Concat")
 parser.add_argument('-t', '--eliminate-tail-unsupported', dest='eliminate_tail', action='store_true', default=False,
                     help='whether remove the last unsupported node for hardware')
 parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
@@ -53,6 +55,8 @@ m = combo.preprocess(m, args.disable_fuse_bn)
 # Add BN on skip branch
 if args.bn_on_skip:
     other.add_bn_on_skip_branch(m.graph)
+elif args.bn_before_merge:
+    other.add_bn_before_merge(m.graph)
 
 # My optimization
 m = combo.common_optimization(m)

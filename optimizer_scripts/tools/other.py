@@ -854,6 +854,49 @@ def add_bn_on_skip_branch(g):
         g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
     topological_sort(g)
 
+def add_bn_before_merge(g):
+    for n in g.node:
+        # Find merge node (Add)
+        if n.op_type != 'Add' and n.op_type != 'Concat':
+            continue
+        if len(n.input) != 2:
+            continue
+        # Get two inputs
+        input_node_a = helper.find_node_by_output_name(g, n.input[0])
+        input_node_b = helper.find_node_by_output_name(g, n.input[1])
+        def add_bn_after(prev_node):
+            # Get the channel number from value info
+            value_name = prev_node.output[0]
+            value = helper.find_value_by_name(g, value_name)
+            shape = helper.get_shape_from_value_info(value)
+            channel = shape[1]
+            # Construct 4 weights
+            node_name = value_name + "_nop_bn"
+            ones = [1.0] * channel
+            zeros = [0.0] * channel
+            scale_node = helper.list_to_constant(node_name + "_scale", [channel], ones)
+            bias_node = helper.list_to_constant(node_name + "_bias", [channel], zeros)
+            mean_node = helper.list_to_constant(node_name + "_mean", [channel], zeros)
+            var_node = helper.list_to_constant(node_name + "_var", [channel], ones)
+            # Construct BN node
+            bn_node = onnx.helper.make_node(
+                "BatchNormalization",
+                [value_name,
+                scale_node.output[0],
+                bias_node.output[0],
+                mean_node.output[0],
+                var_node.output[0]],
+                [node_name],
+                name = node_name
+            )
+            # Reconnect the graph
+            replace_node_input(n, value_name, node_name)
+            # Add node to the graph
+            g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
+        add_bn_after(input_node_a)
+        add_bn_after(input_node_b)
+    topological_sort(g)
+
 def pytorch_check_initializer_as_input(g):
     if len(g.input) < len(g.initializer):
         raise RuntimeError("You need to add option `keep_initializers_as_inputs=True` while exporting the model!")
