@@ -314,6 +314,7 @@ def inference_cov_shape(g):
         # Now start the inference.
         # If auto_pad is set, use the auto_pad.
         auto_pad = helper.get_var_attribute_by_name(node, 'auto_pad', 'string')
+        pads = None
         if auto_pad is not None and auto_pad != 'NOTSET':
             if auto_pad == 'SAME_LOWER' or auto_pad == 'SAME_UPPER':
                 new_output_value_info = onnx.helper.make_tensor_value_info(

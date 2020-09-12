@@ -48,6 +48,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     - fuse_pad_into_conv
 
     """
+    eliminating.eliminate_empty_value_infos(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
     passes = ['extract_constant_to_initializer',
               'eliminate_nop_dropout',
@@ -60,6 +61,9 @@ def preprocess(model_proto, disable_fuse_bn=False):
     g = m.graph
     other.add_name_to_node(g)
     replacing.replace_initializer_with_Constant(g)
+    other.topological_sort(g)
+    m = onnx.utils.polish_model(m)
+    g = m.graph
     eliminating.eliminate_Identify_and_Dropout(g)
     eliminating.eliminate_trivial_maxpool(g)
     eliminating.eliminate_no_children_input(g)
@@ -105,6 +109,7 @@ def common_optimization(m):
     replacing.replace_Squeeze_with_Reshape(g)
     replacing.replace_Unsqueeze_with_Reshape(g)
     replacing.replace_Reshape_with_Flatten(g)
+    replacing.replace_ReduceMean_with_GlobalAveragePool(g)
     other.topological_sort(g)
     return m
 

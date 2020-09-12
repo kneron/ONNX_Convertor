@@ -464,3 +464,70 @@ def replace_split_with_slices(g):
     for old_node in node_to_remove:
         g.node.remove(old_node)
     topological_sort(g)
+
+
+def replace_ReduceMean_with_GlobalAveragePool(g):
+    """
+    Replace ReduceMean with GlobalAveragePool node when available.
+
+    If there is preceeded Transpose, check the Transpose and the ReduceMean
+    together. If the keep_dims is set to 0, add a Flatten.
+
+    :param g: the input graph
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find a ReduceMean layer
+        if node.op_type != 'ReduceMean':
+            continue
+        # Find if it have previous Transpose and its attribute meet the need.
+        prev_node = helper.find_node_by_output_name(g, node.input[0])
+        if prev_node is not None and prev_node.op_type != 'Transpose':
+            prev_node = None
+        perm = helper.get_list_attribute_by_name(prev_node, 'perm', 'int')
+        if perm is None or perm != [0, 2, 3, 1]:
+            prev_node = None
+        # Check attributes
+        axes = helper.get_list_attribute_by_name(node, 'axes', 'int')
+        keepdims = helper.get_var_attribute_by_name(node, 'keepdims', 'int')
+        if axes is None:
+            continue
+        if prev_node is None and axes != [2, 3]:
+            continue
+        if prev_node is not None and axes != [1, 2]:
+            continue
+        if keepdims is None:
+            keepdims = 1
+        # Replace it with GlobalAveragePool
+        if prev_node:
+            input_list = prev_node.input
+        else:
+            input_list = node.input
+        if keepdims == 1:
+            output_list = node.output
+        else:
+            output_list = [node.output[0] + '_before_flatten']
+            flatten_node = onnx.helper.make_node(
+                "Flatten",
+                output_list,
+                node.output,
+                name = node.name + "_flatten",
+                axis = 1
+            )
+            g.node.extend([flatten_node])
+        new_node = onnx.helper.make_node(
+            "GlobalAveragePool",
+            input_list,
+            output_list,
+            name=node.name
+        )
+        g.node.extend([new_node])
+        node_to_remove.append(node)
+        if prev_node:
+            value = helper.find_value_by_name(g, prev_node.output[0])
+            if value:
+                g.value_info.remove(value)
+            node_to_remove.append(prev_node)
+    for node in node_to_remove:
+        g.node.remove(node)
+    topological_sort(g)

@@ -523,3 +523,11 @@ def eliminate_trivial_maxpool(g):
         g.node.remove(node_to_del.pop())
     
     other.topological_sort(g)
+
+def eliminate_empty_value_infos(g):
+    to_remove = []
+    for value_info in g.value_info:
+        if len(value_info.type.tensor_type.shape.dim) == 0:
+            to_remove.append(value_info)
+    for value_info in to_remove:
+        g.value_info.remove(value_info)
