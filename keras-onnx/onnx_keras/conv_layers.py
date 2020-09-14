@@ -17,7 +17,7 @@ class Conv2D(Layer):
     value_infos = []
     # Construct Weights. Keras format(HWCM). M output channel. C input channel.
     if self.node.new_w is not None:
-      wnode_name = self.layer.name + '_fused_weight'
+      wnode_name = self.name + '_fused_weight'
       w = self.node.new_w
     else:
       if helper.duplicate_weights:
@@ -33,7 +33,7 @@ class Conv2D(Layer):
     self.inputs.append(wnode_name)
     # Construct Bias
     if self.node.new_b is not None:
-      bnode_name = self.layer.name + '_fused_bias'
+      bnode_name = self.name + '_fused_bias'
       tn, ti = helper.getConstantNodeByName(
         bnode_name, self.node.new_b)
       node_list += tn
