@@ -16,7 +16,7 @@ class Flatten(Layer):
         op_type='Flatten',
         inputs=self.inputs,
         outputs=self.outputs,
-        name=self.layer.name,
+        name=self.name,
         axis=1
     )
     return [node], []

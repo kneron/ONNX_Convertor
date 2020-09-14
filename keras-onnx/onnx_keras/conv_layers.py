@@ -50,7 +50,7 @@ class Conv2D(Layer):
       value_infos += ti
       self.inputs.append(bnode_name)
     elif helper.compatibility:
-      bnode_name = self.layer.name + '_constructed_bias'
+      bnode_name = self.name + '_constructed_bias'
       constructed_data = np.zeros(w.shape[0], dtype=w.dtype)
       tn, ti = helper.getConstantNodeByName(
         bnode_name, constructed_data)
@@ -288,21 +288,21 @@ class DepthwiseConv2D(Layer):
         bnode_name = self.layer.weights[1].name
       tn, ti = helper.getConstantNodeByName(bnode_name, self.layer.get_weights()[1])
     else:
-      bnode_name = self.layer.name + '_constructed_bias'
+      bnode_name = self.name + '_constructed_bias'
       constructed_data = np.zeros(w.shape[0], dtype=w.dtype)
       tn, ti = helper.getConstantNodeByName(bnode_name, constructed_data)
     node_list += tn
     value_infos += ti
     self.inputs.append(bnode_name)
     # Construct Mean
-    mean_name = self.layer.name + '_constructed_mean'
+    mean_name = self.name + '_constructed_mean'
     constructed_data = np.zeros(w.shape[0], dtype=w.dtype)
     tn, ti = helper.getConstantNodeByName(mean_name, constructed_data)
     node_list += tn
     value_infos += ti
     self.inputs.append(mean_name)
     # Construct Var
-    var_name = self.layer.name + '_constructed_var'
+    var_name = self.name + '_constructed_var'
     constructed_data = np.ones(w.shape[0], dtype=w.dtype)
     tn, ti = helper.getConstantNodeByName(var_name, constructed_data)
     node_list += tn
