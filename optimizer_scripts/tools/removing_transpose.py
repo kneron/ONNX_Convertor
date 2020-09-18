@@ -267,4 +267,45 @@ def remove_trivial_transpose(g):
     g.node.remove(node)
   
   other.topological_sort(g)
-      
+
+def fuse_Transpose_into_Gemm_weight(g):
+  node_to_del = []
+  for node in g.node:
+    # Check pattern
+    if node.op_type != 'Gemm':
+      continue
+    prev_node = helper.find_node_by_output_name(g, node.input[0])
+    if prev_node.op_type != 'Flatten':
+      continue
+    transpose_node = helper.find_node_by_output_name(g, prev_node.input[0])
+    if transpose_node.op_type != 'Transpose':
+      continue
+    # Check attribute
+    perm = helper.get_list_attribute_by_name(transpose_node, 'perm', 'int')
+    if perm != [0, 2, 3, 1]:
+      continue
+    transB = helper.get_var_attribute_by_name(node, 'transB', 'int')
+    if transB is not None and transB == 1:
+      continue
+    # Get the original weight
+    origin_weight = helper.find_node_by_output_name(g, node.input[1])
+    origin_np = helper.constant_to_numpy(origin_weight)
+    # Calculate a new weight
+    shape = helper.get_shape_from_value_info(helper.find_value_by_name(g, prev_node.input[0]))
+    shape.append(-1)
+    new_np = np.reshape(origin_np, shape)
+    new_np = np.transpose(new_np, [0, 3, 1, 2, 4])
+    new_np = np.reshape(new_np, [-1, new_np.shape[-1]])
+    new_weight = helper.numpy_to_constant(origin_weight.output[0], new_np)
+    # Replace and eliminate
+    prev_node.input[0] = transpose_node.input[0]
+    node_to_del.append(transpose_node)
+    node_to_del.append(origin_weight)
+    g.value_info.remove(helper.find_value_by_name(g, transpose_node.output[0]))
+    g.node.extend([new_weight])
+
+  while node_to_del:
+    node = node_to_del.pop()
+    g.node.remove(node)
+
+  other.topological_sort(g)

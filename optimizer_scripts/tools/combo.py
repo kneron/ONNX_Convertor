@@ -71,7 +71,8 @@ def preprocess(model_proto, disable_fuse_bn=False):
     other.topological_sort(g)
     m = other.inference_shapes(m)
     g = m.graph
-    replacing.replace_split_with_slices(g)
+    if m.opset_import[0].version < 10:
+        replacing.replace_split_with_slices(g)
     other.topological_sort(g)
 
     return m
@@ -199,6 +200,7 @@ def postprocess(m):
     m = removing_transpose.eliminate_transposes(m)
     m = onnx.utils.polish_model(m)
     removing_transpose.remove_trivial_transpose(m.graph)
+    removing_transpose.fuse_Transpose_into_Gemm_weight(m.graph)
 
     # fuse some nodes
     fusing.fuse_mul_and_add_into_bn(m.graph)
