@@ -13,6 +13,7 @@ We test our script using:
 * **Python 3**:    Python==3.7.7
 * **ONNX**:    onnx==1.4.1
 * **Tensorflow**:    tensorflow==1.15.0
+* **FlatBuffer**:    flatbuffers==1.12
 
 ## Basic Usage
 
@@ -69,11 +70,19 @@ We test our script using:
 
 
 ## Example 1: Convert model to the onnx optimized for Kneron Toolchain
-1. Convert tflite to onnx  
-(Originally, we add transpose nodes for the channel order difference between onnx and tflite. Use '-release_mode True' could ignore those transpose nodes)
-* python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True
-2. Convert onnx to the onnx which is optimized for Kneron Toolchain
-* python ../optimizer_scripts/onnx2onnx.py ./example/example.onnx
+#### Step0 (Optional). Download example tflite model
+###### (Our provided example model is LFS-tracked file, sometimes 'git lfs pull' is needed)
+    git lfs pull
+#### Step1. Convert tflite to onnx  
+###### (Originally, we add transpose nodes for the channel order difference between onnx and tflite. Use '-release_mode True' could ignore those transpose nodes)
+    python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True
+#### Step2. Convert onnx to the onnx which is optimized for Kneron Toolchain
+    python ../optimizer_scripts/onnx2onnx.py ./example/example.onnx
+
 
 ## Example 2: Convert part of tflite model to onnx
-* python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True -bottom_nodes sequential_1/model1/block_14_add/add
+    python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True -bottom_nodes sequential_1/model1/block_14_add/add
+
+
+## *Note:
+* "./example/example.tflite" and "./onnx_tflite/flatc/flatc" are large file and not necessary. So we let them being tracked with GIT-LFS. You can use 'git lfs pull' to download them.
