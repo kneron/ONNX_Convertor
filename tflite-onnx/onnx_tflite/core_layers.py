@@ -124,8 +124,11 @@ class Reshape(Layer):
   def __init__(self, op, op_type, tflite_interpreter):
       Layer.__init__(self, op, op_type, tflite_interpreter)
 
-      self.tflite_reshape_parser = ReshapeOptions()
-      self.tflite_reshape_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
+      if op.BuiltinOptions() is None:
+          self.tflite_reshape_parser = None
+      else:
+          self.tflite_reshape_parser = ReshapeOptions()
+          self.tflite_reshape_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
 
   def generate(self):
       node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
@@ -156,10 +159,10 @@ class Reshape(Layer):
 
 
       # no attribute 'new_shape', should be op 'squeeze'
-      if not self.tflite_reshape_parser.NewShapeIsNone:
-        new_shape = np.array(self.tflite_reshape_parser.NewShapeAsNumpy(), dtype='int64')
-      else:
+      if self.tflite_reshape_parser is None: 
         new_shape = np.array(out_dim, dtype='int64')
+      elif not self.tflite_reshape_parser.NewShapeIsNone:
+        new_shape = np.array(self.tflite_reshape_parser.NewShapeAsNumpy(), dtype='int64')
 
       shape_tensor = onnx.helper.make_tensor(shape_tensor_name,TensorProto.INT64,new_shape.shape, new_shape)
       shape_node = helper.make_node("Constant",[],[shape_node_name],name=shape_node_name,value=shape_tensor)
@@ -174,8 +177,10 @@ class Reshape(Layer):
       self.node_list.append(shape_node)
       self.node_list.append(reshape_node)
 
-      # no attribute 'new_shape', 
-      if self.tflite_reshape_parser.NewShapeIsNone:
+      # no attribute 'new_shape',
+      if self.tflite_reshape_parser is None:
+        pass
+      elif self.tflite_reshape_parser.NewShapeIsNone:
         dims = list(range(len(out_dim)))
         dims = dims[:1] + dims[-1:] + dims[1:-1]
         # add transpose
