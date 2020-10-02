@@ -484,9 +484,10 @@ def replace_ReduceMean_with_GlobalAveragePool(g):
         prev_node = helper.find_node_by_output_name(g, node.input[0])
         if prev_node is not None and prev_node.op_type != 'Transpose':
             prev_node = None
-        perm = helper.get_list_attribute_by_name(prev_node, 'perm', 'int')
-        if perm is None or perm != [0, 2, 3, 1]:
-            prev_node = None
+        if prev_node is not None:
+            perm = helper.get_list_attribute_by_name(prev_node, 'perm', 'int')
+            if perm != [0, 2, 3, 1]:
+                prev_node = None
         # Check attributes
         axes = helper.get_list_attribute_by_name(node, 'axes', 'int')
         keepdims = helper.get_var_attribute_by_name(node, 'keepdims', 'int')
