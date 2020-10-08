@@ -84,5 +84,14 @@ We test our script using:
     python ./onnx_tflite/tflite2onnx.py -tflite ./example/example.tflite -save_path ./example/example.onnx -release_mode True -bottom_nodes sequential_1/model1/block_14_add/add
 
 
-## *Note:
+## *Note 1:
 * "./example/example.tflite" and "./onnx_tflite/flatc/flatc" are large file and not necessary. So we let them being tracked with GIT-LFS. You can use 'git lfs pull' to download them.
+
+## *Note 2 (convert tensorflow to tflite):
+* Here is the official guide to convert tensorflow model and keras model to tflite:
+    https://www.tensorflow.org/lite/guide/get_started#tensorflow_lite_converter
+
+    Note that current tflite2onnx only support "float32" tflite,and current official tflite not support all tensorflow op  
+    ( ref: https://www.tensorflow.org/lite/guide/get_started#ops_compatibility )  
+    you might need to cut some unsupported nodes. 
+
