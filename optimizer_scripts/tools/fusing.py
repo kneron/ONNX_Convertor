@@ -609,11 +609,22 @@ def fuse_mul_and_add_into_bn(g):
         c_dim = len(scale_data)
         if scale_shape != bais_shape:
             continue
-        if scale_shape != [1, c_dim, 1, 1]:
-            continue
-        for _ in range(3):
+
+        if scale_shape == [1, c_dim, 1, 1]:
+
+            # remove all '1'
+            for _ in range(3):
+                const_add.attribute[0].t.dims.remove(1)
+                const_mul.attribute[0].t.dims.remove(1)
+
+        elif scale_shape == [1, c_dim]:
+
+            # remove all '1'
             const_add.attribute[0].t.dims.remove(1)
             const_mul.attribute[0].t.dims.remove(1)
+
+        else:
+            continue
 
         bn_name = add_node.output[0]
         const_mean = helper.list_to_constant(bn_name+'_mean', [c_dim], [0.0 for _ in range(c_dim)])
