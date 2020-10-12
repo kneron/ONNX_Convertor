@@ -28,15 +28,23 @@ def make_onnx_constant_number(tflite_interpreter, constant_details):
     
     return tensor_node
 
-def make_onnx_channelwise_constant_number(tflite_interpreter, constant_details):
+def make_onnx_channelwise_constant_number(tflite_interpreter, constant_details, shape):
     constant_array = tflite_interpreter.get_tensor(constant_details['index'])
+
+    target_array_shape = None
+    if len(shape) is 2:
+        target_array_shape = [1,constant_array.shape[0]]
+    elif len(shape) is 4:
+        target_array_shape = [1,constant_array.shape[0],1,1]
+    else:
+        raise AssertionError('Unsupport shape' + str(shape))
 
     # make bias onnx node
     tensor_node_name = constant_details['name']
     tensor_node = onnx.helper.make_tensor(
         tensor_node_name,
         TensorProto.FLOAT,
-        [1,constant_array.shape[0],1,1],
+        target_array_shape,
         constant_array.flatten().tolist()
     )
     
@@ -70,10 +78,11 @@ class Add(Layer):
               self.weight_node_list.append(tensor_node)
           elif node_input_detail['shape'].size == 1:
               # channelwise add
-              tensor_node = make_onnx_channelwise_constant_number(self.tflite_interpreter, node_input_detail)
+              tensor_node = make_onnx_channelwise_constant_number(self.tflite_interpreter, node_input_detail, shape=self.node_output_shape)
               self.weight_node_list.append(tensor_node)
 
-          prev_node_names.append(prev_node_name)
+          if prev_node_name not in prev_node_names:
+              prev_node_names.append(prev_node_name)
       
 
       add_node_name = self.node_name
@@ -159,10 +168,11 @@ class Mul(Layer):
               self.weight_node_list.append(tensor_node)
           elif node_input_detail['shape'].size == 1:
               # channelwise mul
-              tensor_node = make_onnx_channelwise_constant_number(self.tflite_interpreter, node_input_detail)
+              tensor_node = make_onnx_channelwise_constant_number(self.tflite_interpreter, node_input_detail, shape=self.node_output_shape)
               self.weight_node_list.append(tensor_node)
 
-          prev_node_names.append(prev_node_name)
+          if prev_node_name not in prev_node_names:
+              prev_node_names.append(prev_node_name)
 
       mul_node_name = self.node_name
       mul_node = onnx.helper.make_node(
