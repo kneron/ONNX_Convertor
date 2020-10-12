@@ -45,7 +45,31 @@ class Dense(Layer):
 
             # change squeeze to new input for gemm
             self.input_nodes_name = [squeeze_node_name]      
+        else:
 
+            ##################  add transpose  ###############
+            transpose_before_node_name = 'transpose_node_before_flatten_' + self.node_name
+            transpose_before_node = onnx.helper.make_node(
+                'Transpose',
+                inputs=self.input_nodes_name,
+                outputs=[transpose_before_node_name],
+                perm=[0,2,3,1],
+                name=transpose_before_node_name
+            )
+            # update tables
+            self.node_list.append(transpose_before_node)
+
+            squeeze_node_name = squeeze_node_name + '_flatten' 
+            reshape_node = onnx.helper.make_node(
+                'Flatten',
+                inputs=[transpose_before_node_name],
+                outputs=[squeeze_node_name],
+                name=squeeze_node_name,
+                axis=1
+            )
+            # update tables
+            self.node_list.append(reshape_node)
+            self.input_nodes_name = [squeeze_node_name]  
       fc_name = self.node_name
 
       weights_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
@@ -161,7 +185,7 @@ class Reshape(Layer):
       # no attribute 'new_shape', should be op 'squeeze'
       if self.tflite_reshape_parser is None: 
         new_shape = np.array(out_dim, dtype='int64')
-      elif not self.tflite_reshape_parser.NewShapeIsNone:
+      elif not self.tflite_reshape_parser.NewShapeIsNone():
         new_shape = np.array(self.tflite_reshape_parser.NewShapeAsNumpy(), dtype='int64')
 
       shape_tensor = onnx.helper.make_tensor(shape_tensor_name,TensorProto.INT64,new_shape.shape, new_shape)
