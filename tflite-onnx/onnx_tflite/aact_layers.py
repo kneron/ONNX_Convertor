@@ -237,3 +237,20 @@ class PRelu(Layer):
         self.value_infos.append(out_shape_info)
 
         return self.node_list, self.value_infos, self.weight_node_list
+
+class Elu(Layer):
+
+    def __init__(self, op, op_type, tflite_interpreter):
+        Layer.__init__(self, op, op_type, tflite_interpreter)
+
+    def generate(self):
+        elu_name = self.node_name
+        elu_node = helper.make_node(
+            op_type='Elu',
+            inputs=self.input_nodes_name,
+            outputs=[elu_name],
+            name=elu_name
+        )
+        self.node_list.append(elu_node)
+
+        return self.node_list, self.value_infos, self.weight_node_list
