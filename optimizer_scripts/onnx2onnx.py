@@ -57,7 +57,7 @@ if args.bn_on_skip:
     other.add_bn_on_skip_branch(m.graph)
 elif args.bn_before_add:
     other.add_bn_before_add(m.graph)
-    add_bn_before_activation(m.graph)
+    other.add_bn_before_activation(m.graph)
 
 # My optimization
 m = combo.common_optimization(m)
