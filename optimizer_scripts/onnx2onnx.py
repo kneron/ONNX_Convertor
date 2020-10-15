@@ -19,6 +19,8 @@ parser.add_argument('in_file', help='input ONNX FILE')
 parser.add_argument('-o', '--output', dest='out_file', type=str, help="ouput ONNX FILE")
 parser.add_argument('--bgr', action='store_true', default=False, help="set if the model is trained in BGR mode")
 parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
+parser.add_argument('--split-convtranspose', dest='split_convtranspose', action='store_true', default=False,
+                    help="set if you want to split ConvTranspose into Conv and special Upsample")
 parser.add_argument('--add-bn-on-skip', dest='bn_on_skip', action='store_true', default=False,
                     help="set if you only want to add BN on skip branches")
 parser.add_argument('--add-bn', dest='bn_before_add', action='store_true', default=False,
@@ -58,6 +60,9 @@ if args.bn_on_skip:
 elif args.bn_before_add:
     other.add_bn_before_add(m.graph)
     other.add_bn_before_activation(m.graph)
+# Split deconv
+if args.split_convtranspose:
+    other.split_ConvTranspose(m)
 
 # My optimization
 m = combo.common_optimization(m)
