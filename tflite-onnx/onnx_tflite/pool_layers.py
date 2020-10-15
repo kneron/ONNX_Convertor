@@ -25,8 +25,8 @@ class MaxPooling2D(Layer):
       node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
       node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
 
-      kernel_shape = [self.tflite_maxpool_parser.FilterWidth(),self.tflite_maxpool_parser.FilterHeight()]
-      strides_len = [self.tflite_maxpool_parser.StrideW(),self.tflite_maxpool_parser.StrideH()]
+      kernel_shape = [self.tflite_maxpool_parser.FilterHeight(),self.tflite_maxpool_parser.FilterWidth()]
+      strides_len = [self.tflite_maxpool_parser.StrideH(),self.tflite_maxpool_parser.StrideW()]
 
       padding_stradegy = 'NONE' 
       if self.tflite_maxpool_parser.Padding() is Padding.SAME:
@@ -77,8 +77,8 @@ class AveragePooling2D(Layer):
       node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
       node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
 
-      kernel_shape = [self.tflite_avgpool_parser.FilterWidth(),self.tflite_avgpool_parser.FilterHeight()]
-      strides_len = [self.tflite_avgpool_parser.StrideW(),self.tflite_avgpool_parser.StrideH()]
+      kernel_shape = [self.tflite_avgpool_parser.FilterHeight(),self.tflite_avgpool_parser.FilterWidth()]
+      strides_len = [self.tflite_avgpool_parser.StrideH(),self.tflite_avgpool_parser.StrideW()]
 
       padding_stradegy = 'NONE' 
       if self.tflite_avgpool_parser.Padding() is Padding.SAME:
