@@ -35,8 +35,8 @@ class Convolution(Layer):
 
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
 
-      strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
-      dilation_factor = [self.tflite_conv_parser.DilationWFactor(), self.tflite_conv_parser.DilationHFactor()]
+      strides_len = [self.tflite_conv_parser.StrideH(),self.tflite_conv_parser.StrideW()]
+      dilation_factor = [self.tflite_conv_parser.DilationHFactor(), self.tflite_conv_parser.DilationWFactor()]
 
       padding_stradegy = 'NONE'
       if self.tflite_conv_parser.Padding() is Padding.SAME:
@@ -131,8 +131,8 @@ class DepthwiseConvolution(Layer):
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
       channel = weights_array.shape[3]
 
-      strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
-      dilation_factor = [self.tflite_conv_parser.DilationWFactor(),self.tflite_conv_parser.DilationHFactor()]
+      strides_len = [self.tflite_conv_parser.StrideH(),self.tflite_conv_parser.StrideW()]
+      dilation_factor = [self.tflite_conv_parser.DilationHFactor(),self.tflite_conv_parser.DilationWFactor()]
 
       padding_stradegy = 'NONE'
       if self.tflite_conv_parser.Padding() is Padding.SAME:
@@ -230,8 +230,8 @@ class ResizeNearestNeighbor(Layer):
             source_width, source_height = node_input_detail['shape'].tolist()[1:3]
             target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
 
-            source_size = np.array([1.0, 1.0, source_width, source_height], dtype=np.int32)
-            target_siz = np.array([1.0, 1.0, target_width, targwt_height], dtype=np.int32)
+            source_size = np.array([1.0, 1.0, source_height, source_width], dtype=np.int32)
+            target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.int32)
 
             constant_val = target_siz/source_size
             constant_node_name = self.node_name + '_scales'
@@ -303,8 +303,8 @@ class ResizeBilinear(Layer):
             source_width, source_height = node_input_detail['shape'].tolist()[1:3]
             target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
 
-            source_size = np.array([1.0, 1.0, source_width, source_height], dtype=np.int32)
-            target_siz = np.array([1.0, 1.0, target_width, targwt_height], dtype=np.int32)
+            source_size = np.array([1.0, 1.0, source_height, source_width], dtype=np.int32)
+            target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.int32)
 
             constant_val = target_siz/source_size
             constant_node_name = self.node_name + '_scales'
@@ -376,7 +376,7 @@ class TransposeConvolution(Layer):
 
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
 
-      strides_len = [self.tflite_tconv_parser.StrideW(),self.tflite_tconv_parser.StrideH()]
+      strides_len = [self.tflite_tconv_parser.StrideH(),self.tflite_tconv_parser.StrideW()]
 
       padding_stradegy = 'NONE'
       if self.tflite_tconv_parser.Padding() is Padding.SAME:

@@ -532,3 +532,81 @@ def replace_ReduceMean_with_GlobalAveragePool(g):
     for node in node_to_remove:
         g.node.remove(node)
     topological_sort(g)
+
+def replace_mul_to_bn(g):
+    """Replace single Mul node with Batchnorm node.
+    :param g: input graph.
+    :return:
+    """
+    node_to_del = []
+    for node in g.node:
+        if node.op_type != 'Mul':
+            continue
+
+        mul_op_node = node
+
+        # only support one input node
+        if len(mul_op_node.input) != 2: # OP node and value node
+            continue
+
+        input_op_node_name = mul_op_node.input[0]
+        mul_value_node = helper.find_node_by_output_name(g, mul_op_node.input[1])
+        if not mul_value_node or mul_value_node.op_type != 'Constant':
+            continue
+
+        _ , previous_node_output_shape = helper.find_size_shape_from_value(helper.find_value_by_name(g, input_op_node_name))
+        scale_shape, scale_data = helper.constant_to_list(mul_value_node)
+        c_dim = len(scale_data)
+
+        # only allow 4 dim data input due to the hardware limitation
+        if len(previous_node_output_shape) != 4:
+            continue
+
+        # check if mul's dim and input channel dimension are matched 
+        if previous_node_output_shape[1] != c_dim:    
+            continue
+
+        # only allow channelwise mul
+        if scale_shape == [1, c_dim, 1, 1]:
+            continue
+
+        # remove all '1'
+        for _ in range(3):
+            mul_value_node.attribute[0].t.dims.remove(1)     
+
+        ones = [1.0] * c_dim
+        zeros = [0.0] * c_dim
+        bn_name = mul_op_node.output[0]
+        mean_value_node = helper.list_to_constant(bn_name+'_mean', zeros.shape, zeros)
+        variance_value_node = helper.list_to_constant(bn_name+'_var', ones.shape, ones)
+        bias_value_node = helper.list_to_constant(bn_name+'_add', zeros.shape, zeros)
+
+        bn_node = onnx.helper.make_node(
+            'BatchNormalization',
+            [input_op_node_name, 
+            mul_value_node.output[0], 
+            bias_value_node.output[0], 
+            mean_value_node.output[0], 
+            variance_value_node.output[0]],
+            [mul_op_node.output[0]],
+            name=bn_name,
+            epsilon=0.00000001
+        )
+
+        mid_val_info = helper.find_value_by_name(g, mul_op_node.output[0])
+        scale_val_info = helper.find_value_by_name(g, mul_value_node.output[0])
+        g.value_info.remove(mid_val_info)
+        g.value_info.remove(scale_val_info)
+        
+        g.node.extend([bn_node])
+        g.node.extend([mean_value_node])
+        g.node.extend([variance_value_node])
+        g.node.extend([bias_value_node])
+        
+        node_to_del.extend([mul_op_node])
+    
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
+
+    topological_sort(g)
+
