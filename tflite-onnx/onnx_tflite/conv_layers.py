@@ -14,6 +14,8 @@ from tflite.DepthwiseConv2DOptions import DepthwiseConv2DOptions
 from tflite.TransposeConvOptions import TransposeConvOptions
 from tflite.ActivationFunctionType import ActivationFunctionType
 from tflite.Padding import Padding
+from tflite.ResizeNearestNeighborOptions import ResizeNearestNeighborOptions
+from tflite.ResizeBilinearOptions import ResizeBilinearOptions
 
 class Convolution(Layer):
 
@@ -215,70 +217,58 @@ class ResizeNearestNeighbor(Layer):
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
+        self.tflite_resize_nn_parser = ResizeNearestNeighborOptions()
+        self.tflite_resize_nn_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
     def generate(self):
-        if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
-            warnings.warn(self.__class__.__name__ + ' is implemented by `Upsample` op, and not support `align_corners`,'
-                                                    '`half_pixel_centers` attributes.',
-                          UserWarning)
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
+        node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
 
-            node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
-            node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
+        # create scale constant node
+        tensor_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
 
-            # create constant node
-            tensor_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
+        source_width, source_height = node_input_detail['shape'].tolist()[1:3]
+        target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
 
-            source_width, source_height = node_input_detail['shape'].tolist()[1:3]
-            target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
+        source_size = np.array([1.0, 1.0, source_height, source_width], dtype=np.float)
+        target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.float)
 
-            source_size = np.array([1.0, 1.0, source_height, source_width], dtype=np.int32)
-            target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.int32)
+        scale_val = target_siz/source_size
+        scale_constant_node = utils.create_constant_node(self.node_name + '_scales' ,scale_val.shape ,scale_val)
 
-            constant_val = target_siz/source_size
-            constant_node_name = self.node_name + '_scales'
+        constant_info = onnx.helper.make_tensor_value_info(
+            name=scale_constant_node.name,
+            elem_type=TensorProto.FLOAT,
+            shape=scale_val.shape)
 
-            constant_tensor = onnx.helper.make_tensor(
-                name=tensor_input_detail['name'],
-                data_type=TensorProto.FLOAT,
-                dims=constant_val.shape,
-                vals=constant_val.ravel())
+        self.node_list.append(scale_constant_node)
+        self.value_infos.append(constant_info)
 
-            constant_node = onnx.helper.make_node(
-                op_type="Constant",
-                inputs=[],
-                outputs=[constant_node_name],
-                name=constant_node_name,
-                value=constant_tensor)
+        # create roi constant node
+        roi_constant_node = utils.create_constant_node(self.node_name + 'resize_roi', [], np.array([-1],dtype=np.float32))
+        self.node_list.append(roi_constant_node)
 
-            constant_info = onnx.helper.make_tensor_value_info(
-                name=constant_node_name,
-                elem_type=TensorProto.FLOAT,
-                shape=constant_val.shape)
+        previous_onnx_node_names = self.input_nodes_name.copy()
+        previous_onnx_node_names.extend([roi_constant_node.name, scale_constant_node.name])
+        resize_nearest_neighbor_node = onnx.helper.make_node(
+            op_type='Resize',
+            inputs=previous_onnx_node_names,
+            outputs=[self.node_name],
+            name=self.node_name,
+            mode='nearest',
+            coordinate_transformation_mode = 'align_corners' if self.tflite_resize_nn_parser.AlignCorners() == True else 'half_pixel'
+        )
 
-            # self.weight_node_list.append(constant_tensor)
-            self.node_list.append(constant_node)
-            self.value_infos.append(constant_info)
+        resize_nearest_neighbor_info = onnx.helper.make_tensor_value_info(
+            name=self.node_name,
+            elem_type=TensorProto.FLOAT,
+            shape=utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+        )
 
-            previous_onnx_node_names = self.input_nodes_name.copy()
-            previous_onnx_node_names.extend([constant_node_name])
-            resize_nearest_neighbor_node = onnx.helper.make_node(
-                op_type='Upsample',
-                inputs=previous_onnx_node_names,
-                outputs=[self.node_name],
-                name=self.node_name,
-                mode='nearest'
-            )
+        # update tables
+        self.node_list.append(resize_nearest_neighbor_node)
+        self.value_infos.append(resize_nearest_neighbor_info)
 
-            resize_nearest_neighbor_info = onnx.helper.make_tensor_value_info(
-                name=self.node_name,
-                elem_type=TensorProto.FLOAT,
-                shape=utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
-            )
-
-            # update tables
-            self.node_list.append(resize_nearest_neighbor_node)
-            self.value_infos.append(resize_nearest_neighbor_info)
-        else:
-            NotImplementedError('Partially Support ONNX ' + utils.ONNX_VERSION_1_4_1)
 
         return self.node_list, self.value_infos, self.weight_node_list
 
@@ -288,70 +278,58 @@ class ResizeBilinear(Layer):
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
+        self.tflite_resize_bilinear_parser = ResizeBilinearOptions()
+        self.tflite_resize_bilinear_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
     def generate(self):
-        if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
-            warnings.warn(self.__class__.__name__ + ' is implemented by `Upsample` op, and not support `align_corners`,'
-                                                    '`half_pixel_centers` attributes.',
-                          UserWarning)
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
+        node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
 
-            node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
-            node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
+        # create scale constant node
+        tensor_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
 
-            # create constant node
-            tensor_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
+        source_width, source_height = node_input_detail['shape'].tolist()[1:3]
+        target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
 
-            source_width, source_height = node_input_detail['shape'].tolist()[1:3]
-            target_width, targwt_height = self.tflite_interpreter.get_tensor(tensor_input_detail['index']).tolist()
+        source_size = np.array([1.0, 1.0, source_height, source_width], dtype=np.float)
+        target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.float)
 
-            source_size = np.array([1.0, 1.0, source_height, source_width], dtype=np.int32)
-            target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.int32)
+        scale_val = target_siz/source_size
+        scale_constant_node = utils.create_constant_node(self.node_name + '_scales' ,scale_val.shape ,scale_val)
 
-            constant_val = target_siz/source_size
-            constant_node_name = self.node_name + '_scales'
+        constant_info = onnx.helper.make_tensor_value_info(
+            name=scale_constant_node.name,
+            elem_type=TensorProto.FLOAT,
+            shape=scale_val.shape)
 
-            constant_tensor = onnx.helper.make_tensor(
-                name=tensor_input_detail['name'],
-                data_type=TensorProto.FLOAT,
-                dims=constant_val.shape,
-                vals=constant_val.ravel())
+        self.node_list.append(scale_constant_node)
+        self.value_infos.append(constant_info)
 
-            constant_node = onnx.helper.make_node(
-                op_type="Constant",
-                inputs=[],
-                outputs=[constant_node_name],
-                name=constant_node_name,
-                value=constant_tensor)
+        # create roi constant node
+        roi_constant_node = utils.create_constant_node(self.node_name + 'resize_roi', [], np.array([-1],dtype=np.float32))
+        self.node_list.append(roi_constant_node)
 
-            constant_info = onnx.helper.make_tensor_value_info(
-                name=constant_node_name,
-                elem_type=TensorProto.FLOAT,
-                shape=constant_val.shape)
+        previous_onnx_node_names = self.input_nodes_name.copy()
+        previous_onnx_node_names.extend([roi_constant_node.name, scale_constant_node.name])
+        resize_nearest_neighbor_node = onnx.helper.make_node(
+            op_type='Resize',
+            inputs=previous_onnx_node_names,
+            outputs=[self.node_name],
+            name=self.node_name,
+            mode='linear',
+            coordinate_transformation_mode = 'align_corners' if self.tflite_resize_bilinear_parser.AlignCorners() == True else 'half_pixel'
+        )
 
-            # self.weight_node_list.append(constant_tensor)
-            self.node_list.append(constant_node)
-            self.value_infos.append(constant_info)
+        resize_nearest_neighbor_info = onnx.helper.make_tensor_value_info(
+            name=self.node_name,
+            elem_type=TensorProto.FLOAT,
+            shape=utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+        )
 
-            previous_onnx_node_names = self.input_nodes_name.copy()
-            previous_onnx_node_names.extend([constant_node_name])
-            resize_nearest_neighbor_node = onnx.helper.make_node(
-                op_type='Upsample',
-                inputs=previous_onnx_node_names,
-                outputs=[self.node_name],
-                name=self.node_name,
-                mode='linear'
-            )
+        # update tables
+        self.node_list.append(resize_nearest_neighbor_node)
+        self.value_infos.append(resize_nearest_neighbor_info)
 
-            resize_nearest_neighbor_info = onnx.helper.make_tensor_value_info(
-                name=self.node_name,
-                elem_type=TensorProto.FLOAT,
-                shape=utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
-            )
-
-            # update tables
-            self.node_list.append(resize_nearest_neighbor_node)
-            self.value_infos.append(resize_nearest_neighbor_info)
-        else:
-            NotImplementedError('Partially Support ONNX ' + utils.ONNX_VERSION_1_4_1)
 
         return self.node_list, self.value_infos, self.weight_node_list
 
