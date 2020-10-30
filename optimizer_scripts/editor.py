@@ -21,6 +21,7 @@ parser.add_argument('-o', '--output', dest='output_change', type=str, nargs='+',
 parser.add_argument('--add-conv', dest='add_conv', type=str, nargs='+', help='add nop conv using specific input')
 parser.add_argument('--add-bn', dest='add_bn', type=str, nargs='+', help='add nop bn using specific input')
 parser.add_argument('--rename-output', dest='rename_output', type=str, nargs='+', help='Rename the specific output(e.g. --rename-output old_name new_name)')
+parser.add_argument('--add-shift-conv', dest='add_shift_conv', type=str, nargs='+', help='add shift conv after a node (e.g. --add-shift-conv target_node 0.5)')
 
 args = parser.parse_args()
 
@@ -44,6 +45,14 @@ if args.delete_output is not None:
 # Add do-nothing Conv node
 if args.add_conv is not None:
     other.add_nop_conv_after(g, args.add_conv)
+    other.topological_sort(g)
+
+# Add shift Conv node
+if args.add_shift_conv is not None:
+    if len(args.add_shift_conv) != 2:
+        assert("Rename output should be paires of names.")
+
+    other.add_shift_conv_after(g, args.add_shift_conv[0], float(args.add_shift_conv[1]))
     other.topological_sort(g)
 
 # Add do-nothing BN node

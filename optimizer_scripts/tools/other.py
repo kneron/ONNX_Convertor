@@ -535,6 +535,73 @@ def add_nop_conv_after(g, value_names):
         g.node.extend([conv_node, weight_node])
     topological_sort(g)
 
+def add_shift_conv_after(g, target_node_name, shift_value):
+    """Add do-nothing depthwise Conv nodes after the given value info. It will\\
+    take the given names as the inputs of the new node and replace the inputs\\
+    of the following nodes.
+
+    :param g: the graph\\
+    :param target_node_name: a string which are the names of value_info.
+    """
+
+    # Find the value first
+    value = helper.find_value_by_name(g, target_node_name)
+    if value is None:
+        value = helper.find_input_by_name(g, target_node_name)
+    if value is None:
+        value = helper.find_output_by_name(g, target_node_name)
+    if value is None:
+        print("Cannot find an value_info named {}".format(target_node_name))
+        return
+    # Get the channel number from value info
+    shape = helper.get_shape_from_value_info(value)
+    channel = shape[1]
+    # Construct 4 weights
+    node_name = target_node_name + "_nop_conv"
+    ones = [1.0] * channel
+    shifts = [shift_value] * channel
+    weight_node = helper.list_to_constant(node_name + "_weight", [channel, 1, 1, 1], ones)
+    bias_node = helper.list_to_constant(node_name + "_bias", [channel], shifts)
+    # Construct BN node
+    conv_node = onnx.helper.make_node(
+        "Conv",
+        [target_node_name,
+        weight_node.output[0],
+        bias_node.output[0]],
+        [node_name],
+        name = node_name,
+        dilations = [1, 1],
+        group = channel,
+        kernel_shape = [1, 1],
+        pads = [0, 0, 0, 0],
+        strides = [1, 1]
+    )
+    # Reconnect the graph
+    following_nodes = helper.find_following_nodes_by_input_value_name(g, target_node_name)
+    if len(following_nodes) > 0:
+        for following_node in following_nodes:
+            replace_node_input(following_node, target_node_name, node_name)
+    else:
+        # If the node is the output, replace the output with the previous input.
+        new_value = onnx.helper.make_tensor_value_info(
+            node_name,
+            value.type.tensor_type.elem_type,
+            shape
+        )
+        output_values = []
+        while len(g.output):
+            output_values.append(g.output.pop())
+        while output_values:
+            output_value = output_values.pop()
+            if output_value.name == target_node_name:
+                g.output.extend([new_value])
+            else:
+                g.output.extend([output_value])
+    # Add node to the graph
+    g.node.extend([conv_node, weight_node, bias_node])
+
+    topological_sort(g)
+
 def add_nop_bn_after(g, value_names):
     """Add do-nothing BatchNormalization nodes after the given value info. It will\\
     take the given names as the inputs of the new node and replace the inputs\\
