@@ -186,6 +186,8 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     )
 
     cnn_model = helper.make_model(graph_cnn, producer_name='Kneron')
+    cnn_model.ir_version = 6
+    cnn_model.opset_import[0].version = 11
 
     # add generated time to model meta data
     helper.set_model_props(cnn_model, {'Generated Time': datetime.utcnow().strftime("%m/%d/%Y, %H:%M:%S") + " (UTC+0)"})
