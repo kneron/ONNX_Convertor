@@ -4,8 +4,6 @@ from onnx import AttributeProto, TensorProto
 from onnx import onnx_pb as onnx_proto
 import numpy as np
 
-ONNX_VERSION_1_6_0 = '1.6.0'
-ONNX_VERSION_1_4_1 = '1.4.1'
 
 def tflite2onnx_shape_map(shape_list):
     # change dimension due to channel first-last issue
