@@ -556,35 +556,32 @@ def replace_mul_to_bn(g):
 
         _ , previous_node_output_shape = helper.find_size_shape_from_value(helper.find_value_by_name(g, input_op_node_name))
         scale_shape, scale_data = helper.constant_to_list(mul_value_node)
-        c_dim = len(scale_data)
+        
 
         # only allow 4 dim data input due to the hardware limitation
         if len(previous_node_output_shape) != 4:
             continue
 
-        # check if mul's dim and input channel dimension are matched 
-        if previous_node_output_shape[1] != c_dim:    
-            continue
+        # channel dimension
+        c_dim = previous_node_output_shape[1]
 
-        # only allow channelwise mul
-        if scale_shape == [1, c_dim, 1, 1]:
-            continue
-
-        # remove all '1'
-        for _ in range(3):
-            mul_value_node.attribute[0].t.dims.remove(1)     
+        # only allow channelwise mul or const mul
+        if scale_shape != [1, c_dim, 1, 1] and scale_shape != 1:
+            continue  
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
+        muls = scale_data * c_dim
         bn_name = mul_op_node.output[0]
-        mean_value_node = helper.list_to_constant(bn_name+'_mean', zeros.shape, zeros)
-        variance_value_node = helper.list_to_constant(bn_name+'_var', ones.shape, ones)
-        bias_value_node = helper.list_to_constant(bn_name+'_add', zeros.shape, zeros)
+        mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
+        variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
+        bias_value_node = helper.list_to_constant(bn_name+'_add', np.array(zeros).shape, zeros)
+        new_mul_value_node = helper.list_to_constant(bn_name+'_mul', np.array(muls).shape, muls)
 
         bn_node = onnx.helper.make_node(
             'BatchNormalization',
             [input_op_node_name, 
-            mul_value_node.output[0], 
+            new_mul_value_node.output[0], 
             bias_value_node.output[0], 
             mean_value_node.output[0], 
             variance_value_node.output[0]],
@@ -602,8 +599,10 @@ def replace_mul_to_bn(g):
         g.node.extend([mean_value_node])
         g.node.extend([variance_value_node])
         g.node.extend([bias_value_node])
+        g.node.extend([new_mul_value_node])
         
         node_to_del.extend([mul_op_node])
+        node_to_del.extend([mul_value_node])
     
     while node_to_del:
         g.node.remove(node_to_del.pop())
