@@ -72,11 +72,12 @@ class Dense(Layer):
             self.input_nodes_name = [squeeze_node_name]  
       fc_name = self.node_name
 
+      
       weights_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
-      bias_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(2))
+      
 
       weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
-      bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
+      
 
       # transpose because shape define diffent between tflite and onnx
       weights_array = np.transpose(weights_array, (1,0))
@@ -91,20 +92,40 @@ class Dense(Layer):
           weights_array.flatten().tolist()
       )
 
-      # make bias onnx node
-      bias_onnx_node_name = fc_name + "_bias"
-      bias_onnx_node = onnx.helper.make_tensor(
-          bias_onnx_node_name,
-          TensorProto.FLOAT,
-          bias_array.shape,
-          bias_array.flatten().tolist()
-      )
+
 
       # make FC onnx node
       node_name_before_fc = []
       node_name_before_fc.extend(self.input_nodes_name)
       node_name_before_fc.append(weight_onnx_node_name)
-      node_name_before_fc.append(bias_onnx_node_name)
+
+      if self.op.Inputs(2) is -1: # no bias node
+          zeros = [0]*weights_node_info['shape'][0]
+          bias_array = np.array(zeros)
+          # make bias onnx node
+          bias_onnx_node_name = fc_name + "_bias"
+          bias_onnx_node = onnx.helper.make_tensor(
+              bias_onnx_node_name,
+              TensorProto.FLOAT,
+              bias_array.shape,
+              bias_array.flatten().tolist()
+          )
+          node_name_before_fc.append(bias_onnx_node_name)
+          self.weight_node_list.append(bias_onnx_node)     
+      else:
+          bias_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(2))
+          bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
+          # make bias onnx node
+          bias_onnx_node_name = fc_name + "_bias"
+          bias_onnx_node = onnx.helper.make_tensor(
+              bias_onnx_node_name,
+              TensorProto.FLOAT,
+              bias_array.shape,
+              bias_array.flatten().tolist()
+          )
+          node_name_before_fc.append(bias_onnx_node_name)
+          self.weight_node_list.append(bias_onnx_node)
+
       fc_onnx_node = helper.make_node(
           op_type   = 'Gemm',
           inputs    = node_name_before_fc,
@@ -125,7 +146,7 @@ class Dense(Layer):
       # update tables
       self.value_infos.append(out_shape_info)
       self.weight_node_list.append(weight_onnx_node)
-      self.weight_node_list.append(bias_onnx_node)
+      
       self.node_list.append(fc_onnx_node)
 
       # change output node's input_name

@@ -47,7 +47,7 @@ class Layer(metaclass=abc.ABCMeta):
             return
 
         self.input_nodes_idx = [self.op.Inputs(i) for i in range(self.op.InputsLength())]
-        self.input_nodes_name = [self.tflite_interpreter._get_tensor_details(idx)['name'] for idx in self.input_nodes_idx]
+        self.input_nodes_name = [self.tflite_interpreter._get_tensor_details(idx)['name'] for idx in self.input_nodes_idx if idx >= 0]
 
         model_input_details = self.tflite_interpreter.get_input_details()
         model_input_node_name = model_input_details[0]['name']

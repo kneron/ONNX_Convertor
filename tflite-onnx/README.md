@@ -14,6 +14,7 @@ We test our script using:
 * **ONNX**:    onnx==1.4.1
 * **Tensorflow**:    tensorflow==1.15.0
 * **FlatBuffer**:    flatbuffers==1.12
+* **Python-igraph**:    python-igraph==0.8.3
 
 ## Basic Usage
 
