@@ -865,6 +865,11 @@ def add_bn_before_add(g):
         # Get two inputs
         input_node_a = helper.find_node_by_output_name(g, n.input[0])
         input_node_b = helper.find_node_by_output_name(g, n.input[1])
+        # Skip constant input add
+        if input_node_a is None or input_node_a.op_type == 'Constant':
+            continue
+        if input_node_b is None or input_node_b.op_type == 'Constant':
+            continue
         def add_bn_after(prev_node):
             # Get the channel number from value info
             value_name = prev_node.output[0]
