@@ -133,7 +133,7 @@ class Concatenate(Layer):
     Layer.__init__(self, node)
   def generate(self):
     if helper.data_format == 'channels_last' and len(list(self.layer.input_shape)):
-      if self.layer.axis == -1:
+      if self.layer.axis == -1 or self.layer.axis == len(list(self.layer.input_shape)) - 1:
         self.axis = 1
       elif self.layer.axis == 0:
         self.axis = 0
