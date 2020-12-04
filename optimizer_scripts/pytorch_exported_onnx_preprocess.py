@@ -22,7 +22,7 @@ from tools import special
 ######################################
 
 parser = argparse.ArgumentParser(description="Optimize a Pytorch generated model for Kneron compiler")
-parser.add_argument('in_file', help='input ONNX or PTH FILE')
+parser.add_argument('in_file', help='input ONNX')
 parser.add_argument('out_file', help="ouput ONNX FILE")
 parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                     help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
@@ -38,7 +38,7 @@ if len(args.in_file) <= 4:
 elif args.in_file[-4:] == 'onnx':
     onnx_in = args.in_file
 else:
-    # When the file is neither an onnx or a pytorch pth.
+    # When the file is not an onnx file.
     logging.error("Invalid input file: {}".format(args.in_file))
     exit(1)
 
