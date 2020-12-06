@@ -36,6 +36,8 @@ class PReLU(Layer):
     node_list = []
     value_infos = []
     w = self.layer.blobs[0].data
+    if len(w.shape) == 1:
+      w = np.reshape(w, (1, w.shape[0], 1, 1))
     wnode_name = self.name + '_weight'
     tn, ti = helper.constructConstantNode(wnode_name, w)
     node_list += tn
