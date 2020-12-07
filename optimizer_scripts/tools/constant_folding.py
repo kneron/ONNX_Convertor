@@ -8,6 +8,7 @@ from .general_graph import Graph, Node
 from .other import topological_sort
 from .replacing import replace_shape_with_constant
 
+
 def are_all_inputs_Constant_with_one_child(g, node):
     for input_name in node.input:
         input_node = helper.find_node_by_output_name(g, input_name)
@@ -18,6 +19,7 @@ def are_all_inputs_Constant_with_one_child(g, node):
             return False
     return True
 
+
 def constant_folding(g):
     """ Do constant folding until nothing more can be done.
 
@@ -26,7 +28,7 @@ def constant_folding(g):
     """
     # Before constant folding, duplicate the constant nodes.
     duplicate_constant_node(g)
-    keep_folding = True # Keep the while loop
+    keep_folding = True  # Keep the while loop
     folded = False      # Return value
     while keep_folding:
         keep_folding = False
@@ -39,11 +41,13 @@ def constant_folding(g):
                 continue
             # Constant folding for the specific node
             if constant_folding_nodes[node.op_type](g, node):
-                logging.debug("Constant nodes and %s %s are folded.", node.op_type, node.name)
+                logging.debug("Constant nodes and %s %s are folded.",
+                              node.op_type, node.name)
                 folded = True
                 keep_folding = True
             else:
-                logging.debug("Constant nodes and %s %s are skipped.", node.op_type, node.name)
+                logging.debug(
+                    "Constant nodes and %s %s are skipped.", node.op_type, node.name)
     return folded
 
 
@@ -57,7 +61,8 @@ def duplicate_constant_node(g):
             continue
         output_val_info = helper.find_value_by_name(g, node.output[0])
         if output_val_info is None:
-            print("Cannot inference the shape of Const node output: " + node.output[0])
+            print("Cannot inference the shape of Const node output: " +
+                  node.output[0])
             exit(1)
         data_shape = helper.get_shape_from_value_info(output_val_info)
         output_nodes = helper.find_nodes_by_input_name(g, node.output[0])
@@ -104,6 +109,7 @@ def duplicate_constant_node(g):
     topological_sort(g)
 
     return
+
 
 def slice_constant_folding(g, node):
     """ Fold constant and slice nodes to a single constant node.
@@ -788,9 +794,58 @@ def floor_constant_folding(g, node):
     return True
 
 
+def bn_constant_folding(g, node):
+    """ Fold constant and mul nodes to a single constant node.
+    """
+    # Prepare data
+    node_to_del = []
+    input_node = helper.find_node_by_output_name(g, node.input[0])
+    scale_node = helper.find_node_by_output_name(g, node.input[1])
+    bias_node = helper.find_node_by_output_name(g, node.input[2])
+    mean_node = helper.find_node_by_output_name(g, node.input[3])
+    var_node = helper.find_node_by_output_name(g, node.input[4])
+
+    input_value_info = []
+    for i in range(5):
+        input_value_info.append(helper.find_value_by_name(g, node.input[i]))
+
+    if input_value_info[0] is None:
+        return False
+
+    input_data = helper.constant_to_numpy(input_node)
+    scale_data = helper.constant_to_numpy(scale_node)
+    bias_data = helper.constant_to_numpy(bias_node)
+    mean_data = helper.constant_to_numpy(mean_node)
+    var_data = helper.constant_to_numpy(var_node)
+
+    epsilon = helper.get_var_attribute_by_name(node, 'epsilon', 'float')
+    if epsilon is None:
+        epsilon = 0.00001
+
+    # Calculate new node
+    new_data = scale_data * (input_data - mean_data) / np.sqrt(var_data + epsilon) + bias_data
+
+    new_node = helper.numpy_to_constant(node.output[0], new_data)
+
+    # Reconnect the graph
+    node_to_del.extend([node, input_node, scale_node, bias_node, mean_node, var_node])
+    g.node.extend([new_node])
+
+    for value in input_value_info:
+        if value is not None:
+            g.value_info.remove(value)
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
 # Available constant folding names to function map.
 constant_folding_nodes = {
     'Add': add_constant_folding,
+    'BatchNormalization': bn_constant_folding,
     'Cast': cast_constant_folding,
     'Concat': concat_constant_folding,
     'Div': div_constant_folding,
