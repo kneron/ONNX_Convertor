@@ -32,6 +32,12 @@ def delete_nodes(g, node_list):
         if len(node.input) == 0:
             for following_node in following_nodes:
                 following_node.input.remove(node.output[0])
+        elif len(following_nodes) > 0 and len(node.input) == 1 and helper.find_input_by_name(g, node.input[0]) is not None:
+            # The node input is an input
+            new_input = helper.find_value_by_name(g, node.output[0])
+            g.input.append(new_input)
+            g.input.remove(helper.find_input_by_name(g, node.input[0]))
+            g.value_info.remove(new_input)
         elif len(following_nodes) > 0:
             for following_node in following_nodes:
                 replace_node_input(following_node, node.output[0], node.input[0])
