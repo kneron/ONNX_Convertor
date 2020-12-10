@@ -61,6 +61,43 @@ def relu6_to_clip(g):
         g.node.remove(node)
         g.node.extend([new_node])
 
+def PRelu_weight_reshape(g):
+    # For PRelu with single dimension weight. Expand it to 1, x, 1, 1
+    for node in g.node:
+        if node.op_type != "PRelu":
+            continue
+        slope = helper.find_node_by_output_name(g, node.input[1])
+        if slope is not None:
+            # Constant node
+            if len(slope.attribute[0].t.dims) != 1:
+                continue
+            slope.attribute[0].t.dims.append(slope.attribute[0].t.dims[0])
+            slope.attribute[0].t.dims[0] = 1
+            slope.attribute[0].t.dims.append(1)
+            slope.attribute[0].t.dims.append(1)
+        else:
+            # Initializer
+            for i in g.initializer:
+                if i.name == node.input[1]:
+                    slope = i
+                    break
+            if len(slope.dims) != 1:
+                continue
+            slope.dims.append(slope.dims[0])
+            slope.dims[0] = 1
+            slope.dims.append(1)
+            slope.dims.append(1)
+            input_value = helper.find_input_by_name(g, node.input[1])
+            new_input = onnx.helper.make_tensor_value_info(
+                node.input[1],
+                input_value.type.tensor_type.elem_type,
+                (1, slope.dims[1], 1, 1))
+            g.input.remove(input_value)
+            g.input.append(new_input)
+        value_info = helper.find_value_by_name(g, node.input[1])
+        if value_info is not None:
+            g.value_info.remove(value_info)
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage:{} file_in file_out".format(sys.argv[0]))
@@ -73,6 +110,7 @@ if __name__ == "__main__":
     remove_BN_spatial(graph)
     upsample_attribute_to_const(graph)
     relu6_to_clip(graph)
+    PRelu_weight_reshape(graph)
     other.topological_sort(graph)
 
     # Change model properties.
