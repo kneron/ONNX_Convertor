@@ -52,6 +52,13 @@ def add_output_to_value_info(g):
         if helper.find_value_by_name(g, output.name) is None:
             g.value_info.extend([output])
 
+def find_first_sequential_outputs(g, node):
+    for value_name in node.output:
+        value = helper.find_output_by_name(g, value_name)
+        if value is not None:
+            return value
+    return find_first_sequential_outputs(g, helper.find_nodes_by_input_name(g, node.output[0])[0])
+
 def remove_nodes(g, cut_nodes=[], cut_types=[]):
     node_to_delete = []
     #Find target nodes
@@ -60,17 +67,22 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
             continue
         else:
             node_to_delete.append(node)
-    #Remove them and add new outputs
-    new_output = []
-    while node_to_delete:
-        node = node_to_delete.pop()
+    # Mapping outputs
+    output_mapping = {}
+    new_output = set()
+    for node in node_to_delete:
+        original_output = find_first_sequential_outputs(g, node)
+        if original_output.name not in output_mapping:
+            output_mapping[original_output.name] = []
         for input_name in node.input:
             value = helper.find_value_by_name(g, input_name)
-            if value is not None and helper.find_output_by_name(g, input_name) is None:
-                new_output.append(value)
-        g.node.remove(node)
-    g.output.extend(new_output)
-    #Remove unreachable nodes
+            if value is not None and helper.find_output_by_name(g, input_name) is None and value.name not in new_output:
+                output_mapping[original_output.name].append(value)
+                new_output.add(value.name)
+    # Remove them
+    while node_to_delete:
+        g.node.remove(node_to_delete.pop())
+    # Remove unreachable nodes
     visited_values = set()
     unused_constant_map = {}
     for input_value in g.input:
@@ -90,15 +102,19 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
                 visited_values.add(output_name)
         else:
             node_to_delete.append(node)
-    new_output = []
-    while node_to_delete:
-        node = node_to_delete.pop()
+    # Mapping outputs again
+    for node in node_to_delete:
+        original_output = find_first_sequential_outputs(g, node)
+        if original_output.name not in output_mapping:
+            output_mapping[original_output.name] = []
         for input_name in node.input:
             value = helper.find_value_by_name(g, input_name)
-            if value is not None and helper.find_output_by_name(g, input_name) is None:
-                new_output.append(value)
-        g.node.remove(node)
-    g.output.extend(new_output)
+            if value is not None and helper.find_output_by_name(g, input_name) is None and value.name not in new_output:
+                output_mapping[original_output.name].append(value)
+                new_output.add(value.name)
+    # Remove them
+    while node_to_delete:
+        g.node.remove(node_to_delete.pop())
     #Remove unused constants
     for node in g.node:
         for input_name in node.input:
@@ -106,7 +122,7 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
                 del unused_constant_map[input_name]
     for node in unused_constant_map.values():
         g.node.remove(node)
-    #Remove unreachable value infos and outputs
+    #Remove unreachable value infos
     reachable_values = set()
     for input_value in g.input:
         reachable_values.add(input_value.name)
@@ -122,12 +138,22 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
     while value_to_remove:
         value_info = value_to_remove.pop()
         g.value_info.remove(value_info)
-    for value_info in g.output:
-        if value_info.name not in reachable_values:
-            value_to_remove.append(value_info)
-    while value_to_remove:
-        value_info = value_to_remove.pop()
-        g.output.remove(value_info)
+    # Reorder output
+    output_values = []
+    while len(g.output):
+        output_values.append(g.output.pop())
+    while output_values:
+        output_value = output_values.pop()
+        if output_value.name in reachable_values:
+            logging.info("Keep output {}".format(output_value.name))
+            g.output.extend([output_value])
+        elif output_value.name in output_mapping:
+            real_outputs = [i for i in output_mapping[output_value.name] if i.name in reachable_values]
+            logging.info("Replace output {} with {}".format(output_value.name, [i.name for i in real_outputs]))
+            g.output.extend(real_outputs)
+        else:
+            logging.info("Abandon output {}".format(output_value.name))
+            continue
 
 def transpose_B_in_Gemm(g):
     """
