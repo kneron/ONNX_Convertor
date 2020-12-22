@@ -169,8 +169,8 @@ def preprocess(kmodel, prefix='', outer_node=None, optimize=False):
         follower.replace_input(sub_outputs[i], model.outputs[i])
       if model.outputs[i] in output_tensor_list:
         sub_outputs[i].tensor = model.outputs[i].tensor
-        output_tensor_list.remove(model.outputs[i])
-        output_tensor_list.append(sub_outputs[i])
+        index = output_tensor_list.index(model.outputs[i])
+        output_tensor_list[index] = sub_outputs[i]
     useless_node_idx_list.append(layer_tree.index(model))
 
   # 5. Remove useless nodes
