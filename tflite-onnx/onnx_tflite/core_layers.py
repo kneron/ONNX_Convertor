@@ -13,6 +13,8 @@ from tflite.L2NormOptions import L2NormOptions
 from tflite.SqueezeOptions import SqueezeOptions
 from tflite.FullyConnectedOptions import FullyConnectedOptions
 from tflite.ActivationFunctionType import ActivationFunctionType
+from tflite.SpaceToDepthOptions import SpaceToDepthOptions
+from tflite.DepthToSpaceOptions import DepthToSpaceOptions
 
 class Dense(Layer):
 
@@ -340,6 +342,83 @@ class L2Normalization(Layer):
 
       # update tables
       self.node_list.append(l2norm_node)
+
+      return self.node_list, self.value_infos, self.weight_node_list
+
+class SpaceToDepth(Layer):
+
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+      self.tflite_space2depth_parser = SpaceToDepthOptions()
+      self.tflite_space2depth_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
+
+  def generate(self):
+
+      # get  block info
+      space2depth_block_size = self.tflite_space2depth_parser.BlockSize()
+
+      # build node
+      space2depth_name = self.node_name
+      space2depth_node = helper.make_node(
+          'SpaceToDepth', 
+          self.input_nodes_name, 
+          [space2depth_name], 
+          blocksize=space2depth_block_size, 
+          name=space2depth_name 
+      )
+
+      # update tables
+      self.node_list.append(space2depth_node)
+
+      return self.node_list, self.value_infos, self.weight_node_list
+
+class DepthToSpace(Layer):
+
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+      self.tflite_depth2space_parser = DepthToSpaceOptions()
+      self.tflite_depth2space_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
+
+  def generate(self):
+
+      # get  block info
+      depth2space_block_size = self.tflite_depth2space_parser.BlockSize()
+
+      # build node
+      depth2space_name = self.node_name
+      depth2space_node = helper.make_node(
+          'DepthToSpace', 
+          self.input_nodes_name, 
+          [depth2space_name], 
+          blocksize=depth2space_block_size, 
+          name=depth2space_name 
+      )
+
+      # update tables
+      self.node_list.append(depth2space_node)
+
+      return self.node_list, self.value_infos, self.weight_node_list
+
+class Maximum(Layer):
+
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+  def generate(self):
+
+      # build node
+      max_name = self.node_name
+      max_node = helper.make_node(
+          'Max', 
+          self.input_nodes_name, 
+          [max_name], 
+          name=max_name 
+      )
+
+      # update tables
+      self.node_list.append(max_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
 
