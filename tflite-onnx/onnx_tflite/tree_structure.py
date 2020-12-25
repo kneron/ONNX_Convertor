@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from conv_layers import Convolution, DepthwiseConvolution, ResizeNearestNeighbor, ResizeBilinear, TransposeConvolution
 from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu
-from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization, NullLayer
+from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization, NullLayer, SpaceToDepth, DepthToSpace, Maximum
 from merg_layers import Add, Mul, Concatenation
 from pool_layers import MaxPooling2D, AveragePooling2D, Mean
 
@@ -84,6 +84,9 @@ class Tree:
             BuiltinOperator.L2_NORMALIZATION : L2Normalization,
             BuiltinOperator.TRANSPOSE_CONV : TransposeConvolution,
             BuiltinOperator.ELU : Elu,
+            BuiltinOperator.SPACE_TO_DEPTH : SpaceToDepth,
+            BuiltinOperator.DEPTH_TO_SPACE : DepthToSpace,
+            BuiltinOperator.MAXIMUM : Maximum,
             BuiltinOperator.CUSTOM : NullLayer
         }
 
