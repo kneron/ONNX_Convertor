@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from conv_layers import Convolution, DepthwiseConvolution, ResizeNearestNeighbor, ResizeBilinear, TransposeConvolution
-from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu
+from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu, LeakyRelu
 from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization, NullLayer, SpaceToDepth, DepthToSpace, Maximum
 from merg_layers import Add, Mul, Concatenation
 from pool_layers import MaxPooling2D, AveragePooling2D, Mean
@@ -87,6 +87,7 @@ class Tree:
             BuiltinOperator.SPACE_TO_DEPTH : SpaceToDepth,
             BuiltinOperator.DEPTH_TO_SPACE : DepthToSpace,
             BuiltinOperator.MAXIMUM : Maximum,
+            BuiltinOperator.LEAKY_RELU : LeakyRelu,
             BuiltinOperator.CUSTOM : NullLayer
         }
 
@@ -110,9 +111,15 @@ class Tree:
         for idx, op in enumerate(self.__tflite_ops):
             if is_subgraph_mode:
                 if self.__tflite_op_types[idx] is BuiltinOperator.CUSTOM:
-                    raise ValueError("custom node found, if the node is at buttom, we recommend you use '-bottom' to delete this node")
+                    print("custom node found, if the node is at buttom, we recommend you use '-bottom' to delete this node")
             if not self.__tflite_op_types[idx] in self.op_convert_table:
-                raise ValueError("unsupported op id " + str(self.__tflite_op_types[idx]))
+                # show unsupported op type
+                all_var = vars(BuiltinOperator).items()
+                for k, v in all_var:
+                    if v == self.__tflite_op_types[idx]:
+                        unsup_op_name = k
+                        print("found unsupported op type " + unsup_op_name + ', if the node is at buttom, we recommend you use "-bottom" to delete this node')
+                
 
     def __parse_graph(self):
         self.__nodes = dict()
@@ -290,7 +297,8 @@ class Tree:
         if op_type in self.op_convert_table: 
             layer_obj = self.op_convert_table[op_type](op, op_type, tflite_interpreter)
         else:
-            raise ValueError(op_type)
+            # unsupported node, set as null layer 
+             layer_obj = self.op_convert_table[BuiltinOperator.CUSTOM](op, op_type, tflite_interpreter)
 
         return layer_obj
 

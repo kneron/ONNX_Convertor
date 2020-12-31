@@ -4,6 +4,7 @@ import abc
 import onnx
 from onnx import helper
 from onnx import AttributeProto, TensorProto
+from tflite.LeakyReluOptions import LeakyReluOptions
 from tflite.ActivationFunctionType import ActivationFunctionType
 from tflite.BuiltinOperator import BuiltinOperator
 import numpy as np
@@ -252,5 +253,33 @@ class Elu(Layer):
             name=elu_name
         )
         self.node_list.append(elu_node)
+
+        return self.node_list, self.value_infos, self.weight_node_list
+
+class LeakyRelu(Layer):
+
+    def __init__(self, op, op_type, tflite_interpreter):
+        Layer.__init__(self, op, op_type, tflite_interpreter)
+
+        self.tflite_leaky_relu_parser = LeakyReluOptions()
+        self.tflite_leaky_relu_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
+
+    def generate(self):
+
+        # get  block info
+        leaky_relu_alpha = self.tflite_leaky_relu_parser.Alpha()
+
+        # build node
+        leaky_relu_name = self.node_name
+        leaky_relu_node = helper.make_node(
+            'LeakyRelu', 
+            self.input_nodes_name, 
+            [leaky_relu_name], 
+            alpha=leaky_relu_alpha, 
+            name=leaky_relu_name 
+        )
+
+        # update tables
+        self.node_list.append(leaky_relu_node)
 
         return self.node_list, self.value_infos, self.weight_node_list
