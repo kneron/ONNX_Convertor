@@ -1,7 +1,6 @@
 """Base layer class
 """
 import abc
-import logging
 import json
 
 

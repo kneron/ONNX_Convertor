@@ -7,7 +7,7 @@ import numpy as np
 from base_layer import Layer
 from aact_layers import defused_activation_node_generator
 import utils
-import warnings
+import logging
 
 from tflite.Conv2DOptions import Conv2DOptions
 from tflite.DepthwiseConv2DOptions import DepthwiseConv2DOptions
@@ -217,9 +217,8 @@ class ResizeNearestNeighbor(Layer):
 
     def generate(self):
         if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
-            warnings.warn(self.__class__.__name__ + ' is implemented by `Upsample` op, and not support `align_corners`,'
-                                                    '`half_pixel_centers` attributes.',
-                          UserWarning)
+            logging.getLogger('tflite2onnx').warning(self.__class__.__name__ + ' is implemented by `Upsample` op, and not support `align_corners`,'
+                                                    '`half_pixel_centers` attributes.')
 
             node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
             node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
