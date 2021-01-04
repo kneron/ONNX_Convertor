@@ -56,6 +56,7 @@ We test our script using:
 * ELU
 * FULLY_CONNECTED
 * L2_NORMALIZATION
+* LEAKY_RELU
 * LOGISTIC
 * MUL
 * MEAN
