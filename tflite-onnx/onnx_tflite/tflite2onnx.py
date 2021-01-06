@@ -4,6 +4,7 @@ from onnx import helper
 from onnx import AttributeProto, TensorProto
 
 import utils
+import logging
 
 import os
 from datetime import datetime
@@ -123,6 +124,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     for h_node in tree_graph.get_head_nodes():
         # transpose for channel last to channel first
         if add_transpose_for_channel_last_first_issue is True:
+            logging.getLogger('tflite2onnx').debug("generating transpose node for channel last first issue: " + h_node.node_name)
             input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, h_node.node_input_shape.tolist())
             h_transpose_node = build_head_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name, h_node.node_name)
             
@@ -133,12 +135,11 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             h_node.input_nodes_name = [input_tensor_value_info.name]
                  
 
-
     ############################
     # build model node by node #
     ############################
     for key in sequential_keys:
-
+        logging.getLogger('tflite2onnx').debug("generating: " + key)
         nodes, val, weight = tree_dict[key].generate()
 
         if (len(val) != 0) and (tree_dict[key].is_bottom_node is False):
@@ -147,7 +148,6 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             onnx_weight_node_list.extend(weight)
         if len(nodes) != 0:
             onnx_node_list.extend(nodes)
-
 
 
     # sometimes, there are sub-node in one tree node, we need to find the last one
@@ -160,7 +160,9 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
 
         out_value_info = None
         if add_transpose_for_channel_last_first_issue is True:
+            logging.getLogger('tflite2onnx').debug("generating transpose node for channel last first issue: " + b_node.node_name)
             out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last( b_node.node_list[-1], b_node.node_output_shape.tolist() )
+            
             if transpose_node != None:
                 onnx_node_list.append(transpose_node)
         else:
@@ -200,6 +202,7 @@ if __name__ == '__main__':
     parser.add_argument('-save_path', metavar='saved model path', help='an output onnx file path')
     parser.add_argument('-bottom_nodes', metavar='bottom node you want', help='nodes name in tflite model which is the bottom node of sub-graph, use "," to add multiple nodes. ex:"con1,softmax2" ')
     parser.add_argument('-release_mode', metavar='is release mode', help='True if no transpose front end needed')
+    parser.add_argument('-log_level', metavar='loglevel', help='log level for python logging modul, ex:"-log_level INFO"')
     args = parser.parse_args()
 
     this_dir_path = os.path.dirname(os.path.abspath(__file__))
@@ -212,23 +215,29 @@ if __name__ == '__main__':
     model_save_path = os.path.abspath(args.save_path)
     is_release_mode = True if args.release_mode == 'True' else False
 
+    # log level set up
+    usr_set_log_level = args.log_level.upper() if args.log_level is not None else "INFO"
+    numeric_level = getattr(logging, usr_set_log_level, None)
+    if not isinstance(numeric_level, int):
+        raise ValueError('Invalid log level: %s' % loglevel)
+    logging.basicConfig(level=numeric_level)
 
+    # show infomation
+    logging.info('-----------   information    ----------------')
+    logging.info('is_release_mode: ' + str(is_release_mode))
+    logging.info('model_path: ' + model_path)
+    logging.info('model_save_path: ' + model_save_path)
 
-
-    print('-----------   information    ----------------')
-    print('is_release_mode: ' + str(is_release_mode))
-    print('model_path: ' + model_path)
-    print('model_save_path: ' + model_save_path)
-
-    print('-----------    start to generate  -----------')
-    print('generating...')
+    logging.info('-----------    start to generate  -----------')
+    logging.info('generating...')
 
     try:
         bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
         main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
+        logging.getLogger('tflite2onnx').info("Conversion Success")
     except Exception as e:
-        print('Error: Something Wrong')
-        print(e)
+        logging.getLogger('tflite2onnx').info('Error: Something Wrong')
+        logging.getLogger('tflite2onnx').error(e)
 
-    print('------------   end   ------------------------')
+    logging.info('------------   end   ------------------------')
 

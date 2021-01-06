@@ -10,6 +10,7 @@ from tflite.BuiltinOperator import BuiltinOperator
 from tflite.Model import Model
 
 from igraph import Graph
+import logging
 
 # For Testing and Check Graph Visualization
 def display_graph(tree):
@@ -111,14 +112,14 @@ class Tree:
         for idx, op in enumerate(self.__tflite_ops):
             if is_subgraph_mode:
                 if self.__tflite_op_types[idx] is BuiltinOperator.CUSTOM:
-                    print("custom node found, if the node is at buttom, we recommend you use '-bottom' to delete this node")
+                    logging.getLogger('tflite2onnx').warning("custom node found, if the node is at buttom, we recommend you use '-bottom_nodes' to delete this node")
             if not self.__tflite_op_types[idx] in self.op_convert_table:
                 # show unsupported op type
                 all_var = vars(BuiltinOperator).items()
                 for k, v in all_var:
                     if v == self.__tflite_op_types[idx]:
                         unsup_op_name = k
-                        print("found unsupported op type " + unsup_op_name + ', if the node is at buttom, we recommend you use "-bottom" to delete this node')
+                        logging.getLogger('tflite2onnx').warning("found unsupported op type " + unsup_op_name + ', if the node is at buttom, we recommend you use "-bottom_nodes" to delete this node')
                 
 
     def __parse_graph(self):
