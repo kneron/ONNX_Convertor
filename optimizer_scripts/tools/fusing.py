@@ -2,6 +2,7 @@ import onnx.helper
 import numpy as np
 from . import helper
 from .other import topological_sort
+from .modhelper import delete_value_with_name_if_exists
 
 def fuse_Transpose_into_Constant(g):
     """
@@ -16,13 +17,13 @@ def fuse_Transpose_into_Constant(g):
         prev_node = helper.find_node_by_output_name(g, node.input[0])
         if prev_node is None or prev_node.op_type != 'Constant':
             continue
-        
+
         pre_shape, data_list = helper.constant_to_list(prev_node)
         w = np.reshape(data_list, pre_shape)
         w = w.transpose(node.attribute[0].ints)
         new_shape = w.shape
         w = w.flatten()
-        
+
         new_tensor = onnx.helper.make_tensor(
             name=prev_node.name+'_data',
             data_type=prev_node.attribute[0].t.data_type,
@@ -36,7 +37,7 @@ def fuse_Transpose_into_Constant(g):
             name=node.output[0],
             value=new_tensor
         )
-        
+
         value_between = helper.find_value_by_name(g, prev_node.output[0])
         value_type = value_between.type.tensor_type.elem_type
         g.value_info.remove(value_between)
@@ -44,21 +45,21 @@ def fuse_Transpose_into_Constant(g):
         g.node.extend([new_node])
         node_to_remove.append(node)
         node_to_remove.append(prev_node)
-        
+
         if new_node.output[0] not in [i.name for i in g.value_info]:
             new_value = onnx.helper.make_tensor_value_info(
                 name=new_node.output[0],
                 elem_type=value_type,
-                shape=new_shape 
+                shape=new_shape
                 )
             g.value_info.extend([new_value])
             if new_node.output[0]:
                 val_info_to_del = helper.find_value_by_name(g, new_node.output[0])
                 g.value_info.remove(val_info_to_del)
-    
+
     for node in node_to_remove:
         g.node.remove(node)
-    
+
     topological_sort(g)
 
 def fuse_Add_into_Conv(g):
@@ -474,13 +475,10 @@ def fuse_Gemm_into_Gemm(g):
             transB.i = 0
         # Connect the new graph
         node.input[0] = prev_node.input[0]
-        prev_value = helper.find_value_by_name(g, prev_node.output[0])
-        g.value_info.remove(prev_value)
+        delete_value_with_name_if_exists(g, prev_node.output[0])
         for i in range(1, 3):
-            value = helper.find_value_by_name(g, prev_node.input[i])
-            g.value_info.remove(value)
-            value = helper.find_value_by_name(g, node.input[i])
-            g.value_info.remove(value)
+            delete_value_with_name_if_exists(g, prev_node.input[i])
+            delete_value_with_name_if_exists(g, node.input[i])
         node.input[1] = new_b_node.output[0]
         node.input[2] = new_c_node.output[0]
     # Remove useless nodes
@@ -547,7 +545,7 @@ def fuse_consecutive_transposes(g):
         new_permutation = []
         for ind in cur_permutation:
             new_permutation.append(pre_permutation[ind])
-        
+
         new_trans_node = onnx.helper.make_node(
             'Transpose',
             [pre_node.input[0]],
@@ -555,18 +553,18 @@ def fuse_consecutive_transposes(g):
             name=node.name,
             perm=new_permutation
         )
-        
+
         g.node.extend([new_trans_node])
         node_to_del.extend([pre_node, node])
-        
+
         mid_val_info = helper.find_value_by_name(g, node.input[0])
         if mid_val_info:
             g.value_info.remove(mid_val_info)
-    
+
     while node_to_del:
         node = node_to_del.pop()
         g.node.remove(node)
-    
+
     topological_sort(g)
 
 def fuse_mul_and_add_into_bn(g):
@@ -600,7 +598,7 @@ def fuse_mul_and_add_into_bn(g):
                     data_input_name = input_name
             else:
                 data_input_name = input_name
-            
+
         if not const_mul:
             continue
 
@@ -614,9 +612,9 @@ def fuse_mul_and_add_into_bn(g):
         # only allow 4 dim data input due to the hardware limitation
         if len(previous_node_output_shape) != 4:
             continue
-        
-        # check if mul's dim and input channel dimension are matched 
-        if previous_node_output_shape[1] != c_dim:    
+
+        # check if mul's dim and input channel dimension are matched
+        if previous_node_output_shape[1] != c_dim:
             continue
 
         if scale_shape == [1, c_dim, 1, 1]:
@@ -654,9 +652,9 @@ def fuse_mul_and_add_into_bn(g):
         g.value_info.remove(mid_val_info)
         g.value_info.remove(scale_val_info)
         g.value_info.remove(bais_val_info)
-        
+
         new_scale_val_info = onnx.helper.make_tensor_value_info(
-            const_mul.output[0], 
+            const_mul.output[0],
             const_mul.attribute[0].t.data_type,
             [c_dim]
             )
@@ -684,7 +682,7 @@ def fuse_mul_and_add_into_bn(g):
         g.node.extend([const_mean])
         g.node.extend([const_var])
         node_to_del.extend([mul_node, add_node])
-    
+
     while node_to_del:
         g.node.remove(node_to_del.pop())
 
@@ -736,7 +734,7 @@ def fuse_mul_and_add_into_gemm(g):
         b_tensor = onnx.helper.make_tensor(
             name=mul_const.name+'_tensor',
             data_type=mul_const.attribute[0].t.data_type,
-            dims=[dim, dim], 
+            dims=[dim, dim],
             vals=b_data
         )
         b_const_node = onnx.helper.make_node(
@@ -771,7 +769,7 @@ def fuse_mul_and_add_into_gemm(g):
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
-    
+
     topological_sort(g)
 
 def fuse_conv_and_add_into_conv(g):
@@ -790,13 +788,13 @@ def fuse_conv_and_add_into_conv(g):
         weight_node = helper.find_node_by_output_name(g, conv_node.input[1])
         if not weight_node or weight_node.op_type != 'Constant':
             continue
-        
+
         m_dim = weight_node.attribute[0].t.dims[0]
         if add_const.attribute[0].t.dims != [1, m_dim, 1, 1]:
             continue
         for _ in range(3):
             add_const.attribute[0].t.dims.remove(1)
-        
+
         conv_node.input.extend([add_const.output[0]])
         conv_node.output.pop()
         conv_node.output.extend([add_node.output[0]])
@@ -816,10 +814,10 @@ def fuse_conv_and_add_into_conv(g):
             add_const.attribute[0].t.dims
         )
         g.value_info.extend([new_add_const_val_info])
-    
+
     while node_to_del:
         g.node.remove(node_to_del.pop())
-    
+
     topological_sort(g)
 
 
