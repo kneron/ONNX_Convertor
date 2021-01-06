@@ -88,3 +88,8 @@ def inference_shapes(m):
     m = onnx.shape_inference.infer_shapes(m)
     onnx.checker.check_model(m)
     return m
+
+def delete_value_with_name_if_exists(g, name):
+    value = helper.find_value_by_name(g, name)
+    if value is not None:
+        g.value_info.remove(value)
