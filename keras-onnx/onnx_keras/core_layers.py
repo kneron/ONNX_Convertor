@@ -85,17 +85,49 @@ class Activation(Layer):
     )
     return [node], []
 
-  def softmax(self, axis=1):
-    if axis == -1:
-      axis = 1
+  def softmax(self, axis=-1):
+    transpose_node_list = []
+
+    # 4 dim input has channel last-first op definition issue, need transpose
+    do_transpose = len(self.input_shapes[0]) is 4
+
+    if do_transpose is True:
+      transpose_before_node_name = 'transpose_node_before_' + self.name
+      transpose_before_node = O.helper.make_node(
+          'Transpose',
+          inputs=self.inputs,
+          outputs=[transpose_before_node_name],
+          perm=[0,2,3,1],
+          name=transpose_before_node_name
+      )
+
+      transpose_after_node_name = 'transpose_node_after_' + self.name
+      transpose_after_node = O.helper.make_node(
+          'Transpose',
+          inputs=[self.name],
+          outputs=self.outputs,
+          perm=[0,3,1,2],
+          name=transpose_after_node_name
+      )
+
+      transpose_node_list = [transpose_before_node, transpose_after_node]
+    else:
+      # change axis param directly
+      mapping_table = {'0':0, '3':1, '1':2, '2':3, '-1': 1}
+      axis = mapping_table[str(axis)]
+
     node = O.helper.make_node(
       op_type='Softmax',
-      inputs=self.inputs,
-      outputs=self.outputs,
+      inputs=self.inputs if do_transpose is False else [transpose_node_list[0].name],
+      outputs=self.outputs if do_transpose is False else [self.name],
       name=self.name,
       axis=axis
     )
-    return [node], []
+
+    if do_transpose is True:
+      return [transpose_node_list[0], node, transpose_node_list[1]], []
+    else:
+      return [node], []
 
   def relu(self):
     node = O.helper.make_node(
