@@ -10,6 +10,7 @@ from tools import replacing
 from tools import other
 from tools import special
 from tools import combo
+from tools.soft_transpose import soft_transpose
 # from tools import temp
 
 # Main process
@@ -19,8 +20,6 @@ parser.add_argument('in_file', help='input ONNX FILE')
 parser.add_argument('-o', '--output', dest='out_file', type=str, help="ouput ONNX FILE")
 parser.add_argument('--bgr', action='store_true', default=False, help="set if the model is trained in BGR mode")
 parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
-parser.add_argument('--split-convtranspose', dest='split_convtranspose', action='store_true', default=False,
-                    help="set if you want to split ConvTranspose into Conv and special Upsample")
 parser.add_argument('--add-bn-on-skip', dest='bn_on_skip', action='store_true', default=False,
                     help="set if you only want to add BN on skip branches")
 parser.add_argument('--add-bn', dest='bn_before_add', action='store_true', default=False,
@@ -29,6 +28,8 @@ parser.add_argument('-t', '--eliminate-tail-unsupported', dest='eliminate_tail',
                     help='whether remove the last unsupported node for hardware')
 parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                     help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
+parser.add_argument('--soft-transpose', dest='soft_transpose', action='store_true', default=False,
+                    help="set if you want to transpose all the weights in order to serve a transposed input.")
 
 args = parser.parse_args()
 
@@ -78,4 +79,8 @@ if args.eliminate_tail:
 
 # Postprocessing
 m = combo.postprocess(m)
+
+if args.soft_transpose:
+    soft_transpose(m.graph)
+
 onnx.save(m, outfile)
