@@ -20,7 +20,7 @@ def torch_pattern_match(m):
             continue
         make_UpsamplingBilinear2d_value_info(m.graph, resize_node.name)
         m = onnx.shape_inference.infer_shapes(m)
-        polish_input_node(m.graph, resize_node.name)
+        polish_RESIZE_input_param_node(m.graph, resize_node.name)
     m = onnx.utils.polish_model(m)
     return m
 
@@ -111,7 +111,7 @@ def make_UpsamplingBilinear2d_value_info(g, resize_node_name):
 
     g.value_info.extend([new_output_value_info])
 
-def polish_input_node(g, resize_node_name):
+def polish_RESIZE_input_param_node(g, resize_node_name):
     resize_node = helper.find_node_by_output_name(g, resize_node_name)
 
     shape_data_node = helper.find_node_by_output_name(g, resize_node.input[3])
