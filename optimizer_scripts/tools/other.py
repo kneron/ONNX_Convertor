@@ -1013,7 +1013,6 @@ def duplicate_param_shared_constant(g):
             
             duplicated_node.name = new_node_name
             duplicated_node.output[0] = new_node_name
-            print(duplicated_node)
             
             node.input[n] = new_node_name
             g.node.extend([duplicated_node])
