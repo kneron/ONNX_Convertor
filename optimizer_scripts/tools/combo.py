@@ -61,6 +61,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     g = m.graph
     other.add_name_to_node(g)
     replacing.replace_initializer_with_Constant(g)
+    other.duplicate_param_shared_constant(g)
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
     g = m.graph
@@ -137,6 +138,7 @@ def pytorch_constant_folding(m):
 
     other.topological_sort(m.graph)
     m = torch_pattern_match(m)
+    m = optimizer.optimize(m, ['eliminate_deadend'])
     return m
 
 
