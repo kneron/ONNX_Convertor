@@ -9,6 +9,7 @@ import math
 import logging
 from . import helper
 from .modhelper import replace_node_input
+import copy
 
 def format_value_info_shape(g):
     """

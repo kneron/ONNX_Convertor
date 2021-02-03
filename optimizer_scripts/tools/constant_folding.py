@@ -117,15 +117,24 @@ def slice_constant_folding(g, node):
     pre_node = helper.find_node_by_output_name(g, node.input[0])
     pre_shape, data_list = helper.constant_to_list(pre_node)
 
-    data_list = np.reshape(data_list, pre_shape)
-    axes = helper.get_attribute_by_name(node, 'axes')
-    ends = list(helper.get_attribute_by_name(node, 'ends').ints)
-    starts = list(helper.get_attribute_by_name(node, 'starts').ints)
+    starts_node = helper.find_node_by_output_name(g, node.input[1])
+    _, starts = helper.constant_to_list(starts_node)
 
-    if not axes:
+    ends_node = helper.find_node_by_output_name(g, node.input[2])
+    _, ends = helper.constant_to_list(ends_node)
+
+    axes_node = helper.find_node_by_output_name(g, node.input[3])
+    if not axes_node:
         axes = list(range(len(helper.get_shape(data_list))))
     else:
-        axes = list(axes.ints)
+        _, axes = helper.constant_to_list(axes_node)
+
+    data_list = list(map(int, data_list))
+    starts = list(map(int, starts))
+    ends = list(map(int, ends))
+    axes = list(map(int, axes))
+
+    data_list = np.reshape(data_list, pre_shape)
 
     new_data = helper.slice_data(data_list, starts, ends, axes)
     new_node = helper.list_to_constant(node.output[0], helper.get_shape(
@@ -303,14 +312,14 @@ def concat_constant_folding(g, node):
         node.output[0],
         helper.get_shape(concat_data),
         helper.flatten_to_list(concat_data),
-        data_type=input_node.attribute[0].t.data_type
     )
     g.node.extend([new_node])
     node_to_del.append(node)
 
     for input_name in node.input:
         val_info = helper.find_value_by_name(g, input_name)
-        g.value_info.remove(val_info)
+        if val_info:
+            g.value_info.remove(val_info)
 
     while node_to_del:
         node = node_to_del.pop()
