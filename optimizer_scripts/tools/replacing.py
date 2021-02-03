@@ -2,6 +2,7 @@
 """
 import struct
 import copy
+import logging
 import onnx.helper
 import numpy as np
 from . import helper
@@ -96,7 +97,7 @@ def replace_Reshape_with_Flatten(g):
         # If found shape value_info, remove it
         if shape_value != None:
             g.value_info.remove(shape_value)
-            
+
     for node in node_to_remove:
         g.node.remove(node)
 
@@ -153,7 +154,7 @@ def replace_Unsqueeze_with_Reshape(g):
         if output_value is None:
             raise RuntimeError("Cannot get shape for Unsqueeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
-        
+
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.
         new_node = onnx.helper.make_node(
@@ -392,10 +393,10 @@ def replace_shape_with_constant(g):
 
     for node in node_to_remove:
         g.node.remove(node)
-    
+
     topological_sort(g)
 
-    return replaced 
+    return replaced
 
 def replace_split_with_slices(g):
     """Replace split node with slice nodes.
@@ -414,7 +415,7 @@ def replace_split_with_slices(g):
         _, shape = helper.find_size_shape_from_value(input_value)
         if len(shape) == 0:
             continue
-        
+
         output_val_names = list(node.output)
 
         axis = 0
@@ -556,7 +557,7 @@ def replace_mul_to_bn(g):
 
         _ , previous_node_output_shape = helper.find_size_shape_from_value(helper.find_value_by_name(g, input_op_node_name))
         scale_shape, scale_data = helper.constant_to_list(mul_value_node)
-        
+
 
         # only allow 4 dim data input due to the hardware limitation
         if len(previous_node_output_shape) != 4:
@@ -567,7 +568,7 @@ def replace_mul_to_bn(g):
 
         # only allow channelwise mul or const mul
         if scale_shape != [1, c_dim, 1, 1] and scale_shape != 1:
-            continue  
+            continue
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
@@ -580,10 +581,10 @@ def replace_mul_to_bn(g):
 
         bn_node = onnx.helper.make_node(
             'BatchNormalization',
-            [input_op_node_name, 
-            new_mul_value_node.output[0], 
-            bias_value_node.output[0], 
-            mean_value_node.output[0], 
+            [input_op_node_name,
+            new_mul_value_node.output[0],
+            bias_value_node.output[0],
+            mean_value_node.output[0],
             variance_value_node.output[0]],
             [mul_op_node.output[0]],
             name=bn_name,
@@ -594,16 +595,72 @@ def replace_mul_to_bn(g):
         scale_val_info = helper.find_value_by_name(g, mul_value_node.output[0])
         g.value_info.remove(mid_val_info)
         g.value_info.remove(scale_val_info)
-        
+
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])
         g.node.extend([variance_value_node])
         g.node.extend([bias_value_node])
         g.node.extend([new_mul_value_node])
-        
+
         node_to_del.extend([mul_op_node])
         node_to_del.extend([mul_value_node])
-    
+
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
+
+    topological_sort(g)
+
+def replace_Sum_with_Adds(g):
+    node_to_del = []
+
+    for node in g.node:
+        # Check for sum
+        if node.op_type != 'Sum':
+            continue
+        # Check for input number
+        if len(node.input) == 1:
+            # If input number is 1, delete the sum node.
+            following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+            for following_node in following_nodes:
+                modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+            node_to_del.append(node)
+            if helper.find_value_by_name(node.output[0]) is not None:
+                g.value_info.remove(helper.find_value_by_name(node.output[0]))
+        elif len(node.input) == 2:
+            # If input number is 2, replace it with add.
+            node.op_type = 'Add'
+            continue
+        elif len(node.input) > 2:
+            # If input number is larger than 2, replace it with n-1 add.
+            input_count = len(node.input)
+            # First node has 2 inputs
+            first_node = onnx.helper.make_node(
+                "Add",
+                [node.input[0], node.input[1]],
+                [node.output[0] + '_replacement_1'],
+                name=node.name + '_replacement_1'
+            )
+            # Last node has the same output as the original sum node
+            last_node = onnx.helper.make_node(
+                "Add",
+                [node.output[0] + '_replacement_' + str(input_count - 2), node.input[input_count - 1]],
+                [node.output[0]],
+                name=node.name
+            )
+            g.node.extend([first_node, last_node])
+            for i in range(2, input_count - 1):
+                new_node = onnx.helper.make_node(
+                    "Add",
+                    [node.output[0] + '_replacement_' + str(i - 1), node.input[i]],
+                    [node.output[0] + '_replacement_' + str(i)],
+                    name=node.name + '_replacement_' + str(i)
+                )
+                g.node.extend([new_node])
+            node_to_del.append(node)
+        else:
+            logging.error("Sum node must have at least 1 input.")
+            quit(1)
+
     while node_to_del:
         g.node.remove(node_to_del.pop())
 
