@@ -9,10 +9,11 @@ import math
 import logging
 from . import helper
 from .modhelper import replace_node_input
+import copy
 
 def format_value_info_shape(g):
     """
-    Replace -1 batch size in value info
+    Replace -1 and 0 batch size in value info
 
     :param g: the onnx graph
     """
@@ -28,7 +29,7 @@ def format_value_info_shape(g):
             value.type.tensor_type.shape.dim[0].dim_value = 1
     for value in g.value_info:
         if len(value.type.tensor_type.shape.dim) > 0 and\
-           (value.type.tensor_type.shape.dim[0].dim_value <= 0 or\
+           (value.type.tensor_type.shape.dim[0].dim_value < 0 or\
            not isinstance(value.type.tensor_type.shape.dim[0].dim_value, int)):
             value.type.tensor_type.shape.dim[0].dim_value = 1
 
@@ -996,3 +997,23 @@ def rename_output_name(g, original_name, new_name):
     nodes = helper.find_nodes_by_input_name(g, original_name)
     for node in nodes:
         replace_node_input(node, original_name, new_name)
+
+def duplicate_param_shared_constant(g):
+    for node in g.node:
+        input_names = set()
+        for n, input_node_name in enumerate(node.input):
+            param_data_node = helper.find_node_by_output_name(g, input_node_name)
+            if param_data_node is None or param_data_node.op_type != 'Constant':
+                continue
+            if param_data_node.name not in input_names:
+                input_names.add(input_node_name)
+                continue
+            
+            duplicated_node = copy.deepcopy(param_data_node)
+            new_node_name = param_data_node.name + '_' + str(n)
+            
+            duplicated_node.name = new_node_name
+            duplicated_node.output[0] = new_node_name
+            
+            node.input[n] = new_node_name
+            g.node.extend([duplicated_node])

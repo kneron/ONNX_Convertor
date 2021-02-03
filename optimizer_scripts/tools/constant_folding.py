@@ -110,8 +110,52 @@ def duplicate_constant_node(g):
 
     return
 
-
 def slice_constant_folding(g, node):
+    op_version = helper.get_current_opset_version()
+    # only support opset 9 & 11
+    if op_version == 11:
+        slice_constant_folding_Opset_11(g, node)
+    elif op_version == 9:
+        slice_constant_folding_Opset_9(g, node)
+
+def slice_constant_folding_Opset_11(g, node):
+    """ Fold constant and slice nodes to a single constant node.
+    """
+    pre_node = helper.find_node_by_output_name(g, node.input[0])
+    pre_shape, data_list = helper.constant_to_list(pre_node)
+
+    starts_node = helper.find_node_by_output_name(g, node.input[1])
+    _, starts = helper.constant_to_list(starts_node)
+
+    ends_node = helper.find_node_by_output_name(g, node.input[2])
+    _, ends = helper.constant_to_list(ends_node)
+
+    axes_node = helper.find_node_by_output_name(g, node.input[3])
+    if not axes_node:
+        axes = list(range(len(helper.get_shape(data_list))))
+    else:
+        _, axes = helper.constant_to_list(axes_node)
+
+    data_list = list(map(int, data_list))
+    starts = list(map(int, starts))
+    ends = list(map(int, ends))
+    axes = list(map(int, axes))
+
+    data_list = np.reshape(data_list, pre_shape)
+
+    new_data = helper.slice_data(data_list, starts, ends, axes)
+    new_node = helper.list_to_constant(node.output[0], helper.get_shape(
+        new_data), helper.flatten_to_list(new_data))
+    g.node.extend([new_node])
+    value_info = helper.find_value_by_name(g, pre_node.output[0])
+    if value_info is not None:
+        g.value_info.remove(value_info)
+    g.node.remove(node)
+    g.node.remove(pre_node)
+
+    return True
+
+def slice_constant_folding_Opset_9(g, node):
     """ Fold constant and slice nodes to a single constant node.
     """
     pre_node = helper.find_node_by_output_name(g, node.input[0])
@@ -138,7 +182,6 @@ def slice_constant_folding(g, node):
     g.node.remove(pre_node)
 
     return True
-
 
 def cast_constant_folding(g, node):
     """ Fold constant and cast node to a single constant node.
@@ -303,14 +346,14 @@ def concat_constant_folding(g, node):
         node.output[0],
         helper.get_shape(concat_data),
         helper.flatten_to_list(concat_data),
-        data_type=input_node.attribute[0].t.data_type
     )
     g.node.extend([new_node])
     node_to_del.append(node)
 
     for input_name in node.input:
         val_info = helper.find_value_by_name(g, input_name)
-        g.value_info.remove(val_info)
+        if val_info:
+            g.value_info.remove(val_info)
 
     while node_to_del:
         node = node_to_del.pop()

@@ -5,6 +5,16 @@ import onnx.helper
 import struct
 import numpy as np
 
+__ONNX_VERSION__ = -1
+
+def setup_current_opset_version(m):
+    __ONNX_VERSION__ = m.opset_import[0].version
+    if __ONNX_VERSION__ not in [9, 11]:
+        raise RuntimeError('Only support opset 9 and 11, but got ' + str(__ONNX_VERSION__))
+
+def get_current_opset_version():
+    return __ONNX_VERSION__
+
 def find_nodes_by_input_name(g, name):
     nodes = []
     for node in g.node:

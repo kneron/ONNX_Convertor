@@ -37,7 +37,7 @@ if args.out_file is None:
 else:
     outfile = args.out_file
 
-# Polish model in v1.4.1 includes:
+# onnx Polish model includes:
 #    -- nop
 #    -- eliminate_identity
 #    -- eliminate_nop_transpose
