@@ -113,6 +113,7 @@ def common_optimization(m):
     replacing.replace_Unsqueeze_with_Reshape(g)
     replacing.replace_Reshape_with_Flatten(g)
     replacing.replace_ReduceMean_with_GlobalAveragePool(g)
+    replacing.replace_Sum_with_Adds(g)
     other.topological_sort(g)
     return m
 
