@@ -5,6 +5,7 @@ import logging
 import onnx.utils
 from onnx import optimizer
 
+from . import helper
 from . import other
 from . import replacing
 from . import eliminating
@@ -48,6 +49,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     - fuse_pad_into_conv
 
     """
+    helper.setup_current_opset_version(model_proto)
     eliminating.eliminate_empty_value_infos(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
     passes = ['extract_constant_to_initializer',
@@ -72,7 +74,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     other.topological_sort(g)
     m = other.inference_shapes(m)
     g = m.graph
-    if m.opset_import[0].version < 10:
+    if helper.get_current_opset_version() < 10:
         replacing.replace_split_with_slices(g)
     other.topological_sort(g)
 
