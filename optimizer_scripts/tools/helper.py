@@ -5,14 +5,17 @@ import onnx.helper
 import struct
 import numpy as np
 
-__ONNX_VERSION__ = -1
+__ONNX_VERSION__ =  -1
 
 def setup_current_opset_version(m):
+    global __ONNX_VERSION__
     __ONNX_VERSION__ = m.opset_import[0].version
     if __ONNX_VERSION__ not in [9, 11]:
         raise RuntimeError('Only support opset 9 and 11, but got ' + str(__ONNX_VERSION__))
 
 def get_current_opset_version():
+    if __ONNX_VERSION__ == -1:
+        raise RuntimeError('do setup_current_opset_version first please')
     return __ONNX_VERSION__
 
 def find_nodes_by_input_name(g, name):
