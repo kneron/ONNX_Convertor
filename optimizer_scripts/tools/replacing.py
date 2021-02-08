@@ -374,11 +374,10 @@ def replace_shape_with_constant(g):
             input_value = helper.find_input_by_name(g, node.input[0])
         if input_value is None or len(input_value.type.tensor_type.shape.dim) == 0:
             continue
-        # Check for case where dimension could be 0 or -1
-        tmp = True
-        for d in input_value.type.tensor_type.shape.dim:
-            tmp = tmp and (d.dim_value > 0)
-        if not tmp:
+        # Check if width and height of input shape is valid
+        shape_h = input_value.type.tensor_type.shape.dim[2].dim_value
+        shape_w = input_value.type.tensor_type.shape.dim[3].dim_value
+        if shape_h < 1 or shape_w < 1:
             continue
         # Repalce it
         input_shape = [
