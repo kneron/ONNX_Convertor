@@ -203,7 +203,7 @@ class Conv2DTranspose(Layer):
             dilations=dilations,
             kernel_shape=kernel_shape,
             auto_pad=auto_pad,
-            output_shape=self.output_shape,
+            output_shape=self.output_shape[2:],
             strides=strides
         )
     else:
@@ -216,7 +216,7 @@ class Conv2DTranspose(Layer):
             kernel_shape=kernel_shape,
             auto_pad=auto_pad,
             strides=strides,
-            output_padding=[int(self.layer.output_padding[0])//2,
+            pads=[int(self.layer.output_padding[0])//2,
                             int(self.layer.output_padding[1])//2,
                             int(self.layer.output_padding[0])//2 + int(self.layer.output_padding[0])%2,
                             int(self.layer.output_padding[1])//2 + int(self.layer.output_padding[1])%2]

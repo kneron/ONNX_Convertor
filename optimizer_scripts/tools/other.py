@@ -926,9 +926,9 @@ def add_bn_before_add(g):
             replace_node_input(n, value_name, node_name)
             # Add node to the graph
             g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
-        if not (input_node_a.op_type == 'BatchNormalization' and len(helper.find_following_nodes_by_input_value_name(g, input_node_a.output[0])) == 1):
+        if not input_node_a.op_type == 'BatchNormalization' or len(helper.find_following_nodes_by_input_value_name(g, input_node_a.output[0])) > 1:
             add_bn_after(input_node_a)
-        if not (input_node_b.op_type == 'BatchNormalization' and len(helper.find_following_nodes_by_input_value_name(g, input_node_b.output[0])) == 1):
+        if not input_node_b.op_type == 'BatchNormalization' or len(helper.find_following_nodes_by_input_value_name(g, input_node_b.output[0])) > 1:
             add_bn_after(input_node_b)
     topological_sort(g)
 
