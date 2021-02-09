@@ -342,10 +342,17 @@ def concat_constant_folding(g, node):
         node_to_del.append(input_node)
 
     concat_data = np.concatenate(input_data, axis=node.attribute[0].i)
+    node_data_type = input_node.attribute[0].t.data_type
+    if concat_data.dtype in [np.int32, np.int64]:
+        node_data_type = onnx.helper.TensorProto.INT64
+    elif concat_data.dtype in [np.float32, np.float64]:
+        node_data_type = onnx.helper.TensorProto.FLOAT
+
     new_node = helper.list_to_constant(
         node.output[0],
         helper.get_shape(concat_data),
         helper.flatten_to_list(concat_data),
+        data_type=node_data_type
     )
     g.node.extend([new_node])
     node_to_del.append(node)
