@@ -19,6 +19,7 @@ parser.add_argument('in_file', help='input ONNX FILE')
 parser.add_argument('-o', '--output', dest='out_file', type=str, help="ouput ONNX FILE")
 parser.add_argument('--bgr', action='store_true', default=False, help="set if the model is trained in BGR mode")
 parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
+parser.add_argument('--rgba2yynn', action='store_true', default=False, help="set if the model has yynn input but you want to take rgba images")
 parser.add_argument('--split-convtranspose', dest='split_convtranspose', action='store_true', default=False,
                     help="set if you want to split ConvTranspose into Conv and special Upsample")
 parser.add_argument('--add-bn-on-skip', dest='bn_on_skip', action='store_true', default=False,
@@ -71,6 +72,8 @@ if args.bgr:
     special.change_input_from_bgr_to_rgb(m)
 if args.norm:
     special.add_0_5_to_normalized_input(m)
+if args.rgba2yynn:
+    special.add_rgb2yynn_node(m)
 
 # Remove useless last node
 if args.eliminate_tail:
