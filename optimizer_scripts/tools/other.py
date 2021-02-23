@@ -264,6 +264,8 @@ def inference_shapes(m):
             inferencing_shapes = True
         if inference_upsample_shape(g):
             inferencing_shapes = True
+        if inference_resize_shape(g):
+            inferencing_shapes = True
         if inference_split_shape(g):
             inferencing_shapes = True
         if inferencing_shapes:
@@ -272,6 +274,32 @@ def inference_shapes(m):
             g = m.graph
     return m
 
+
+def inference_resize_shape(g):
+    for node in g.node:
+        if node.op_type != 'Resize':
+            continue
+
+        output_value = helper.find_value_by_name(g, node.output[0])
+        output_value = helper.find_output_by_name(g, node.output[0]) if output_value is None else output_value
+        if output_value is not None:
+            continue
+
+        # currently, only support 4 input 
+        if len(node.input) == 4: # input: X, roi, scales, sizes
+            shape_node = helper.find_node_by_output_name(g, node.input[3])
+            if shape_node.op_type != 'Constant':
+                continue
+
+            _, shape_value = helper.constant_to_list(shape_node)
+            output_value = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    onnx.TensorProto.FLOAT,
+                    [int(v) for v in shape_value])
+            g.value_info.extend([output_value])
+
+            return True
+    return False
 
 def inference_upsample_shape(g):
     """For onnx v1.4.1+, onnx cannot inference upsample output shape. Let's\\
