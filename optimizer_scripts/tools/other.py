@@ -254,6 +254,16 @@ def topological_sort(g):
     if node_map:
         raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
 
+def remove_zero_value_info(g):
+    value_info_list = list(g.value_info)
+    for vi in value_info_list:
+        if not vi.type.tensor_type.shape.dim:
+            g.value_info.remove(vi)
+
+        for dim in vi.type.tensor_type.shape.dim:
+            if dim.dim_value == 0:
+                g.value_info.remove(vi)
+                break
 
 def inference_shapes(m):
     g = m.graph
@@ -272,8 +282,9 @@ def inference_shapes(m):
             topological_sort(g)
             m = onnx.utils.polish_model(m)
             g = m.graph
+    remove_zero_value_info(g)
+    m = onnx.utils.polish_model(m)
     return m
-
 
 def inference_resize_shape(g):
     for node in g.node:
