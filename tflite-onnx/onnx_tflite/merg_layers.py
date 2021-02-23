@@ -102,7 +102,7 @@ class Add(Layer):
               if o_n_i_n == self.node_name:
                   o_n.input_nodes_name[idx] = self.node_list[-1].name
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
   def defuse_activation_function(self):
       return defused_activation_node_generator(
@@ -134,7 +134,7 @@ class Concatenation(Layer):
       # update tables
       self.node_list.append(concat_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
   def defuse_activation_function(self):
       return defused_activation_node_generator(
@@ -185,7 +185,7 @@ class Mul(Layer):
       # update tables
       self.node_list.append(mul_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
   def defuse_activation_function(self):
       return defused_activation_node_generator(

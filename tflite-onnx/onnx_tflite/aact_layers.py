@@ -74,7 +74,7 @@ class ReluDefused(ActivationDefused):
         self.value_infos.append(out_shape_info)
         self.node_list.append(relu_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        return self.node_list, self.value_infos, self.weight_node_list, {}
 
 
 class Relu6Defused(ActivationDefused):
@@ -102,7 +102,7 @@ class Relu6Defused(ActivationDefused):
         self.value_infos.append(out_shape_info)
         self.node_list.append(clip_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        return self.node_list, self.value_infos, self.weight_node_list, {}
 
 
 # Normal Activation Layer
@@ -130,7 +130,13 @@ class Relu(Layer):
         self.value_infos.append(out_shape_info)
         self.node_list.append(relu_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        #Generate Quantization Info and Reverse Quantization for Weights and Bias
+        output_quantization_info = node_output_detail["quantization_parameters"]
+        output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+        quantization_info = {}
+        quantization_info[self.node_name] = output_quantization_info
+
+        return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
 
 class Relu6(Layer):
@@ -159,7 +165,13 @@ class Relu6(Layer):
         self.value_infos.append(out_shape_info)
         self.node_list.append(clip_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        #Generate Quantization Info and Reverse Quantization for Weights and Bias
+        output_quantization_info = node_output_detail["quantization_parameters"]
+        output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+        quantization_info = {}
+        quantization_info[self.node_name] = output_quantization_info
+
+        return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
 
 class LOGISTIC(Layer):
@@ -177,7 +189,7 @@ class LOGISTIC(Layer):
         )
         self.node_list.append(logistic_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        return self.node_list, self.value_infos, self.weight_node_list, {}
 
 
 class Softmax(Layer):
@@ -195,7 +207,7 @@ class Softmax(Layer):
         )
         self.node_list.append(softmax_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        return self.node_list, self.value_infos, self.weight_node_list, {}
 
 
 class PRelu(Layer):
@@ -237,7 +249,13 @@ class PRelu(Layer):
         )
         self.value_infos.append(out_shape_info)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        #Generate Quantization Info and Reverse Quantization for Weights and Bias
+        output_quantization_info = node_output_detail["quantization_parameters"]
+        output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+        quantization_info = {}
+        quantization_info[self.node_name] = output_quantization_info
+
+        return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
 class Elu(Layer):
 
@@ -254,7 +272,7 @@ class Elu(Layer):
         )
         self.node_list.append(elu_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        return self.node_list, self.value_infos, self.weight_node_list, {}
 
 class LeakyRelu(Layer):
 
@@ -282,4 +300,4 @@ class LeakyRelu(Layer):
         # update tables
         self.node_list.append(leaky_relu_node)
 
-        return self.node_list, self.value_infos, self.weight_node_list
+        return self.node_list, self.value_infos, self.weight_node_list, {}

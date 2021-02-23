@@ -55,8 +55,17 @@ class MaxPooling2D(Layer):
       # update tables
       self.value_infos.append(out_shape_info)
       self.node_list.append(max_pool_node)
+      
+      #Generate Quantization Info and Reverse Quantization for Weights and Bias
+      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      quantization_info = {}
+      quantization_info[self.input_nodes_name[0]] = input_quantization_info
+      quantization_info[max_pool_name] = output_quantization_info
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
   def defuse_activation_function(self):
       return defused_activation_node_generator(
@@ -108,7 +117,16 @@ class AveragePooling2D(Layer):
       self.value_infos.append(out_shape_info)
       self.node_list.append(avg_pool_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      #Generate Quantization Info and Reverse Quantization for Weights and Bias
+      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      quantization_info = {}
+      quantization_info[self.input_nodes_name[0]] = input_quantization_info
+      quantization_info[avg_pool_name] = output_quantization_info
+
+      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
   def defuse_activation_function(self):
       return defused_activation_node_generator(
@@ -174,8 +192,12 @@ class Mean(Layer):
       ##################  add squeeze  ###############
       ##################  add squeeze  ###############
 
+      #Generate Quantization Info and Reverse Quantization for Weights and Bias
+      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+      quantization_info = {}
+      quantization_info[mean_node_name] = output_quantization_info
 
-
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
 

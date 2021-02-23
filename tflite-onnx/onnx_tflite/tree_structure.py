@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from conv_layers import Convolution, DepthwiseConvolution, ResizeNearestNeighbor, ResizeBilinear, TransposeConvolution
 from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu, LeakyRelu
@@ -11,6 +12,7 @@ from tflite.Model import Model
 
 from igraph import Graph
 import logging
+import json
 
 # For Testing and Check Graph Visualization
 def display_graph(tree):
@@ -52,6 +54,7 @@ class Tree:
         self.__eliminate_side_input()
         self.__init_inputs_node_info()
         self.__init_outputs_node_info()
+        #self.__generate_quantized_info()
 
         # cut tree if user assign target nodes
         # currently only support setup sub-graph output node
@@ -132,6 +135,40 @@ class Tree:
                                          tflite_interpreter=self.__interpreter)
             self.__nodes[node.node_name] = node
             self.__sequential_nodes_key.append(node.node_name)
+    
+    # def __generate_quantized_info(self):
+    #     dumped_info = {}
+    #     tensor_values = {}
+
+    #     for item in self.__interpreter.get_tensor_details():
+    #         curr_dict = {}
+    #         #curr_dict["name"] = item["name"]
+    #         curr_dict["index"] = item["index"]
+    #         curr_dict["shape"] = item["shape"].tolist()
+    #         curr_dict["dtype"] = str(item["dtype"]).split(".")[1].split("'")[0]
+    #         curr_dict["quantization_scale"] = item["quantization_parameters"]["scales"].tolist()
+    #         curr_dict["quantization_scale_dtype"] = str(item["quantization_parameters"]["scales"].dtype)
+    #         curr_dict["quantization_zero"] = item["quantization_parameters"]["zero_points"].tolist()
+
+    #         if not curr_dict["quantization_scale"]:
+    #             curr_dict["radix"] = 0
+    #             curr_dict["kneron_scale"] = 0
+    #         else:
+    #             dtype_to_power = {"uint8":8, "int32":32}
+    #             if curr_dict["dtype"] not in dtype_to_power:
+    #                 raise TypeError("Unsupported Fix Point Type")
+    #             curr_dict["min"] = [(-1 * curr_dict["quantization_zero"][i]) * curr_dict["quantization_scale"][i] for i in range(len(curr_dict["quantization_zero"]))]
+    #             curr_dict["max"] = [((1 << dtype_to_power[curr_dict["dtype"]]) - curr_dict["quantization_zero"][i]) * curr_dict["quantization_scale"][i] for i in range(len(curr_dict["quantization_zero"]))]
+    #             radix = [int(1 / curr_dict["quantization_scale"][i]).bit_length() - 1 for i in range(len(curr_dict["quantization_zero"]))]
+    #             curr_dict["radix"] = radix
+    #             curr_dict["kneron_scale"] = [1 / ((1 << radix[i]) * curr_dict["quantization_scale"][i]) for i in range(len(curr_dict["quantization_zero"]))] 
+
+    #         dumped_info[item["name"]] = curr_dict
+        
+    #     with open ("/home/weijie/workflow_v3/TFlite/tflite-onnx/example/test_tflite/input/user_config.json", "w") as f:
+    #         json.dump(dumped_info, f, indent = 1)
+    #         print("Qunatized information saved")
+    #     return
 
     def __eliminate_side_input(self):
         # eliminate side input idx
