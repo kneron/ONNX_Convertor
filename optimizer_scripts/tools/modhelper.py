@@ -72,23 +72,6 @@ def delete_output(g, target_list):
             continue
         g.output.remove(output_value)
 
-def remove_zero_value_info(g):
-    value_info_list = list(g.value_info)
-    for vi in value_info_list:
-        if not vi.type.tensor_type.shape.dim:
-            g.value_info.remove(vi)
-        for dim in vi.type.tensor_type.shape.dim:
-            if dim.dim_value == 0:
-                g.value_info.remove(vi)
-                break
-
-def inference_shapes(m):
-    onnx.checker.check_model(m)
-    remove_zero_value_info(m.graph)
-    m = onnx.shape_inference.infer_shapes(m)
-    onnx.checker.check_model(m)
-    return m
-
 def delete_value_with_name_if_exists(g, name):
     value = helper.find_value_by_name(g, name)
     if value is not None:

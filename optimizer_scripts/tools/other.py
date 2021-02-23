@@ -254,6 +254,16 @@ def topological_sort(g):
     if node_map:
         raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
 
+def remove_zero_value_info(g):
+    value_info_list = list(g.value_info)
+    for vi in value_info_list:
+        if not vi.type.tensor_type.shape.dim:
+            g.value_info.remove(vi)
+
+        for dim in vi.type.tensor_type.shape.dim:
+            if dim.dim_value == 0:
+                g.value_info.remove(vi)
+                break
 
 def inference_shapes(m):
     g = m.graph
@@ -264,14 +274,43 @@ def inference_shapes(m):
             inferencing_shapes = True
         if inference_upsample_shape(g):
             inferencing_shapes = True
+        if inference_resize_shape(g):
+            inferencing_shapes = True
         if inference_split_shape(g):
             inferencing_shapes = True
         if inferencing_shapes:
             topological_sort(g)
             m = onnx.utils.polish_model(m)
             g = m.graph
+    remove_zero_value_info(g)
+    m = onnx.utils.polish_model(m)
     return m
 
+def inference_resize_shape(g):
+    for node in g.node:
+        if node.op_type != 'Resize':
+            continue
+
+        output_value = helper.find_value_by_name(g, node.output[0])
+        output_value = helper.find_output_by_name(g, node.output[0]) if output_value is None else output_value
+        if output_value is not None:
+            continue
+
+        # currently, only support 4 input 
+        if len(node.input) == 4: # input: X, roi, scales, sizes
+            shape_node = helper.find_node_by_output_name(g, node.input[3])
+            if shape_node.op_type != 'Constant':
+                continue
+
+            _, shape_value = helper.constant_to_list(shape_node)
+            output_value = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    onnx.TensorProto.FLOAT,
+                    [int(v) for v in shape_value])
+            g.value_info.extend([output_value])
+
+            return True
+    return False
 
 def inference_upsample_shape(g):
     """For onnx v1.4.1+, onnx cannot inference upsample output shape. Let's\\
