@@ -34,23 +34,20 @@ def replace_initializer_with_Constant(g):
             value_info = input_map[tensor.name]
             g.input.remove(value_info)
             continue
-        # Convert init to a constant node
-        if tensor.name not in node_names:
-            new_name = tensor.name
-        else:
-            new_name = tensor.name + '_2'
-            following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
-            for node in following_nodes:
-                modhelper.replace_node_input(node, tensor.name, new_name)
-        new_node = onnx.helper.make_node(
-            "Constant",
-            [],
-            [new_name],
-            name=new_name,
-            value=tensor
-        )
-        # Add node to lists
-        g.node.extend([new_node])
+        following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
+        for i, node in enumerate(following_nodes):
+            new_name = tensor.name + "_duplicated_No" + str(i) if i > 0 else tensor.name
+            modhelper.replace_node_input(node, tensor.name, new_name)
+            new_node = onnx.helper.make_node(
+                "Constant",
+                [],
+                [new_name],
+                name=new_name,
+                value=tensor
+            )
+            # Add node to lists
+            g.node.extend([new_node])
+
         # Add value info to lists
         value_info = input_map[tensor.name]
         g.value_info.extend([value_info])
