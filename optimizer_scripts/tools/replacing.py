@@ -561,9 +561,13 @@ def replace_mul_to_bn(g):
         if not mul_value_node or mul_value_node.op_type != 'Constant':
             continue
 
-        _ , previous_node_output_shape = helper.find_size_shape_from_value(helper.find_value_by_name(g, input_op_node_name))
-        scale_shape, scale_data = helper.constant_to_list(mul_value_node)
+        prev_shape_value_info = helper.find_value_by_name(g, input_op_node_name)
+        prev_shape_value_info = helper.find_input_by_name(g, input_op_node_name) if prev_shape_value_info is None else prev_shape_value_info
+        if prev_shape_value_info is None:
+           continue
 
+        _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
+        scale_shape, scale_data = helper.constant_to_list(mul_value_node)
 
         # only allow 4 dim data input due to the hardware limitation
         if len(previous_node_output_shape) != 4:
