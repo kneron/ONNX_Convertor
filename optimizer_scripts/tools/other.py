@@ -959,7 +959,8 @@ def add_bn_before_add(g):
                 mean_node.output[0],
                 var_node.output[0]],
                 [node_name],
-                name = node_name
+                name = node_name,
+                epsilon=0.00000001
             )
             # Reconnect the graph
             replace_node_input(n, value_name, node_name)
@@ -1005,7 +1006,8 @@ def add_bn_before_activation(g):
                 mean_node.output[0],
                 var_node.output[0]],
                 [node_name],
-                name = node_name
+                name = node_name,
+                epsilon=0.00000001
             )
             # Reconnect the graph
             replace_node_input(n, value_name, node_name)
