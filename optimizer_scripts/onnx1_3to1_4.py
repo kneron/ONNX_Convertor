@@ -98,6 +98,21 @@ def PRelu_weight_reshape(g):
         if value_info is not None:
             g.value_info.remove(value_info)
 
+def do_convert(m):
+    graph = m.graph
+    
+    # Modify the nodes.
+    remove_BN_spatial(graph)
+    upsample_attribute_to_const(graph)
+    relu6_to_clip(graph)
+    PRelu_weight_reshape(graph)
+    other.topological_sort(graph)
+
+    # Change model properties.
+    m.ir_version = 4
+    m.opset_import[0].version = 9
+    return m
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage:{} file_in file_out".format(sys.argv[0]))

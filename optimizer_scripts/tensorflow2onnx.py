@@ -6,6 +6,7 @@ import sys
 import onnx.utils
 from tensorflow.python.platform import gfile
 from tools import combo, eliminating
+import onnx1_3to1_4 
 
 TF2ONNX_VERSION = int(tf2onnx.version.version.replace('.', ''))
 
@@ -13,8 +14,6 @@ if 160 <= TF2ONNX_VERSION:
     from tf2onnx import tf_loader
 else:
     from tf2onnx import loader as tf_loader
-
-file_path = '../models/tensorflow/mnist.pb'
 
 tf.logging.set_verbosity(tf.logging.ERROR)
 logging.basicConfig(stream=sys.stdout, format='[%(asctime)s] %(levelname)s: %(message)s', level=logging.INFO)
@@ -96,26 +95,28 @@ if args.in_file[-3:] == '.pb':
         with tf_loader.tf_session(graph=tf_graph):
             onnx_graph = tf2onnx.tfonnx.process_tf_graph(tf_graph=tf_graph,
                                                          input_names=inputs,
-                                                         output_names=outputs)
+                                                         output_names=outputs,
+                                                         opset=8)
     else:
         with tf.Session(graph=tf_graph):
             onnx_graph = tf2onnx.tfonnx.process_tf_graph(tf_graph=tf_graph,
                                                          input_names=inputs,
-                                                         output_names=outputs)
+                                                         output_names=outputs,
+                                                         opset=8)
 
     # Optimize with tf2onnx.optimizer
     onnx_graph = tf2onnx.optimizer.optimize_graph(onnx_graph)
     model_proto = onnx_graph.make_model(model_name)
     model_proto = onnx.utils.polish_model(model_proto)
-    output_onnx_path = '/'.join(args.out_file.split('/')[:-1]) + '/' + model_name + '.onnx'
+    
+else:
+    raise Exception('expect .pb file as input, but got "' + str(args.in_file) + '"')
 
-    tf2onnx.utils.save_protobuf(output_onnx_path, model_proto)
+# rename
+m = model_proto 
 
-    logging.info('Save ONNX: %s', output_onnx_path)
-
-    m = onnx.load(output_onnx_path)
-elif args.in_file[-5:] == '.onnx':
-    m = onnx.load(input_path)
+# opset 9,10,11 in tf2onnx can't pass onnx.utils.polish_model, so we use opset 8  and then convert it to opset 9
+m = onnx1_3to1_4.do_convert(m)
 
 m = combo.preprocess(m)
 m = combo.common_optimization(m)
