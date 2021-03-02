@@ -48,18 +48,22 @@ def replace_initializer_with_Constant(g):
             # Add node to lists
             g.node.extend([new_node])
 
-        # Add value info to lists
-        value_info = input_map[tensor.name]
-        g.value_info.extend([value_info])
-        # Remove original input value info
-        g.input.remove(value_info)
-        # if value info exists, remove it as well.
-        value_info = helper.find_value_by_name(g, tensor.name)
-        if value_info is not None:
-            g.value_info.remove(value_info)
+        
+        if tensor.name in input_map:
+            # Add value info to lists
+            value_info = input_map[tensor.name]
+            g.value_info.extend([value_info])
+            # Remove original input value info
+            g.input.remove(value_info)
+            # if value info exists, remove it as well.
+            value_info = helper.find_value_by_name(g, tensor.name)
+            if value_info is not None:
+                g.value_info.remove(value_info)
     # Remove original initializer
     while len(g.initializer) != 0:
         g.initializer.pop()
+    
+    topological_sort(g)
 
 def replace_Reshape_with_Flatten(g):
     """

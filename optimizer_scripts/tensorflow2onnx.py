@@ -5,8 +5,7 @@ import logging
 import sys
 import onnx.utils
 from tensorflow.python.platform import gfile
-from tools import combo, eliminating
-import onnx1_3to1_4 
+from tools import combo, eliminating, replacing
 
 TF2ONNX_VERSION = int(tf2onnx.version.version.replace('.', ''))
 
@@ -96,17 +95,20 @@ if args.in_file[-3:] == '.pb':
             onnx_graph = tf2onnx.tfonnx.process_tf_graph(tf_graph=tf_graph,
                                                          input_names=inputs,
                                                          output_names=outputs,
-                                                         opset=8)
+                                                         opset=9)
     else:
         with tf.Session(graph=tf_graph):
             onnx_graph = tf2onnx.tfonnx.process_tf_graph(tf_graph=tf_graph,
                                                          input_names=inputs,
                                                          output_names=outputs,
-                                                         opset=8)
+                                                         opset=9)
 
     # Optimize with tf2onnx.optimizer
     onnx_graph = tf2onnx.optimizer.optimize_graph(onnx_graph)
     model_proto = onnx_graph.make_model(model_name)
+
+    # Make tf2onnx output compatible with the spec. of onnx.utils.polish_model
+    replacing.replace_initializer_with_Constant(model_proto.graph)
     model_proto = onnx.utils.polish_model(model_proto)
     
 else:
@@ -114,9 +116,6 @@ else:
 
 # rename
 m = model_proto 
-
-# opset 9,10,11 in tf2onnx can't pass onnx.utils.polish_model, so we use opset 8  and then convert it to opset 9
-m = onnx1_3to1_4.do_convert(m)
 
 m = combo.preprocess(m)
 m = combo.common_optimization(m)
