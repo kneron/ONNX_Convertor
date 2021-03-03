@@ -12,25 +12,15 @@ from .other import topological_sort
 def replace_initializer_with_Constant(g):
     """
     Replace initializers with Constant and a corresponding value_info
+    If the initializer has related input, remove it.
 
     :param g: the onnx graph
     """
-    # Creat a set of existed node names
-    node_names = set()
-    for node in g.node:
-        node_names.add(node.name)
-    # Unused initializers should be removed
-    unused_initializer = set()
-    for tensor in g.initializer:
-        unused_initializer.add(tensor.name)
-    for node in g.node:
-        for in_value in node.input:
-            if in_value in unused_initializer:
-                unused_initializer.remove(in_value)
 
     input_map = {i.name: i for i in g.input}
     for tensor in g.initializer:
-        if tensor.name in unused_initializer:
+        # Check for the initializer related input and remove it
+        if tensor.name in input_map:
             value_info = input_map[tensor.name]
             g.input.remove(value_info)
             continue
@@ -48,15 +38,11 @@ def replace_initializer_with_Constant(g):
             # Add node to lists
             g.node.extend([new_node])
 
-        # Add value info to lists
-        value_info = input_map[tensor.name]
-        g.value_info.extend([value_info])
-        # Remove original input value info
-        g.input.remove(value_info)
-        # if value info exists, remove it as well.
+        # if value info already exists, remove it as well.
         value_info = helper.find_value_by_name(g, tensor.name)
         if value_info is not None:
             g.value_info.remove(value_info)
+
     # Remove original initializer
     while len(g.initializer) != 0:
         g.initializer.pop()

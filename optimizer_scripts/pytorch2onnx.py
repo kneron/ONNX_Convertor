@@ -59,15 +59,8 @@ elif args.in_file[-4:] == '.pth':
     # model = torchvision.models.resnet34(pretrained=True)
     # Invoke export.
     # torch.save(model, "resnet34.pth")
-    if torch.__version__ < '1.3.0':
-        torch.onnx.export(model, dummy_input, args.out_file)
-        torch.onnx.export(model, dummy_input,
-                          args.out_file + "_backup.onnx")
-    else:
-        torch.onnx.export(model, dummy_input,
-                          args.out_file, keep_initializers_as_inputs=True)
-        torch.onnx.export(
-            model, dummy_input, args.out_file + "_backup.onnx", keep_initializers_as_inputs=True)
+    torch.onnx.export(model, dummy_input, args.out_file)
+    torch.onnx.export(model, dummy_input, args.out_file + "_backup.onnx")
 elif args.in_file[-4:] == 'onnx':
     onnx_in = args.in_file
 else:

@@ -30,6 +30,7 @@ m = onnx.utils.polish_model(m)
 g = m.graph
 replacing.replace_initializer_with_Constant(g)
 other.topological_sort(g)
+m = onnx.utils.polish_model(m)
 
 # Remove nodes according to the given arguments.
 if args.delete_node is not None:

@@ -47,7 +47,6 @@ onnx_out = args.out_file
 def torch_exported_onnx_flow(m, disable_fuse_bn=False, align_corner=False):
     special.check_onnx_version(m)
 
-    other.pytorch_check_initializer_as_input(m.graph)
     m = combo.preprocess(m, disable_fuse_bn)
     m = combo.pytorch_constant_folding(m)
 

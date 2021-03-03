@@ -1033,10 +1033,6 @@ def add_bn_before_activation(g):
         add_bn_after(input_node)
     topological_sort(g)
 
-def pytorch_check_initializer_as_input(g):
-    if len(g.input) < len(g.initializer):
-        raise RuntimeError("You need to add option `keep_initializers_as_inputs=True` while exporting the model!")
-
 def rename_output_name(g, original_name, new_name):
     # Output
     output_value = helper.find_output_by_name(g, original_name)
