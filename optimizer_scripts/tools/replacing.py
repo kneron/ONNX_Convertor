@@ -430,39 +430,48 @@ def replace_split_with_slices(g):
                 split = item.ints
 
         length = input_value.type.tensor_type.shape.dim[axis].dim_value
-
-        outputs = node.output
         if split is not []:
             n_out = len(node.attribute[1].ints)
             pos = 0
             for i in range(n_out):
                 pos += node.attribute[1].ints[i]
                 new_node_name = output_val_names[i]
+                # Construct starts, ends, axes
+                starts_name = new_node_name + '_starts_' + str(i)
+                ends_name = new_node_name + '_ends_' + str(i)
+                axes_name = new_node_name + '_axes_' + str(i)
+                starts_node = helper.list_to_constant(starts_name, (1, ), [int(pos-node.attribute[1].ints[i])])
+                ends_node = helper.list_to_constant(ends_name, (1, ), [int(pos)])
+                axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
+                # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
-                    inputs=[node.input[0]],
+                    inputs=[node.input[0], starts_name, ends_name, axes_name],
                     outputs=[new_node_name],
-                    name=new_node_name,
-                    axes=[axis],
-                    ends=[pos],
-                    starts=[pos-node.attribute[1].ints[i]]
+                    name=new_node_name
                 )
-                g.node.extend([new_node])
+                g.node.extend([starts_node, ends_node, axes_node, new_node])
             node_to_remove.append(node)
         else:
-            n_out = len(outputs)
+            n_out = len(output_val_names)
             width = length//n_out
             for i in range(n_out):
+                new_node_name = output_val_names[i]
+                # Construct starts, ends, axes
+                starts_name = new_node_name + '_starts_' + str(i)
+                ends_name = new_node_name + '_ends_' + str(i)
+                axes_name = new_node_name + '_axes_' + str(i)
+                starts_node = helper.list_to_constant(starts_name, (1, ), [int(i*width)])
+                ends_node = helper.list_to_constant(ends_name, (1, ), [int((1+i)*width)])
+                axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
+                # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
-                    inputs=[node.input[0]],
-                    outputs=[outputs[i]],
-                    name=outputs[i],
-                    axes=[axis],
-                    ends=[(1+i)*width],
-                    starts=[i*width]
+                    inputs=[node.input[0], starts_name, ends_name, axes_name],
+                    outputs=[new_node_name],
+                    name=new_node_name
                 )
-                g.node.extend([new_node])
+                g.node.extend([starts_node, ends_node, axes_node, new_node])
             node_to_remove.append(node)
 
     for old_node in node_to_remove:

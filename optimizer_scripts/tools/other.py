@@ -296,7 +296,6 @@ def inference_resize_shape(g):
         if output_value is not None:
             continue
 
-        # currently, only support 4 input 
         if len(node.input) == 4: # input: X, roi, scales, sizes
             shape_node = helper.find_node_by_output_name(g, node.input[3])
             if shape_node.op_type != 'Constant':
@@ -308,7 +307,25 @@ def inference_resize_shape(g):
                     onnx.TensorProto.FLOAT,
                     [int(v) for v in shape_value])
             g.value_info.extend([output_value])
-
+            return True
+        else:
+            # If output shape is not given, inference from scales
+            # Get the input shape
+            input_value = helper.find_value_by_name(g, node.input[0])
+            if input_value is None:
+                continue
+            shape_value = helper.get_shape_from_value_info(input_value)
+            scales_node = helper.find_node_by_output_name(g, node.input[2])
+            if scales_node.op_type != 'Constant':
+                continue
+            _, scales_value = helper.constant_to_list(scales_node)
+            for i in range(len(shape_value)):
+                shape_value[i] *= scales_value[i]
+            output_value = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    onnx.TensorProto.FLOAT,
+                    [int(v) for v in shape_value])
+            g.value_info.extend([output_value])
             return True
     return False
 

@@ -44,21 +44,27 @@ else:
 
 onnx_out = args.out_file
 
+def torch_exported_onnx_flow(m, disable_fuse_bn=False, align_corner=False):
+    special.check_onnx_version(m)
+
+    other.pytorch_check_initializer_as_input(m.graph)
+    m = combo.preprocess(m, disable_fuse_bn)
+    m = combo.pytorch_constant_folding(m)
+
+    m = combo.common_optimization(m)
+
+    m = combo.postprocess(m)
+
+    if align_corner:
+        special.set_upsample_mode_to_align_corner(m.graph)
+    return m
+
 ######################################
 #  Optimize onnx                     #
 ######################################
 
 m = onnx.load(onnx_in)
 
-other.pytorch_check_initializer_as_input(m.graph)
-m = combo.preprocess(m, args.disable_fuse_bn)
-m = combo.pytorch_constant_folding(m)
-
-m = combo.common_optimization(m)
-
-m = combo.postprocess(m)
-
-if args.align_corner:
-    special.set_upsample_mode_to_align_corner(m.graph)
+m = torch_exported_onnx_flow(m. args.disable_fuse_bn, args.align_corner)
 
 onnx.save(m, onnx_out)

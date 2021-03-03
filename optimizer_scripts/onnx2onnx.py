@@ -51,6 +51,7 @@ else:
 
 # Basic model organize
 m = onnx.load(args.in_file)
+special.check_onnx_version(m)
 # temp.weight_broadcast(m.graph)
 m = combo.preprocess(m, args.disable_fuse_bn)
 # temp.fuse_bias_in_consecutive_1x1_conv(m.graph)

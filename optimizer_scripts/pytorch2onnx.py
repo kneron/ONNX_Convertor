@@ -13,6 +13,7 @@ from tools import replacing
 from tools import other
 from tools import combo
 from tools import special
+from .pytorch_exported_onnx_preprocess import torch_exported_onnx_flow
 
 # Debug use
 # logging.basicConfig(level=logging.DEBUG)
@@ -82,15 +83,6 @@ onnx_out = args.out_file
 
 m = onnx.load(onnx_in)
 
-other.pytorch_check_initializer_as_input(m.graph)
-m = combo.preprocess(m, args.disable_fuse_bn)
-m = combo.pytorch_constant_folding(m)
-
-m = combo.common_optimization(m)
-
-m = combo.postprocess(m)
-
-if args.align_corner:
-    special.set_upsample_mode_to_align_corner(m.graph)
+m = torch_exported_onnx_flow(m. args.disable_fuse_bn, args.align_corner)
 
 onnx.save(m, onnx_out)

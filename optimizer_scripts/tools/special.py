@@ -208,3 +208,8 @@ def add_rgb2yynn_node(m):
     g.value_info.extend([weight_value, old_input_value])
     # topological sort
     other.topological_sort(g)
+
+def check_onnx_version(m, target=11):
+    if m.opset_import[0].version != target:
+        print(f"IR version is not supported. Expect {target} but get {m.opset_import[0].version}.")
+        exit(1)
