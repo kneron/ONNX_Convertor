@@ -49,7 +49,7 @@ class ReLU(Layer):
       threshold = np.array(self.layer.threshold)
 
       # onnx clip only support no shape tensor in min max node in opset11
-      threshold_value_node, _ = helper.constructConstantNode(self.name + '_threshold', threshold)
+      threshold_value_node, _ = helper.constructScalarConstant(self.name + '_threshold', threshold)
       self.inputs.append(threshold_value_node[0].name)
 
       node = O.helper.make_node(
@@ -64,9 +64,9 @@ class ReLU(Layer):
       threshold = np.array(self.layer.threshold)
       max_value = np.array(self.layer.max_value)
 
-      # onnx clip only support no shape tensor in min max node in opset11
-      threshold_value_node, _ = helper.constructConstantNode(self.name + '_threshold', threshold)
-      max_value_node, _ = helper.constructConstantNode(self.name + '_max_val', max_value)
+      # onnx clip only support scalar (no shape tensor) in min max node in opset11
+      threshold_value_node, _ = helper.constructScalarConstant(self.name + '_threshold', threshold)
+      max_value_node, _ = helper.constructScalarConstant(self.name + '_max_val', max_value)
 
       self.inputs.append(threshold_value_node[0].name)
       self.inputs.append(max_value_node[0].name)

@@ -221,7 +221,6 @@ class KerasFrontend(object):
       )
     # Create the model (ModelProto)
     self.omodel = O.helper.make_model(graph_def, producer_name='Kneron')
-    self.omodel.opset_import[0].version = 9
     # O.checker.check_model(self.omodel)
     self.logger.debug("Conversion Finished. With op: " + str(self.ops))
     return self.omodel
