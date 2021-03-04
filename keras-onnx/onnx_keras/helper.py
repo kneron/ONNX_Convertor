@@ -185,6 +185,40 @@ def constructConstantNode(name, data, output=None):
   value_infos = [info]
   return node_list, value_infos
 
+def constructScalarConstant(name, data, output=None):
+  """Construct a constant scalar(tensor of empty shape) node for weights and other uses.
+
+  # Arguments:
+    name:   Name of the node. Usually a node name with usage,
+            e.g."re_lu_1_max_val"
+    data:   The data in numpy format
+    output: The output name of current node. By default, it is the current
+            node name.
+  """
+  if data is None:
+    raise ValueError("data param cannot be None.")
+  tensor = O.helper.make_tensor(
+    name + 'tensor',
+    convertKerasType(data.dtype),
+    [],
+    data.ravel())
+  if output is None:
+    output = name
+  node = O.helper.make_node(
+    "Constant",
+    [],
+    [output],
+    name=name,
+    value=tensor)
+  node_list = [node]
+  info = O.helper.make_tensor_value_info(
+    name,
+    convertKerasType(data.dtype),
+    data.shape
+  )
+  value_infos = [info]
+  return node_list, value_infos
+
 def relu6(x):
   """A fake function as a custom layer
   """
