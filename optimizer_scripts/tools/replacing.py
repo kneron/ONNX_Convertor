@@ -23,7 +23,6 @@ def replace_initializer_with_Constant(g):
         if tensor.name in input_map:
             value_info = input_map[tensor.name]
             g.input.remove(value_info)
-            continue
         following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
         for i, node in enumerate(following_nodes):
             new_name = tensor.name + "_duplicated_No" + str(i) if i > 0 else tensor.name
