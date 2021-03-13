@@ -47,6 +47,15 @@ class Convolution(Layer):
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
       bias_quantization_info = bias_node_info["quantization_parameters"]
       bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
+
+    #   input_quantization_info_clean = utils.get_quantization_info_in_array(input_quantization_info)
+    #   output_quantization_info_clean = utils.get_quantization_info_in_array(output_quantization_info)
+    #   weight_quantization_info_clean = utils.get_quantization_info_in_array(weight_quantization_info)
+    #   bias_quantization_info_clean = utils.get_quantization_info_in_array(bias_quantization_info)
+      #Nested weight and bias into input
+      input_quantization_info["weight"] =  weight_quantization_info
+      input_quantization_info["bias"] = bias_quantization_info
+
       weights_array = np.array(weights_array, dtype = np.dtype("f4"))
       if weight_quantization_info["scales"]:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
@@ -159,6 +168,10 @@ class DepthwiseConvolution(Layer):
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
       bias_quantization_info = bias_node_info["quantization_parameters"]
       bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
+      #Nested weight and bias into input
+      input_quantization_info["weight"] =  weight_quantization_info
+      input_quantization_info["bias"] = bias_quantization_info
+
       weights_array = np.array(weights_array, dtype = np.dtype("f4"))
       if weight_quantization_info["scales"]:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
@@ -457,6 +470,8 @@ class TransposeConvolution(Layer):
       weights_array = np.array(weights_array, dtype = np.dtype("f4"))
       if weight_quantization_info["scales"]:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
+      #Nested weight quantization info into input
+      input_quantization_info["weight"] = weight_quantization_info
 
       padding_stradegy = 'NONE'
       if self.tflite_tconv_parser.Padding() is Padding.SAME:

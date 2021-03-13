@@ -89,6 +89,8 @@ class Dense(Layer):
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
       if weight_quantization_info["scales"]:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
+      #Nested weight quantization into input
+      input_quantization_info["weight"] = weight_quantization_info
 
       # transpose because shape define diffent between tflite and onnx
       weights_array = np.transpose(weights_array, (1,0))

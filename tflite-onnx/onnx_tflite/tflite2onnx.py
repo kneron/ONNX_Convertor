@@ -95,7 +95,9 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name, trans
 
 def merge_quantization_info(dumped_info, quantization_info):
     for name in quantization_info:
-        if name in dumped_info:
+        if name in dumped_info and ("weight" not in quantization_info[name] and "bias" not in quantization_info[name]):
+            continue
+        if "quantized_dimension" not in quantization_info[name] or quantization_info[name]["quantized_dimension"] != 0:
             continue
         curr_dict = quantization_info[name]
         if len(curr_dict["scales"]) == 0:
@@ -107,11 +109,31 @@ def merge_quantization_info(dumped_info, quantization_info):
                 raise TypeError("Unsupported Fix Point Type")
             zero_points = curr_dict["zero_points"]
             scales = curr_dict["scales"]
-            curr_dict["min"] = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))]
-            curr_dict["max"] = [((1 << dtype_to_power[curr_dict["dtype"]]) - zero_points[i]) * scales[i] for i in range(len(zero_points))]
-            radix = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
-            curr_dict["radix"] = radix
-            curr_dict["kneron_scale"] = [1 / ((1 << radix[i]) * scales[i]) for i in range(len(zero_points))] 
+
+            mins = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))]
+            curr_dict["min"] = mins
+            if len(mins) == 1:
+                curr_dict["min"] = {"all":mins[0]}
+            
+            maxs = [((1 << dtype_to_power[curr_dict["dtype"]]) - zero_points[i]) * scales[i] for i in range(len(zero_points))]
+            curr_dict["max"] = maxs
+            if len(maxs) == 1:
+                curr_dict["max"] = {"all":maxs[0]}
+            
+            radixs = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
+            curr_dict["radix"] = radixs
+            if len(radixs) == 1:
+                curr_dict["radix"] = {"all":radixs[0]}
+            
+            kneron_scales = [1 / ((1 << radixs[i]) * scales[i]) for i in range(len(zero_points))]
+            curr_dict["scale"] = kneron_scales
+            if len(kneron_scales) == 1:
+                curr_dict["scale"] = {"all":kneron_scales[0]}
+
+            if "weight" in quantization_info[name]:
+                merge_nested_quantization_info(curr_dict, quantization_info[name]["weight"], "weight")
+            if "bias" in quantization_info[name]:
+                merge_nested_quantization_info(curr_dict, quantization_info[name]["bias"], "weight") 
 
         curr_dict["scales"] = curr_dict["scales"].tolist()
         curr_dict["zero_points"] = curr_dict["zero_points"].tolist()
@@ -119,6 +141,53 @@ def merge_quantization_info(dumped_info, quantization_info):
         dumped_info[name] = curr_dict
     
     return 
+
+def merge_nested_quantization_info(dumped_info, quantization_info, name):
+    if len(quantization_info["scales"]) == 0:
+        quantization_info["radix"] = 0
+        quantization_info["kneron_scale"] = 0
+    else:
+        dtype_to_power = {"uint8":8, "int32":32}
+        if quantization_info["dtype"] not in dtype_to_power:
+            raise TypeError("Unsupported Fix Point Type")
+        zero_points = quantization_info["zero_points"]
+        scales = quantization_info["scales"]
+
+        mins = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))]
+        quantization_info["min"] = mins
+        if len(mins) == 1:
+            quantization_info["min"] = {"all":mins[0]}
+        
+        maxs = [((1 << dtype_to_power[quantization_info["dtype"]]) - zero_points[i]) * scales[i] for i in range(len(zero_points))]
+        quantization_info["max"] = maxs
+        if len(maxs) == 1:
+            quantization_info["max"] = {"all":maxs[0]}
+        
+        radixs = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
+        quantization_info["radix"] = radixs
+        if len(radixs) == 1:
+            quantization_info["radix"] = {"all":radixs[0]}
+        
+        kneron_scales = [1 / ((1 << radixs[i]) * scales[i]) for i in range(len(zero_points))]
+        quantization_info["scale"] = kneron_scales
+        if len(kneron_scales) == 1:
+            quantization_info["scale"] = {"all":kneron_scales[0]}
+
+        # quantization_info["min"] = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))]
+        # quantization_info["max"] = [((1 << dtype_to_power[quantization_info["dtype"]]) - zero_points[i]) * scales[i] for i in range(len(zero_points))]
+        # radix = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
+        # quantization_info["radix"] = radix
+        # quantization_info["kneron_scale"] = [1 / ((1 << radix[i]) * scales[i]) for i in range(len(zero_points))]
+    
+    dumped_info[name] = quantization_info
+    return 
+
+
+def check_quantization(tensor_details):
+    for node_detail in tensor_details:
+        if len(node_detail["quantization_parameters"]["scales"] > 0):
+            return True
+    return False 
 
 def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
 
@@ -182,13 +251,13 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             merge_quantization_info(dumped_quantization_info, quantization_info)
             #print(dumped_quantization_info)
 
-    json_save_path = model_save_path[:-5] + "_user_config.json"
-    with open (json_save_path, "w") as f:
-        json.dump(dumped_quantization_info, f, indent = 1)
-        print("New Qunatized information saved")
-    # with open ("/home/weijie/workflow_v3/TFlite/tflite-onnx/example/test_tflite/input/user_config_new.json", "w") as f:
-    #     json.dump(dumped_quantization_info, f, indent = 1)
-    #     print("New Qunatized information saved")
+    if check_quantization(interpreter.get_tensor_details()): 
+        json_save_path = model_save_path[:-5] + "_user_config.json"
+        with open (json_save_path, "w") as f:
+            print(json_save_path)
+            json.dump(dumped_quantization_info, f, indent = 1)
+            print("New Qunatized information saved")
+
 
 
     # sometimes, there are sub-node in one tree node, we need to find the last one
@@ -273,15 +342,15 @@ if __name__ == '__main__':
     logging.info('generating...')
 
 
-    # bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
-    # main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
-    try:
-        bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
-        main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
-        logging.getLogger('tflite2onnx').info("Conversion Success")
-    except Exception as e:
-        logging.getLogger('tflite2onnx').info('Error: Something Wrong')
-        logging.getLogger('tflite2onnx').error(e)
+    bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
+    main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
+    # try:
+    #     bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
+    #     main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
+    #     logging.getLogger('tflite2onnx').info("Conversion Success")
+    # except Exception as e:
+    #     logging.getLogger('tflite2onnx').info('Error: Something Wrong')
+    #     logging.getLogger('tflite2onnx').error(e)
 
     logging.info('------------   end   ------------------------')
 
