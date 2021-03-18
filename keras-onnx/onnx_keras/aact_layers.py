@@ -25,6 +25,8 @@ class ReLU(Layer):
   def __init__(self, node):
     Layer.__init__(self, node)
   def generate(self):
+    node_list = []
+
     if self.layer.max_value is None and self.layer.threshold == 0:
       node = O.helper.make_node(
         op_type='Relu',
@@ -32,6 +34,7 @@ class ReLU(Layer):
         outputs=self.outputs,
         name=self.name
       )
+      node_list.append(node)
     elif helper.compatibility:
       helper.logger.warning("Under compatibility mode. Generating Relu instead of Clip for layer %s.", self.name)
       node = O.helper.make_node(
@@ -41,24 +44,43 @@ class ReLU(Layer):
         name=self.name,
         max=float(self.layer.max_value)
       )
+      node_list.append(node)
     elif self.layer.max_value is None:
+      threshold = np.array(self.layer.threshold)
+
+      # onnx clip only support no shape tensor in min max node in opset11
+      threshold_value_node, _ = helper.constructScalarConstant(self.name + '_threshold', threshold)
+      self.inputs.append(threshold_value_node[0].name)
+
       node = O.helper.make_node(
         op_type='Clip',
         inputs=self.inputs,
         outputs=self.outputs,
         name=self.name,
-        min=float(self.layer.threshold)
       )
+      node_list.append(threshold_value_node[0])
+      node_list.append(node)
     else:
+      threshold = np.array(self.layer.threshold)
+      max_value = np.array(self.layer.max_value)
+
+      # onnx clip only support scalar (no shape tensor) in min max node in opset11
+      threshold_value_node, _ = helper.constructScalarConstant(self.name + '_threshold', threshold)
+      max_value_node, _ = helper.constructScalarConstant(self.name + '_max_val', max_value)
+
+      self.inputs.append(threshold_value_node[0].name)
+      self.inputs.append(max_value_node[0].name)
+
       node = O.helper.make_node(
         op_type='Clip',
         inputs=self.inputs,
         outputs=self.outputs,
-        name=self.name,
-        min=float(self.layer.threshold),
-        max=float(self.layer.max_value)
+        name=self.name
       )
-    return [node], []
+      node_list.append(threshold_value_node[0])
+      node_list.append(max_value_node[0])
+      node_list.append(node)
+    return node_list, []
 
 class PReLU(Layer):
   def __init__(self, node):

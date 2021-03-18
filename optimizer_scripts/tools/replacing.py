@@ -12,28 +12,17 @@ from .other import topological_sort
 def replace_initializer_with_Constant(g):
     """
     Replace initializers with Constant and a corresponding value_info
+    If the initializer has related input, remove it.
 
     :param g: the onnx graph
     """
-    # Creat a set of existed node names
-    node_names = set()
-    for node in g.node:
-        node_names.add(node.name)
-    # Unused initializers should be removed
-    unused_initializer = set()
-    for tensor in g.initializer:
-        unused_initializer.add(tensor.name)
-    for node in g.node:
-        for in_value in node.input:
-            if in_value in unused_initializer:
-                unused_initializer.remove(in_value)
 
     input_map = {i.name: i for i in g.input}
     for tensor in g.initializer:
-        if tensor.name in unused_initializer:
+        # Check for the initializer related input and remove it
+        if tensor.name in input_map:
             value_info = input_map[tensor.name]
             g.input.remove(value_info)
-            continue
         following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
         for i, node in enumerate(following_nodes):
             new_name = tensor.name + "_duplicated_No" + str(i) if i > 0 else tensor.name
@@ -48,17 +37,11 @@ def replace_initializer_with_Constant(g):
             # Add node to lists
             g.node.extend([new_node])
 
-        
-        if tensor.name in input_map:
-            # Add value info to lists
-            value_info = input_map[tensor.name]
-            g.value_info.extend([value_info])
-            # Remove original input value info
-            g.input.remove(value_info)
-            # if value info exists, remove it as well.
-            value_info = helper.find_value_by_name(g, tensor.name)
-            if value_info is not None:
-                g.value_info.remove(value_info)
+        # if value info already exists, remove it as well.
+        value_info = helper.find_value_by_name(g, tensor.name)
+        if value_info is not None:
+            g.value_info.remove(value_info)
+
     # Remove original initializer
     while len(g.initializer) != 0:
         g.initializer.pop()
@@ -434,39 +417,48 @@ def replace_split_with_slices(g):
                 split = item.ints
 
         length = input_value.type.tensor_type.shape.dim[axis].dim_value
-
-        outputs = node.output
         if split is not []:
             n_out = len(node.attribute[1].ints)
             pos = 0
             for i in range(n_out):
                 pos += node.attribute[1].ints[i]
                 new_node_name = output_val_names[i]
+                # Construct starts, ends, axes
+                starts_name = new_node_name + '_starts_' + str(i)
+                ends_name = new_node_name + '_ends_' + str(i)
+                axes_name = new_node_name + '_axes_' + str(i)
+                starts_node = helper.list_to_constant(starts_name, (1, ), [int(pos-node.attribute[1].ints[i])])
+                ends_node = helper.list_to_constant(ends_name, (1, ), [int(pos)])
+                axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
+                # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
-                    inputs=[node.input[0]],
+                    inputs=[node.input[0], starts_name, ends_name, axes_name],
                     outputs=[new_node_name],
-                    name=new_node_name,
-                    axes=[axis],
-                    ends=[pos],
-                    starts=[pos-node.attribute[1].ints[i]]
+                    name=new_node_name
                 )
-                g.node.extend([new_node])
+                g.node.extend([starts_node, ends_node, axes_node, new_node])
             node_to_remove.append(node)
         else:
-            n_out = len(outputs)
+            n_out = len(output_val_names)
             width = length//n_out
             for i in range(n_out):
+                new_node_name = output_val_names[i]
+                # Construct starts, ends, axes
+                starts_name = new_node_name + '_starts_' + str(i)
+                ends_name = new_node_name + '_ends_' + str(i)
+                axes_name = new_node_name + '_axes_' + str(i)
+                starts_node = helper.list_to_constant(starts_name, (1, ), [int(i*width)])
+                ends_node = helper.list_to_constant(ends_name, (1, ), [int((1+i)*width)])
+                axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
+                # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
-                    inputs=[node.input[0]],
-                    outputs=[outputs[i]],
-                    name=outputs[i],
-                    axes=[axis],
-                    ends=[(1+i)*width],
-                    starts=[i*width]
+                    inputs=[node.input[0], starts_name, ends_name, axes_name],
+                    outputs=[new_node_name],
+                    name=new_node_name
                 )
-                g.node.extend([new_node])
+                g.node.extend([starts_node, ends_node, axes_node, new_node])
             node_to_remove.append(node)
 
     for old_node in node_to_remove:

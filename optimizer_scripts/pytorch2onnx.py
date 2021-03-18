@@ -13,6 +13,7 @@ from tools import replacing
 from tools import other
 from tools import combo
 from tools import special
+from .pytorch_exported_onnx_preprocess import torch_exported_onnx_flow
 
 # Debug use
 # logging.basicConfig(level=logging.DEBUG)
@@ -58,15 +59,8 @@ elif args.in_file[-4:] == '.pth':
     # model = torchvision.models.resnet34(pretrained=True)
     # Invoke export.
     # torch.save(model, "resnet34.pth")
-    if torch.__version__ < '1.3.0':
-        torch.onnx.export(model, dummy_input, args.out_file)
-        torch.onnx.export(model, dummy_input,
-                          args.out_file + "_backup.onnx")
-    else:
-        torch.onnx.export(model, dummy_input,
-                          args.out_file, keep_initializers_as_inputs=True)
-        torch.onnx.export(
-            model, dummy_input, args.out_file + "_backup.onnx", keep_initializers_as_inputs=True)
+    torch.onnx.export(model, dummy_input, args.out_file, opset_version=11)
+    torch.onnx.export(model, dummy_input, args.out_file + "_backup.onnx", opset_version=11)
 elif args.in_file[-4:] == 'onnx':
     onnx_in = args.in_file
 else:
@@ -82,15 +76,6 @@ onnx_out = args.out_file
 
 m = onnx.load(onnx_in)
 
-other.pytorch_check_initializer_as_input(m.graph)
-m = combo.preprocess(m, args.disable_fuse_bn)
-m = combo.pytorch_constant_folding(m)
-
-m = combo.common_optimization(m)
-
-m = combo.postprocess(m)
-
-if args.align_corner:
-    special.set_upsample_mode_to_align_corner(m.graph)
+m = torch_exported_onnx_flow(m. args.disable_fuse_bn, args.align_corner)
 
 onnx.save(m, onnx_out)
