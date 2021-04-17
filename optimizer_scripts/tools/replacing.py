@@ -562,8 +562,8 @@ def replace_mul_to_bn(g):
         _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
         scale_shape, scale_data = helper.constant_to_list(mul_value_node)
 
-        # only allow 4 dim data input due to the hardware limitation
-        if len(previous_node_output_shape) != 4:
+        # only allow bn for larger than 3 dim data input due to the hardware limitation
+        if len(previous_node_output_shape) < 3:
             continue
 
         # channel dimension

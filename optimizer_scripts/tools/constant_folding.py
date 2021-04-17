@@ -703,6 +703,10 @@ def div_constant_folding(g, node):
     else:
         new_shape = new_data.shape
 
+    # Check data type if it is int
+    if pre_node_1.attribute[0].t.data_type == 7:
+        new_data = new_data.astype('int64')
+
     new_tensor = onnx.helper.make_tensor(
         name=node.output[0]+'_data',
         data_type=pre_node_1.attribute[0].t.data_type,
