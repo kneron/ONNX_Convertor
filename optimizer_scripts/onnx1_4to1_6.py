@@ -5,7 +5,7 @@ import onnx
 import onnx.utils
 import numpy as np
 from onnx import numpy_helper
-from tools import other, helper
+from tools import other, helper, replacing
 
 """
 Change onnx model from version 1.4 to version 1.6. 
@@ -147,6 +147,15 @@ if __name__ == "__main__":
 
     model = onnx.load(sys.argv[1])
     graph = model.graph
+
+    if model.opset_import[0].version == 11:
+        print("(Stop) the input model is already opset 11, no need to upgrade")
+        exit(1)
+
+    # deal with empty node name issue
+    other.add_name_to_node(graph)
+    # simplify the node param type from initializer to constant
+    replacing.replace_initializer_with_Constant(graph)
 
     # Modify the nodes.
     replace_min_max_attribute_to_const_node_in_clip_node(graph)
