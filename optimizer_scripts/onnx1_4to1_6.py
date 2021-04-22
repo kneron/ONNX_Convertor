@@ -32,8 +32,8 @@ def replace_all_attribute_to_const_node_in_pad_node(g):
         new_node = onnx.helper.make_node(
             "Pad",
             [node.input[0], pad_loc_node.name, pad_value_node.name],
-            [node.name],
-            name=node.name,
+            [node.output[0]],
+            name=node.output[0],
             mode=pad_mode,
         )
         node_to_remove.append(node)
@@ -62,8 +62,8 @@ def upsampling_to_resize(g):
         new_node = onnx.helper.make_node(
             "Resize",
             [node.input[0], roi_node.name, scale_value_node.name],
-            [node.name],
-            name=node.name,
+            [node.output[0]],
+            name=node.output[0],
             mode=upsampling_mode,
             coordinate_transformation_mode = 'asymmetric'
         )
