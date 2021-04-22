@@ -12,6 +12,36 @@ from tools import special
 from tools import combo
 # from tools import temp
 
+def onnx2onnx_flow(m, disable_fuse_bn=False, bn_on_skip=False, bn_before_add=False, bgr=False, norm=False, rgba2yynn=False, eliminate_tail=False):
+    # temp.weight_broadcast(m.graph)
+    m = combo.preprocess(m, disable_fuse_bn)
+    # temp.fuse_bias_in_consecutive_1x1_conv(m.graph)
+
+    # Add BN on skip branch
+    if bn_on_skip:
+        other.add_bn_on_skip_branch(m.graph)
+    elif bn_before_add:
+        other.add_bn_before_add(m.graph)
+        other.add_bn_before_activation(m.graph)
+
+    # My optimization
+    m = combo.common_optimization(m)
+    # Special options
+    if bgr:
+        special.change_input_from_bgr_to_rgb(m)
+    if norm:
+        special.add_0_5_to_normalized_input(m)
+    if rgba2yynn:
+        special.add_rgb2yynn_node(m)
+
+    # Remove useless last node
+    if eliminate_tail:
+        eliminating.remove_useless_last_nodes(m.graph)
+
+    # Postprocessing
+    m = combo.postprocess(m)
+    return m
+
 # Main process
 # Argument parser
 parser = argparse.ArgumentParser(description="Optimize an ONNX model for Kneron compiler")
@@ -20,8 +50,6 @@ parser.add_argument('-o', '--output', dest='out_file', type=str, help="ouput ONN
 parser.add_argument('--bgr', action='store_true', default=False, help="set if the model is trained in BGR mode")
 parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
 parser.add_argument('--rgba2yynn', action='store_true', default=False, help="set if the model has yynn input but you want to take rgba images")
-parser.add_argument('--split-convtranspose', dest='split_convtranspose', action='store_true', default=False,
-                    help="set if you want to split ConvTranspose into Conv and special Upsample")
 parser.add_argument('--add-bn-on-skip', dest='bn_on_skip', action='store_true', default=False,
                     help="set if you only want to add BN on skip branches")
 parser.add_argument('--add-bn', dest='bn_before_add', action='store_true', default=False,
@@ -51,34 +79,7 @@ else:
 
 # Basic model organize
 m = onnx.load(args.in_file)
-# temp.weight_broadcast(m.graph)
-m = combo.preprocess(m, args.disable_fuse_bn)
-# temp.fuse_bias_in_consecutive_1x1_conv(m.graph)
 
-# Add BN on skip branch
-if args.bn_on_skip:
-    other.add_bn_on_skip_branch(m.graph)
-elif args.bn_before_add:
-    other.add_bn_before_add(m.graph)
-    other.add_bn_before_activation(m.graph)
-# Split deconv
-if args.split_convtranspose:
-    other.split_ConvTranspose(m)
+m = onnx2onnx_flow(m, args.disable_fuse_bn, args.bn_on_skip, args.bn_before_add, args.bgr, args.norm, args.rgba2yynn, args.eliminate_tail)
 
-# My optimization
-m = combo.common_optimization(m)
-# Special options
-if args.bgr:
-    special.change_input_from_bgr_to_rgb(m)
-if args.norm:
-    special.add_0_5_to_normalized_input(m)
-if args.rgba2yynn:
-    special.add_rgb2yynn_node(m)
-
-# Remove useless last node
-if args.eliminate_tail:
-    eliminating.remove_useless_last_nodes(m.graph)
-
-# Postprocessing
-m = combo.postprocess(m)
 onnx.save(m, outfile)
