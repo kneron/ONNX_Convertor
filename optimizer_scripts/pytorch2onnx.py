@@ -13,22 +13,10 @@ from tools import replacing
 from tools import other
 from tools import combo
 from tools import special
+from pytorch_exported_onnx_preprocess import torch_exported_onnx_flow
 
 # Debug use
 # logging.basicConfig(level=logging.DEBUG)
-
-# Define general pytorch exported onnx optimize process
-def torch_exported_onnx_flow(m, disable_fuse_bn=False, align_corner=False):
-    m = combo.preprocess(m, disable_fuse_bn)
-    m = combo.pytorch_constant_folding(m)
-
-    m = combo.common_optimization(m)
-
-    m = combo.postprocess(m)
-
-    if align_corner:
-        special.set_upsample_mode_to_align_corner(m.graph)
-    return m
 
 ######################################
 #  Generate a prototype onnx         #
