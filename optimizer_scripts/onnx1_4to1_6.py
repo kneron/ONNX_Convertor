@@ -139,13 +139,7 @@ def replace_min_max_attribute_to_const_node_in_clip_node(g):
         node.input.extend([min_const_node.name])
         node.input.extend([max_const_node.name])
 
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage:{} file_in file_out".format(sys.argv[0]))
-        exit(1)
-
-    model = onnx.load(sys.argv[1])
+def onnx1_4to1_6(model):
     graph = model.graph
 
     if model.opset_import[0].version == 11:
@@ -169,5 +163,14 @@ if __name__ == "__main__":
     model.opset_import[0].version = 11
 
     model = onnx.utils.polish_model(model)
+    return model
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage:{} file_in file_out".format(sys.argv[0]))
+        exit(1)
+
+    model = onnx.load(sys.argv[1])
+    model = onnx1_4to1_6(model)
 
     onnx.save(model, sys.argv[2])
