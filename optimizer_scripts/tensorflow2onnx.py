@@ -95,13 +95,13 @@ if args.in_file[-3:] == '.pb':
             onnx_graph = tf2onnx.tfonnx.process_tf_graph(tf_graph=tf_graph,
                                                          input_names=inputs,
                                                          output_names=outputs,
-                                                         opset=9)
+                                                         opset=11)
     else:
         with tf.Session(graph=tf_graph):
             onnx_graph = tf2onnx.tfonnx.process_tf_graph(tf_graph=tf_graph,
                                                          input_names=inputs,
                                                          output_names=outputs,
-                                                         opset=9)
+                                                         opset=11)
 
     # Optimize with tf2onnx.optimizer
     onnx_graph = tf2onnx.optimizer.optimize_graph(onnx_graph)

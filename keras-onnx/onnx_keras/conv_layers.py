@@ -252,15 +252,25 @@ class ZeroPadding2D(Layer):
     for _ in range(len(self.layer.output_shape) - 2):
       pads.append(0)
     pads += [self.layer.padding[0][1], self.layer.padding[1][1]]
+
+    pad_value_node_name = self.name + '_pad_value_node'
+    pad_value_node, _ = helper.constructConstantNode(pad_value_node_name, np.array(pads, dtype='int'))
+
+    self.inputs.append(pad_value_node[0].name)
+
     # Make the node
     node = O.helper.make_node(
       op_type='Pad',
       inputs=self.inputs,
       outputs=self.outputs,
-      name=self.name,
-      pads=pads
+      name=self.name
       )
-    return [node], []
+
+    node_list = []
+    node_list.extend(pad_value_node)
+    node_list.append(node)
+    
+    return node_list, []
 
 class DepthwiseConv2D(Layer):
   def __init__(self, node):
@@ -437,18 +447,31 @@ class UpSampling2D(Layer):
     scales = list(self.layer.size)
     for _ in range(len(self.layer.input_shape) - len(scales)):
       scales.insert(0, 1)
-    if not helper.compatibility:
-      scale_name = self.name + '_scales'
-      tn, ti = helper.constructConstantNode(
-        scale_name,
-        np.array(scales, dtype='float32'))
-      nodes += tn
-      values += ti
-      self.inputs.append(scale_name)
+
+    # Roi node
+    roi_name = self.name + '_roi'
+    tn, ti = helper.constructConstantNode(
+      roi_name,
+      np.array([-1],dtype=np.float32))
+    nodes += tn
+    values += ti
+    self.inputs.append(roi_name)
+
+    # Scale node
+    scale_name = self.name + '_scales'
+    scale_tn, scale_ti = helper.constructConstantNode(
+      scale_name,
+      np.array(scales, dtype=np.float32))
+    nodes += scale_tn
+    values += scale_ti
+    self.inputs.append(scale_name)
+
     # Setup shape
     if self.layer.interpolation is not None:
       if self.layer.interpolation == 'nearest':
         mode = 'nearest'
+      elif self.layer.interpolation == 'bilinear':
+        mode = 'linear'
       else:
         mode = 'linear'
     else:
@@ -456,23 +479,15 @@ class UpSampling2D(Layer):
       mode = 'nearest'
 
     # Make the node
-    if helper.compatibility:
-      node = O.helper.make_node(
-        op_type='Upsample',
-        inputs=self.inputs,
-        outputs=self.outputs,
-        name=self.name,
-        mode=mode,
-        scales=list(map(float, scales))
-        )
-    else:
-      node = O.helper.make_node(
-        op_type='Upsample',
-        inputs=self.inputs,
-        outputs=self.outputs,
-        name=self.name,
-        mode=mode
-        )
+    node = O.helper.make_node(
+      op_type='Resize',
+      inputs=self.inputs,
+      outputs=self.outputs,
+      name=self.name,
+      mode=mode,
+      coordinate_transformation_mode = 'asymmetric'
+      )
+
     nodes.append(node)
     return nodes, values
 

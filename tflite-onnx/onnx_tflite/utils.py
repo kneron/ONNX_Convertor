@@ -2,8 +2,8 @@ import onnx
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 from onnx import onnx_pb as onnx_proto
+import numpy as np
 
-ONNX_VERSION_1_4_1 = '1.4.1'
 
 def tflite2onnx_shape_map(shape_list):
     # change dimension due to channel first-last issue
@@ -102,3 +102,33 @@ def get_value_from_dict(dict_obj, key):
             return None
     else:
         raise TypeError('dict_obj is not type of ' + dict.__name__)
+
+def create_constant_node(node_name, shape, data):
+    # default data type
+    data_type = onnx.helper.TensorProto.FLOAT
+
+    if data.dtype == np.int or data.dtype == np.int64:
+        data_type = onnx.helper.TensorProto.INT64
+
+    elif data.dtype == np.float or data.dtype == np.float64:
+        data_type = onnx.helper.TensorProto.FLOAT
+
+    else:
+        data_type = onnx.helper.TensorProto.FLOAT
+    
+    value_tensor = onnx.helper.make_tensor(
+        node_name, 
+        data_type, 
+        shape, 
+        data.tolist()
+    )
+
+    constant_node = onnx.helper.make_node(
+        "Constant", 
+        [], 
+        [node_name], 
+        name=node_name, 
+        value=value_tensor
+    )
+
+    return constant_node

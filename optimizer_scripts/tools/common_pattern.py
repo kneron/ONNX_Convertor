@@ -15,12 +15,30 @@ def torch_pattern_match(m):
     for matmul_node in optype2node['MatMul']:
         pattern_matmul_mul_add(m.graph, matmul_node)
     for resize_node in optype2node['Resize']:
-        # torch nn.UpsamplingBilinear2d will give us 4 input: "X, roi, scales, sizes"
+        # torch nn.UpsamplingBilinear2d will be given us 4 input: "X, roi, scales, sizes"
         if len(resize_node.input) != 4:
             continue
         make_UpsamplingBilinear2d_value_info(m.graph, resize_node.name)
         m = onnx.shape_inference.infer_shapes(m)
         polish_RESIZE_input_param_node(m.graph, resize_node.name)
+    m = onnx.utils.polish_model(m)
+    return m
+
+def tf_pattern_match(m):
+    # Create a map from optype to the nodes.
+    optype2node = defaultdict(list)
+    for node in m.graph.node:
+        optype2node[node.op_type].append(node)
+    for matmul_node in optype2node['MatMul']:
+        pattern_matmul_mul_add(m.graph, matmul_node)
+    for resize_node in optype2node['Resize']:
+        # In tensorflow2onnx, ReizeXXX will be given us 4 input: "X, roi, scales, sizes" 
+        # and node output name will be given the "node name + :0"
+        if len(resize_node.input) != 4:
+            continue
+        make_UpsamplingBilinear2d_value_info(m.graph, resize_node.output[0])
+        m = onnx.shape_inference.infer_shapes(m)
+        polish_RESIZE_input_param_node(m.graph, resize_node.output[0])
     m = onnx.utils.polish_model(m)
     return m
 

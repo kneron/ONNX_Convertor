@@ -29,17 +29,20 @@ def swap_transpose_with_single_next_node(g):
   passable_nodes = set(['Relu', 'Neg', 'LeakyRelu', 'Sqrt', 'Reciprocal', 'Add', 'Mul', 'Tanh'])
   for node in g.node:
     trans_node = node
+    # Check for transpose node
     if trans_node.op_type != 'Transpose':
       continue
     next_nodes = helper.find_nodes_by_input_name(g, trans_node.output[0])
     if len(next_nodes) != 1:
       continue
     next_node = next_nodes[0]
+    # Check if the next node is the type can be swapped
     if next_node.op_type not in passable_nodes:
       continue
-    
+
     input_nodes = [helper.find_node_by_output_name(g, input_name) for input_name in next_node.input]
-    
+
+    # Check if the node has nonconstant input other than the Transpose node itself
     nonconstant_input = False
     for input_node in input_nodes:
       if input_node == None:
@@ -54,7 +57,7 @@ def swap_transpose_with_single_next_node(g):
         break
     if nonconstant_input:
       continue
- 
+
     for input_node in input_nodes:
       if input_node.name == trans_node.name:
         # if the input is just the transpose node
@@ -78,6 +81,9 @@ def swap_transpose_with_single_next_node(g):
         # if the input is a constant node
         old_tensor = input_node.attribute[0].t
         old_shape, data = helper.constant_to_list(input_node)
+        # If the constant node is a scaler, no action is needed
+        if type(old_shape) == int:
+            old_shape = [old_shape]
         permutation = list(trans_node.attribute[0].ints)
         while len(old_shape) < len(permutation):
           old_shape.insert(0, 1)
@@ -90,7 +96,7 @@ def swap_transpose_with_single_next_node(g):
         new_tensor = onnx.helper.make_tensor(
           name=old_tensor.name,
           data_type=old_tensor.data_type,
-          dims=new_shape,                                                                     
+          dims=new_shape,
           vals=np_data.flatten().tolist()
         )
         new_node = onnx.helper.make_node(
@@ -101,12 +107,12 @@ def swap_transpose_with_single_next_node(g):
           value=new_tensor
         )
         g.node.extend([new_node])
-        
+
         g.value_info.remove(helper.find_value_by_name(g, input_node.output[0]))
         g.node.remove(input_node)
-      
+
     swapped = True
-  
+
   other.topological_sort(g)
   return swapped
 

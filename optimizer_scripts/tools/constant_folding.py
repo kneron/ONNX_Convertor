@@ -33,6 +33,7 @@ def constant_folding(g):
     while keep_folding:
         keep_folding = False
         for node in g.node:
+            logging.debug("Constant folding: " + node.name)
             # Check if the node is foldable
             if node.op_type not in constant_folding_nodes.keys():
                 continue
@@ -114,9 +115,9 @@ def slice_constant_folding(g, node):
     op_version = helper.get_current_opset_version()
     # only support opset 9 & 11
     if op_version == 11:
-        slice_constant_folding_Opset_11(g, node)
+        return slice_constant_folding_Opset_11(g, node)
     elif op_version == 9:
-        slice_constant_folding_Opset_9(g, node)
+        return slice_constant_folding_Opset_9(g, node)
 
 def slice_constant_folding_Opset_11(g, node):
     """ Fold constant and slice nodes to a single constant node.
@@ -130,7 +131,7 @@ def slice_constant_folding_Opset_11(g, node):
     ends_node = helper.find_node_by_output_name(g, node.input[2])
     _, ends = helper.constant_to_list(ends_node)
 
-    axes_node = helper.find_node_by_output_name(g, node.input[3])
+    axes_node = None if len(node.input) < 4 else helper.find_node_by_output_name(g, node.input[3])
     if not axes_node:
         axes = list(range(len(helper.get_shape(data_list))))
     else:
@@ -701,6 +702,10 @@ def div_constant_folding(g, node):
         new_shape = []
     else:
         new_shape = new_data.shape
+
+    # Check data type if it is int
+    if pre_node_1.attribute[0].t.data_type == 7:
+        new_data = new_data.astype('int64')
 
     new_tensor = onnx.helper.make_tensor(
         name=node.output[0]+'_data',
