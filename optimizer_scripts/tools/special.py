@@ -146,19 +146,6 @@ def add_0_5_to_normalized_input(m):
     # topological sort
     other.topological_sort(g)
 
-def set_upsample_mode_to_align_corner(g):
-    """Set all the upsample nodes mode to align_corner.
-    """
-    for node in g.node:
-        if node.op_type != 'Upsample':
-            continue
-        # Find a upsample node
-        attribute = helper.get_attribute_by_name(node, "mode")
-        if type(attribute.s) == type(b'abc'):
-            attribute.s = "align_corner".encode('utf-8')
-        else:
-            attribute.s = "align_corner"
-
 def add_rgb2yynn_node(m):
     """Add a conv layer which can convert rgb to yynn input.
     """

@@ -18,7 +18,16 @@ from tools import special
 # logging.basicConfig(level=logging.DEBUG)
 
 # Define general pytorch exported onnx optimize process
-def torch_exported_onnx_flow(m, disable_fuse_bn=False, align_corner=False):
+def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.ModelProto:
+    """Optimize the Pytorch exported onnx.
+
+    Args:
+        m (ModelProto): the input onnx model
+        disable_fuse_bn (bool, optional): do not fuse BN into Conv. Defaults to False.
+
+    Returns:
+        ModelProto: the optimized onnx model
+    """
     m = combo.preprocess(m, disable_fuse_bn)
     m = combo.pytorch_constant_folding(m)
 
@@ -26,8 +35,6 @@ def torch_exported_onnx_flow(m, disable_fuse_bn=False, align_corner=False):
 
     m = combo.postprocess(m)
 
-    if align_corner:
-        special.set_upsample_mode_to_align_corner(m.graph)
     return m
 
 
@@ -38,8 +45,6 @@ if __name__ == "__main__":
     parser.add_argument('out_file', help="ouput ONNX FILE")
     parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
-    parser.add_argument('--align-corner', dest='align_corner', action='store_true', default=False,
-                        help="set if the Upsample nodes in your pytorch model have align_corner set to true.")
 
     args = parser.parse_args()
 
@@ -62,6 +67,6 @@ if __name__ == "__main__":
 
     m = onnx.load(onnx_in)
 
-    m = torch_exported_onnx_flow(m, args.disable_fuse_bn, args.align_corner)
+    m = torch_exported_onnx_flow(m, args.disable_fuse_bn)
 
     onnx.save(m, onnx_out)

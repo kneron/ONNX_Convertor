@@ -12,7 +12,22 @@ from tools import special
 from tools import combo
 # from tools import temp
 
-def onnx2onnx_flow(m, disable_fuse_bn=False, bn_on_skip=False, bn_before_add=False, bgr=False, norm=False, rgba2yynn=False, eliminate_tail=False):
+def onnx2onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False, bn_on_skip=False, bn_before_add=False, bgr=False, norm=False, rgba2yynn=False, eliminate_tail=False) -> onnx.ModelProto:
+    """Optimize the onnx.
+
+    Args:
+        m (ModelProto): the input onnx ModelProto
+        disable_fuse_bn (bool, optional): do not fuse BN into Conv. Defaults to False.
+        bn_on_skip (bool, optional): add BN operator on skip branches. Defaults to False.
+        bn_before_add (bool, optional): add BN before Add node on every branches. Defaults to False.
+        bgr (bool, optional): add an Conv layer to convert rgb input to bgr. Defaults to False.
+        norm (bool, optional): add an Conv layer to add 0.5 tp the input. Defaults to False.
+        rgba2yynn (bool, optional): add an Conv layer to convert rgb input to yynn . Defaults to False.
+        eliminate_tail (bool, optional): remove the trailing NPU unsupported nodes. Defaults to False.
+
+    Returns:
+        ModelProto: the optimized onnx model object.
+    """
     # temp.weight_broadcast(m.graph)
     m = combo.preprocess(m, disable_fuse_bn)
     # temp.fuse_bias_in_consecutive_1x1_conv(m.graph)

@@ -8,7 +8,7 @@ from onnx import numpy_helper
 from tools import other, helper, replacing
 
 """
-Change onnx model from version 1.4 to version 1.6. 
+Change onnx model from version 1.4 to version 1.6.
 """
 
 def replace_all_attribute_to_const_node_in_pad_node(g):
@@ -139,7 +139,15 @@ def replace_min_max_attribute_to_const_node_in_clip_node(g):
         node.input.extend([min_const_node.name])
         node.input.extend([max_const_node.name])
 
-def onnx1_4to1_6(model):
+def onnx1_4to1_6(model: onnx.ModelProto) -> onnx.ModelProto:
+    """Update ir_version from 4 to 6 and update opset from 9 to 11.
+
+    Args:
+        model (onnx.ModelProto): input onnx model.
+
+    Returns:
+        onnx.ModelProto: updated onnx model.
+    """
     graph = model.graph
 
     if model.opset_import[0].version == 11:
