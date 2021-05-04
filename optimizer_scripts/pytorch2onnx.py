@@ -29,8 +29,6 @@ parser.add_argument('--input-size', dest='input_size', nargs=3,
                     help='if you using pth, please use this argument to set up the input size of the model. It should be in \'CH H W\' format, e.g. \'--input-size 3 256 512\'.')
 parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                     help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
-parser.add_argument('--align-corner', dest='align_corner', action='store_true', default=False,
-                    help="set if the Upsample nodes in your pytorch model have align_corner set to true.")
 
 args = parser.parse_args()
 
@@ -75,6 +73,6 @@ onnx_out = args.out_file
 
 m = onnx.load(onnx_in)
 
-m = torch_exported_onnx_flow(m, args.disable_fuse_bn, args.align_corner)
+m = torch_exported_onnx_flow(m, args.disable_fuse_bn)
 
 onnx.save(m, onnx_out)
