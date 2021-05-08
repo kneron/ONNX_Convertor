@@ -223,6 +223,7 @@ def postprocess(m):
     m = onnx.utils.polish_model(m)
     fusing.fuse_conv_and_add_into_conv(m.graph)
     replacing.replace_mul_to_bn(m.graph)
+    replacing.replace_add_to_bn(m.graph)
 
     other.add_output_to_value_info(m.graph)
     m.producer_name = 'kneron_formatter'
