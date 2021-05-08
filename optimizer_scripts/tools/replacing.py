@@ -557,7 +557,7 @@ def replace_mul_to_bn(g):
         prev_shape_value_info = helper.find_value_by_name(g, input_op_node_name)
         prev_shape_value_info = helper.find_input_by_name(g, input_op_node_name) if prev_shape_value_info is None else prev_shape_value_info
         if prev_shape_value_info is None:
-           continue
+            continue
 
         _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
         scale_shape, scale_data = helper.constant_to_list(mul_value_node)
@@ -641,7 +641,7 @@ def replace_add_to_bn(g):
         prev_shape_value_info = helper.find_value_by_name(g, input_op_node_name)
         prev_shape_value_info = helper.find_input_by_name(g, input_op_node_name) if prev_shape_value_info is None else prev_shape_value_info
         if prev_shape_value_info is None:
-           continue
+            continue
 
         _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
         bias_shape, bias_data = helper.constant_to_list(add_value_node)
