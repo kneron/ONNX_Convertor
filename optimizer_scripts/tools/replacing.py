@@ -562,12 +562,8 @@ def replace_mul_to_bn(g):
         _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
         scale_shape, scale_data = helper.constant_to_list(mul_value_node)
 
-        # only allow bn for larger than 3 dim data input due to the hardware limitation
-        if len(previous_node_output_shape) < 3:
-            continue
-
         # channel dimension
-        c_dim = previous_node_output_shape[1]
+        c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
 
         # only allow channelwise mul or const mul
         if scale_shape != [1, c_dim, 1, 1] and scale_shape != 1:
@@ -598,9 +594,7 @@ def replace_mul_to_bn(g):
             epsilon=0.00000001
         )
 
-        mid_val_info = helper.find_value_by_name(g, mul_op_node.output[0])
         scale_val_info = helper.find_value_by_name(g, mul_value_node.output[0])
-        g.value_info.remove(mid_val_info)
         g.value_info.remove(scale_val_info)
 
         g.node.extend([bn_node])
@@ -646,12 +640,8 @@ def replace_add_to_bn(g):
         _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
         bias_shape, bias_data = helper.constant_to_list(add_value_node)
 
-        # only allow bn for larger than 3 dim data input due to the hardware limitation
-        if len(previous_node_output_shape) < 3:
-            continue
-
         # channel dimension
-        c_dim = previous_node_output_shape[1]
+        c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
 
         # only allow channelwise mul or const mul
         if bias_shape != [1, c_dim, 1, 1] and bias_shape != 1:
@@ -682,9 +672,7 @@ def replace_add_to_bn(g):
             epsilon=0.00000001
         )
 
-        mid_val_info = helper.find_value_by_name(g, add_op_node.output[0])
         add_val_info = helper.find_value_by_name(g, add_value_node.output[0])
-        g.value_info.remove(mid_val_info)
         g.value_info.remove(add_val_info)
 
         g.node.extend([bn_node])
