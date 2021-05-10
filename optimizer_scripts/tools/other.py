@@ -43,6 +43,42 @@ def add_name_to_node(g):
         if len(node.name) == 0:
             node.name = node.output[0]
 
+def rename_all_node_name(g):
+    """
+    rename all nodes:
+
+        new_name = old_name + "_kn"
+
+    :param g: the onnx graph
+    """    
+
+    # rename all graph input value info
+    for in_val in g.output:
+        in_val.name = in_val.name + "_kn"
+
+    for node in g.node:
+        new_node_name = node.name + "_kn"
+        new_node_output0_name = node.output[0] + "_kn"
+
+        # rename  the input of all the following nodes
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            replace_node_input(following_node, node.output[0], new_node_output0_name )
+
+        # rename value info
+        value_info = helper.find_value_by_name(g, node.output[0])
+        if value_info != None:
+            value_info.name = new_node_output0_name
+
+        # rename graph output value info if nessesary 
+        output_value_info = helper.find_output_by_name(g, node.output[0])
+        if output_value_info != None:
+            output_value_info.name = new_node_output0_name
+
+        # rename node
+        node.output[0] = new_node_output0_name
+        node.name = new_node_name
+
 def add_output_to_value_info(g):
     """
     If output does not present in value_info, copy one
