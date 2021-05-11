@@ -52,6 +52,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     helper.setup_current_opset_version(model_proto)
     eliminating.eliminate_empty_value_infos(model_proto.graph)
     other.add_name_to_node(model_proto.graph)
+    other.rename_all_node_name(model_proto.graph)
     replacing.replace_initializer_with_Constant(model_proto.graph)
     other.topological_sort(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
