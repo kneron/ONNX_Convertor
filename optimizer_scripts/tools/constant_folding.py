@@ -33,7 +33,6 @@ def constant_folding(g):
     while keep_folding:
         keep_folding = False
         for node in g.node:
-            logging.debug("Constant folding: " + node.name)
             # Check if the node is foldable
             if node.op_type not in constant_folding_nodes.keys():
                 continue
@@ -439,8 +438,12 @@ def unsqueeze_constant_folding(g, node):
 
     pre_val_info = helper.find_value_by_name(g, node.input[0])
     next_val_info = helper.find_value_by_name(g, node.output[0])
-    g.value_info.remove(pre_val_info)
-    g.value_info.remove(next_val_info)
+    if pre_val_info is not None:
+        g.value_info.remove(pre_val_info)
+    else:
+        print(node.name)
+    if next_val_info is not None:
+        g.value_info.remove(next_val_info)
 
     new_val_info = onnx.helper.make_tensor_value_info(
         node.output[0],

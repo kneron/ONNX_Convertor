@@ -38,6 +38,19 @@ def find_node_by_output_name(g, name):
             return i
     return None
 
+def find_node_by_node_name(g, name):
+    """
+    Find a node in the graph by its output name
+
+    :param g: the onnx graph\\
+    :param name: the target node output name\\
+    :returns: the node find by name
+    """
+    for i in g.node:
+        if i.name == name:
+            return i
+    return None
+
 def find_following_nodes_by_input_value_name(g, name):
     """ Find the following nodes of a specific value.
 

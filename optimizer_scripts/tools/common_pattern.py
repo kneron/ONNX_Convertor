@@ -112,7 +112,7 @@ def pattern_matmul_mul_add(g, matmul_node):
     other.topological_sort(g)
 
 def make_UpsamplingBilinear2d_value_info(g, resize_node_name):
-    resize_node = helper.find_node_by_output_name(g, resize_node_name)
+    resize_node = helper.find_node_by_node_name(g, resize_node_name)
 
     shape_data_node = helper.find_node_by_output_name(g, resize_node.input[3])
     shape_data = helper.constant_to_numpy(shape_data_node).astype(int)
@@ -130,7 +130,7 @@ def make_UpsamplingBilinear2d_value_info(g, resize_node_name):
     g.value_info.extend([new_output_value_info])
 
 def polish_RESIZE_input_param_node(g, resize_node_name):
-    resize_node = helper.find_node_by_output_name(g, resize_node_name)
+    resize_node = helper.find_node_by_node_name(g, resize_node_name)
 
     shape_data_node = helper.find_node_by_output_name(g, resize_node.input[3])
     shape_data = helper.constant_to_numpy(shape_data_node).astype(int)
