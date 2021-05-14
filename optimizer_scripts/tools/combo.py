@@ -131,6 +131,7 @@ def pytorch_constant_folding(m):
     """
     logging.info("Working on Pytorch constant folding.")
     replacing.replace_shape_with_constant(m.graph)
+    replacing.replace_ConstantOfShape_with_constant(m.graph)
 
     # constant_folding
     m = other.inference_shapes(m)

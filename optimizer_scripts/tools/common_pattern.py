@@ -36,9 +36,9 @@ def tf_pattern_match(m):
         # and node output name will be given the "node name + :0"
         if len(resize_node.input) != 4:
             continue
-        make_UpsamplingBilinear2d_value_info(m.graph, resize_node.output[0])
+        make_UpsamplingBilinear2d_value_info(m.graph, resize_node.name)
         m = onnx.shape_inference.infer_shapes(m)
-        polish_RESIZE_input_param_node(m.graph, resize_node.output[0])
+        polish_RESIZE_input_param_node(m.graph, resize_node.name)
     m = onnx.utils.polish_model(m)
     return m
 

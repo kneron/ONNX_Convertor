@@ -388,6 +388,54 @@ def replace_shape_with_constant(g):
 
     return replaced
 
+def replace_ConstantOfShape_with_constant(g):
+    """Replace Shape with Constant.\\
+    This is the first step of reshape constant folding.
+
+    :param g: the input graph\\
+    :return: if anything modified, return true.
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find a Shape
+        if node.op_type != 'ConstantOfShape':
+            continue
+        # Check  input
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None:
+            input_value = helper.find_input_by_name(g, node.input[0])
+        if input_value is None or len(input_value.type.tensor_type.shape.dim) == 0:
+            continue
+
+        # Replace to constant node
+        pre_node = helper.find_node_by_output_name(g, node.input[0])
+        _, target_shape = helper.constant_to_list(pre_node)
+
+        value = helper.get_attribute_by_name(node, 'value').i
+
+        node_name = node.output[0]
+        new_node = helper.list_to_constant(
+            node_name, [target_shape[0]], [value] * target_shape[0])
+
+        g.node.extend([new_node])
+
+        # remove old node
+        node_to_remove.append(node)
+
+        # delete value_info
+        val_info_used = sum([input_value.name in node.input for node in g.node])
+        if val_info_used == 1:
+            g.value_info.remove(input_value)
+
+    replaced = True if len(node_to_remove) > 0 else False
+
+    for node in node_to_remove:
+        g.node.remove(node)
+
+    topological_sort(g)
+
+    return replaced
+
 def replace_split_with_slices(g):
     """Replace split node with slice nodes.
     :param g: input graph.
