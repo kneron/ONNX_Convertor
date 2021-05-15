@@ -91,7 +91,7 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name, trans
 
     return transpose_node
 
-def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
+def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
 
     onnx_weight_node_list = []
     output_tensor_value_info = []
@@ -194,7 +194,9 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     cnn_model = onnx.utils.polish_model(cnn_model)
 
     # save
-    onnx.save(cnn_model, model_save_path)
+    if model_save_path is not None:
+        onnx.save(cnn_model, model_save_path)
+    return cnn_model
 
 
 if __name__ == '__main__':
