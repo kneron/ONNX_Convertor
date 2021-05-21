@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from conv_layers import Convolution, DepthwiseConvolution, ResizeNearestNeighbor, ResizeBilinear, TransposeConvolution
-from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu, LeakyRelu
+from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu, LeakyRelu, Relu6Defused
 from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization, NullLayer, SpaceToDepth, DepthToSpace, Maximum
 from merg_layers import Add, Mul, Concatenation
 from pool_layers import MaxPooling2D, AveragePooling2D, Mean
@@ -61,6 +61,7 @@ class Tree:
         self.__generate_subtree(head_nodes_name=[], bottom_nodes_name=bottom_nodes_name)
 
         self.__defused(enable_defuse=defused)
+        self.__add_clip_after_quantized_node(self.__interpreter)
         self.__init_graph_inputs_node()
         self.__init_graph_outputs_node()
 
@@ -236,6 +237,88 @@ class Tree:
             for input_node in node.input_nodes:
                 if not (node in input_node.output_nodes):
                     input_node.output_nodes.append(node)
+    
+    def __add_clip_after_quantized_node(self, interpreter):
+        quantized_node_list = []
+        add_clip_node_list = []
+        for item in interpreter.get_tensor_details():
+            if item["quantization"] != (0.0, 0):
+                quantized_node_list.append(item["name"])
+        
+        for node_name in self.__nodes:
+            # print(node_name)
+            node = self.__nodes[node_name]
+            if node_name not in quantized_node_list:
+                continue
+            
+            clip_node = Relu6Defused(op=node.op, op_type=BuiltinOperator.RELU6, tflite_interpreter=interpreter)
+
+            clip_node.node_idx = -1
+
+            # init input node
+            input_node_outputs_remove_name = node.output_nodes_name.copy()
+            input_node_outputs_add_name = clip_node.node_name
+
+            input_node_outputs_remove_node = node.output_nodes.copy()
+            input_node_outputs_add_node = clip_node
+
+            # init fused node
+            fused_node_inputs_name = [node.node_name]
+            fused_node_outputs_name = node.output_nodes_name.copy()
+
+            fused_node_inputs_node = [node]
+            fused_node_outputs_node = node.output_nodes.copy()
+
+            # init output node
+            output_node_inputs_remove_node_name = node.node_name
+            output_node_inputs_add_node_name = clip_node.node_name
+
+            output_node_inputs_remove_node = node
+            output_node_inputs_add_node = clip_node
+
+            # modify input node
+            for input_node_output_remove_name in input_node_outputs_remove_name:
+                node.output_nodes_name.remove(input_node_output_remove_name)
+            node.output_nodes_name.append(input_node_outputs_add_name)
+
+            for input_node_output_remove_node in input_node_outputs_remove_node:
+                node.output_nodes.remove(input_node_output_remove_node)
+            node.output_nodes.append(input_node_outputs_add_node)
+
+            # modify fused node
+            clip_node.input_nodes_name = fused_node_inputs_name
+            clip_node.output_nodes_name = fused_node_outputs_name
+
+            clip_node.input_nodes = fused_node_inputs_node
+            clip_node.output_nodes = fused_node_outputs_node
+
+            # modify output node
+            for output_node_name in fused_node_outputs_name:
+                output_node = self.__nodes[output_node_name]
+                replace_idx = output_node.input_nodes_name.index(output_node_inputs_remove_node_name)
+                output_node.input_nodes_name[replace_idx] = output_node_inputs_add_node_name
+
+            for output_node in fused_node_outputs_node:
+                replace_idx = output_node.input_nodes.index(output_node_inputs_remove_node)
+                output_node.input_nodes[replace_idx] = output_node_inputs_add_node
+
+            # defused node is not head node
+            clip_node.is_head_node = False
+
+            # origin node is not buttom node
+            clip_node.is_bottom_node = node.is_bottom_node
+            node.is_bottom_node = False
+
+            # add fused node
+            add_clip_node_list.append(clip_node)
+
+        # add fused node
+        for defused_activation_node in add_clip_node_list:
+            self.__nodes[defused_activation_node.node_name] = defused_activation_node
+
+            # update __sequential_nodes_key
+            insert_index = self.__sequential_nodes_key.index(defused_activation_node.input_nodes[0].node_name) + 1
+            self.__sequential_nodes_key.insert(insert_index, defused_activation_node.node_name)
 
     def __defused(self, enable_defuse):
         if not enable_defuse:
