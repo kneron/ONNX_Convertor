@@ -17,6 +17,8 @@ from tree_structure import Tree
 
 import json 
 
+import math
+
 def read_tflite_model(path):
     data = open(path, "rb").read()
     model = Model.GetRootAsModel(bytearray(data), 0)
@@ -120,12 +122,27 @@ def merge_quantization_info(dumped_info, quantization_info):
             if len(maxs) == 1:
                 curr_dict["max"] = {"all":maxs[0]}
             
-            radixs = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
+            def get_radix(scale, max_perchannel, min_perchannel):
+                range_tflite = max_perchannel - min_perchannel
+                range_kneron = max(abs(max_perchannel), abs(min_perchannel)) * 2
+                ratio = range_tflite / range_kneron
+                radix = math.floor(math.log(ratio / scale, 2))
+                return radix
+
+            # radixs = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
+            radixs = [get_radix(scales[i], maxs[i], mins[i]) for i in range(len(zero_points))]
+            #radixs = [-int(math.log(scales[i],2)) for i in range(len(zero_points))]
             curr_dict["radix"] = radixs
             if len(radixs) == 1:
                 curr_dict["radix"] = {"all":radixs[0]}
-            
-            kneron_scales = [1 / ((1 << radixs[i]) * scales[i]) for i in range(len(zero_points))]
+
+            kneron_scales = []
+            for i in range(len(zero_points)):
+                if radixs[i] >= 0:
+                    kneron_scales.append(1 / ((1 << radixs[i]) * scales[i]))
+                elif radixs[i] < 0:
+                    kneron_scales.append((1 / 2 **(-radixs[i])) * scales[i]) 
+
             curr_dict["scale"] = kneron_scales
             if len(kneron_scales) == 1:
                 curr_dict["scale"] = {"all":kneron_scales[0]}
@@ -296,6 +313,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     )
 
     cnn_model = helper.make_model(graph_cnn, producer_name='Kneron')
+    cnn_model.opset_import[0].version = 11
 
     # add generated time to model meta data
     helper.set_model_props(cnn_model, {'Generated Time': datetime.utcnow().strftime("%m/%d/%Y, %H:%M:%S") + " (UTC+0)"})
