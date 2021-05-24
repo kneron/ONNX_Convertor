@@ -531,3 +531,50 @@ def eliminate_empty_value_infos(g):
             to_remove.append(value_info)
     for value_info in to_remove:
         g.value_info.remove(value_info)
+
+def eliminate_nop_pads(g):
+    node_to_remove = []
+    for node in g.node:
+        if node.op_type != 'Pad':
+            continue
+        # Check if the Pad is empty or not
+        pads_node = helper.find_node_by_output_name(g, node.input[1])
+        pads_np = helper.constant_to_numpy(pads_node)
+        all_zero = True
+        for value in pads_np:
+            if value != 0:
+                all_zero = False
+        if not all_zero:
+            continue
+        # Check if it has the constant_value_node
+        constant_value_node = None
+        if len(node.input) > 2:
+            constant_value_node = helper.find_node_by_output_name(g, node.input[2])
+        # If this node is the output node, set its previous node as output nodes.
+        if helper.find_output_by_name(g, node.output[0]) is not None:
+            todel_output = helper.find_output_by_name(g, node.output[0])
+            the_input_value = helper.find_value_by_name(g, node.input[0])
+            g.output.remove(todel_output)
+            g.output.extend([the_input_value])
+            node_to_remove.append(node)
+            # node_to_remove.append(pads_node)
+            # if constant_value_node is not None:
+            #     node_to_remove.append(constant_value_node)
+            continue
+        # Replace the parents in all the following nodes
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+        # Delete value info
+        value_between = helper.find_value_by_name(g, node.output[0])
+        try:
+            g.value_info.remove(value_between)
+        except:
+            print("No value info to delete while eliminating identity layers.")
+        # Node is waiting for elimination
+        node_to_remove.append(node)
+        # node_to_remove.append(pads_node)
+        # if constant_value_node is not None:
+        #     node_to_remove.append(constant_value_node)
+    for node in node_to_remove:
+        g.node.remove(node)

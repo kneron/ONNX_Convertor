@@ -70,6 +70,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
     g = m.graph
+    eliminating.eliminate_nop_pads(g)
     eliminating.eliminate_Identify_and_Dropout(g)
     eliminating.eliminate_trivial_maxpool(g)
     eliminating.eliminate_no_children_input(g)
@@ -184,7 +185,7 @@ def tensorflow_optimization(m):
         other.topological_sort(m.graph)
         while len(m.graph.value_info) != 0:
             m.graph.value_info.pop()
-        
+
         m = other.inference_shapes(m)
         replacing.replace_shape_with_constant(m.graph)
     other.topological_sort(m.graph)
@@ -228,5 +229,6 @@ def postprocess(m):
     replacing.replace_add_to_bn(m.graph)
 
     other.add_output_to_value_info(m.graph)
+    m = optimizer.optimize(m, ['eliminate_deadend'])
     m.producer_name = 'kneron_formatter'
     return m
