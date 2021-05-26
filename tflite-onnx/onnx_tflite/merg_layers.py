@@ -6,7 +6,7 @@ from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
 from aact_layers import defused_activation_node_generator
-import utils
+import tflite_utils
 
 from tflite.AddOptions import AddOptions
 from tflite.MulOptions import MulOptions
@@ -127,7 +127,7 @@ class Concatenation(Layer):
           'Concat',
           inputs=prev_node_names,
           outputs=[concat_node_name],
-          axis= utils.channel_last_2_channel_first_axis_mapping( [self.tflite_concat_parser.Axis()] )[0],
+          axis= tflite_utils.channel_last_2_channel_first_axis_mapping( [self.tflite_concat_parser.Axis()] )[0],
           name=concat_node_name
       )
 
