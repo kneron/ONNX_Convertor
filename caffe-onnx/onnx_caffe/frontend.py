@@ -22,7 +22,6 @@ class CaffeFrontend(object):
   """
   def __init__(self):
     self.logger = logging.getLogger("onnx-caffe")
-    self.logger.setLevel(logging.DEBUG)
     # Keras and Onnx model
     self.cmodel = None
     self.cproto = None

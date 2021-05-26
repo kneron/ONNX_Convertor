@@ -8,16 +8,6 @@ import onnx.utils
 from tensorflow.python.platform import gfile
 from tools import combo, eliminating, replacing
 
-TF2ONNX_VERSION = int(tf2onnx.version.version.replace('.', ''))
-
-if 160 <= TF2ONNX_VERSION:
-    from tf2onnx import tf_loader
-else:
-    from tf2onnx import loader as tf_loader
-
-tf.logging.set_verbosity(tf.logging.ERROR)
-logging.basicConfig(stream=sys.stdout, format='[%(asctime)s] %(levelname)s: %(message)s', level=logging.INFO)
-
 def tf2onnx_flow(pb_path: str, test_mode =False) -> onnx.ModelProto:
     """Convert frozen graph pb file into onnx
 
@@ -31,6 +21,13 @@ def tf2onnx_flow(pb_path: str, test_mode =False) -> onnx.ModelProto:
     Returns:
         onnx.ModelProto: converted onnx
     """
+    TF2ONNX_VERSION = int(tf2onnx.version.version.replace('.', ''))
+
+    if 160 <= TF2ONNX_VERSION:
+        from tf2onnx import tf_loader
+    else:
+        from tf2onnx import loader as tf_loader
+
     if pb_path[-3:] == '.pb':
         model_name = pb_path.split('/')[-1][:-3]
 
@@ -141,6 +138,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--test_mode', default=False, help='test mode will not eliminate shape changes after input')
 
     args = parser.parse_args()
+    logging.basicConfig(stream=sys.stdout, format='[%(asctime)s] %(levelname)s: %(message)s', level=logging.INFO)
     m = tf2onnx_flow(args.in_file, args.test_mode)
     onnx.save(m, args.out_file)
     logging.info('Save Optimized ONNX: %s', args.out_file)

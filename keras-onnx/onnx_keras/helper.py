@@ -9,7 +9,6 @@ from .exceptions import OnnxNotSupport
 
 # Logger options and flags
 logger = logging.getLogger("onnx-keras")
-logger.setLevel(logging.DEBUG)
 batchReplace = False
 custom_name2type = dict()
 custom_type2opid = dict()
