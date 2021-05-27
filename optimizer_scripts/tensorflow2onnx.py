@@ -27,10 +27,13 @@ def tf2onnx_flow(pb_path: str, test_mode =False) -> onnx.ModelProto:
         from tf2onnx import tf_loader
     else:
         from tf2onnx import loader as tf_loader
-
+ 
     if pb_path[-3:] == '.pb':
         model_name = pb_path.split('/')[-1][:-3]
 
+        # always reset tensorflow session at begin 
+        tf.reset_default_graph()
+        
         with tf.Session() as sess:
             with gfile.FastGFile(pb_path, 'rb') as f:
                 graph_def = tf.GraphDef()
