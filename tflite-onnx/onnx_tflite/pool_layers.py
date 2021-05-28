@@ -6,7 +6,7 @@ from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
 from aact_layers import defused_activation_node_generator
-import utils
+import tflite_utils
 
 from tflite.ReducerOptions import ReducerOptions
 from tflite.Pool2DOptions import Pool2DOptions
@@ -43,13 +43,13 @@ class MaxPooling2D(Layer):
           outputs=[max_pool_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, None, padding_stradegy),
+          pads=tflite_utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, None, padding_stradegy),
           name=max_pool_name
       )
       out_shape_info = helper.make_tensor_value_info(
           max_pool_name,
           TensorProto.FLOAT,
-          utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+          tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
       )
 
       # update tables
@@ -95,13 +95,13 @@ class AveragePooling2D(Layer):
           outputs=[avg_pool_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, None, padding_stradegy),
+          pads=tflite_utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, None, padding_stradegy),
           name=avg_pool_name
       )
       out_shape_info = helper.make_tensor_value_info(
           avg_pool_name,
           TensorProto.FLOAT,
-          utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+          tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
       )
 
       # update tables

@@ -8,7 +8,6 @@ from onnx import mapping
 
 # Logger options and flags
 logger = logging.getLogger("onnx-caffe")
-logger.setLevel(logging.DEBUG)
 batchReplace = False
 noneDataFormat = False
 

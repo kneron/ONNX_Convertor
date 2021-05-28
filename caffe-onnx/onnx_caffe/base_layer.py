@@ -11,7 +11,6 @@ class Layer:
     self.proto = proto
     self.blob = blob
     self.logger = logging.getLogger("onnx-caffe")
-    self.logger.setLevel(logging.DEBUG)
   def generate(self):
     """Generate the nodes according to the original layer
 

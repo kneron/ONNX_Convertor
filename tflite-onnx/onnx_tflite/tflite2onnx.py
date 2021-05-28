@@ -3,7 +3,7 @@ import onnx.utils
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 
-import utils
+import tflite_utils
 import logging
 
 import os
@@ -38,7 +38,7 @@ def get_op_info(model_path):
 def set_end_node(onnx_end_node, onnx_end_node_shape):
 
     out_value_info_name = "out_" + onnx_end_node.name
-    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(onnx_end_node_shape))
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, tflite_utils.tflite2onnx_shape_map(onnx_end_node_shape))
 
     # change output
     onnx_end_node.output[:] = [out_value_info_name]
@@ -91,7 +91,7 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name, trans
 
     return transpose_node
 
-def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
+def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
 
     onnx_weight_node_list = []
     output_tensor_value_info = []
@@ -131,7 +131,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             onnx_node_list.append(h_transpose_node)
             h_node.input_nodes_name = [h_transpose_node.name]
         else:
-            input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(h_node.node_input_shape.tolist()))
+            input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, tflite_utils.tflite2onnx_shape_map(h_node.node_input_shape.tolist()))
             h_node.input_nodes_name = [input_tensor_value_info.name]
                  
 
@@ -174,7 +174,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
 
     input_init = [input_tensor_value_info]
     input_init.extend(onnx_weight_node_list)
-    onnx_inputs = utils.make_kneron_valid_onnx_input( input_init )
+    onnx_inputs = tflite_utils.make_kneron_valid_onnx_input( input_init )
 
     graph_cnn = helper.make_graph(
         onnx_node_list,
@@ -194,7 +194,9 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     cnn_model = onnx.utils.polish_model(cnn_model)
 
     # save
-    onnx.save(cnn_model, model_save_path)
+    if model_save_path is not None:
+        onnx.save(cnn_model, model_save_path)
+    return cnn_model
 
 
 if __name__ == '__main__':

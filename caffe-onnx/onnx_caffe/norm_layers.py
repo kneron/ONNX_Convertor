@@ -11,7 +11,6 @@ from . import helper
 
 # Logger options and flags
 logger = logging.getLogger("onnx-caffe")
-logger.setLevel(logging.DEBUG)
 batchReplace = False
 noneDataFormat = False
 
