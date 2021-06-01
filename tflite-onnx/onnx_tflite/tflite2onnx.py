@@ -117,7 +117,7 @@ def merge_quantization_info(dumped_info, quantization_info):
             if len(mins) == 1:
                 curr_dict["min"] = {"all":mins[0]}
             
-            maxs = [((1 << dtype_to_power[curr_dict["dtype"]]) - zero_points[i]) * scales[i] for i in range(len(zero_points))]
+            maxs = [((1 << dtype_to_power[curr_dict["dtype"]]) - zero_points[i] - 1) * scales[i] for i in range(len(zero_points))]
             curr_dict["max"] = maxs
             if len(maxs) == 1:
                 curr_dict["max"] = {"all":maxs[0]}
