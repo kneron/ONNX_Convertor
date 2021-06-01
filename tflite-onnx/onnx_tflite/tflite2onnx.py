@@ -360,15 +360,13 @@ if __name__ == '__main__':
     logging.info('generating...')
 
 
-    bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
-    main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
-    # try:
-    #     bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
-    #     main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
-    #     logging.getLogger('tflite2onnx').info("Conversion Success")
-    # except Exception as e:
-    #     logging.getLogger('tflite2onnx').info('Error: Something Wrong')
-    #     logging.getLogger('tflite2onnx').error(e)
+    try:
+        bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
+        main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
+        logging.getLogger('tflite2onnx').info("Conversion Success")
+    except Exception as e:
+        logging.getLogger('tflite2onnx').info('Error: Something Wrong')
+        logging.getLogger('tflite2onnx').error(e)
 
     logging.info('------------   end   ------------------------')
 
