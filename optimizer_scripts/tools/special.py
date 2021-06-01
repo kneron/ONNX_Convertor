@@ -146,15 +146,52 @@ def add_0_5_to_normalized_input(m):
     # topological sort
     other.topological_sort(g)
 
-def set_upsample_mode_to_align_corner(g):
-    """Set all the upsample nodes mode to align_corner.
+def add_rgb2yynn_node(m):
+    """Add a conv layer which can convert rgb to yynn input.
     """
-    for node in g.node:
-        if node.op_type != 'Upsample':
-            continue
-        # Find a upsample node
-        attribute = helper.get_attribute_by_name(node, "mode")
-        if type(attribute.s) == type(b'abc'):
-            attribute.s = "align_corner".encode('utf-8')
-        else:
-            attribute.s = "align_corner"
+    g = m.graph
+    if len(g.input) > 1:
+        print("This model has multiple inputs. Cannot change to rgb input.")
+        return
+    input_shape = helper.get_shape_from_value_info(g.input[0])
+    if len(input_shape) != 4:
+        print("The input shape is not BCHW. Cannot normalize input.")
+        return
+    # Construct weight
+    ch = input_shape[1]
+    weight_np = np.zeros((3, 3, 4, 4)).astype('float32')
+    weight_np[1, 1, :3, :2] = np.array([[[[0.299],
+                                          [0.587],
+                                          [0.114]]]])
+    weight_np[1, 1, 3, 2:] = 1.
+    weight_np = np.transpose(weight_np, (3, 2, 0, 1))
+    new_weight = helper.numpy_to_constant("input_rgb2yynn_weight", weight_np)
+    # Construct conv node
+    new_conv = onnx.helper.make_node(
+        'Conv',
+        ['new_input', "input_rgb2yynn_weight"],
+        [g.input[0].name],
+        name='input_rgba2yynn',
+        dilations=[1, 1],
+        kernel_shape=[3, 3],
+        pads=[1, 1, 1, 1],
+        strides=[1, 1]
+    )
+    # Construct value_infos
+    old_input_value = g.input.pop()
+    weight_value = onnx.helper.make_tensor_value_info(
+        'input_rgb2yynn_weight',
+        old_input_value.type.tensor_type.elem_type,
+        [4, 4, 3, 3]
+    )
+    # Connect the graph
+    new_input_value = onnx.helper.make_tensor_value_info(
+        'new_input',
+        old_input_value.type.tensor_type.elem_type,
+        input_shape
+    )
+    g.input.extend([new_input_value])
+    g.node.extend([new_weight, new_conv])
+    g.value_info.extend([weight_value, old_input_value])
+    # topological sort
+    other.topological_sort(g)

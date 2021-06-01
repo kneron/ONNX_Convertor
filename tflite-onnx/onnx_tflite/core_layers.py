@@ -295,6 +295,8 @@ class Pad(Layer):
       #             [2 1]     ==       [0,0,2,2,3,3,1,1]          
       #             [3 3]]          
 
+      pad_name = self.node_name
+
       # create constant node
       pad_node_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
       pad_param = self.tflite_interpreter.get_tensor(pad_node_detail['index']).tolist()
@@ -308,19 +310,29 @@ class Pad(Layer):
       pad_ch_w = pad_param[3][0]
       pad_ch_h = pad_param[3][1]
 
+
+      pad_position_array = np.array([0,0,pad_w0,pad_h0,pad_ch_w,pad_ch_h,pad_w,pad_h]).astype(np.int64)
+      pad_position_node = utils.create_constant_node(pad_name + '_pad_posision_node', pad_position_array.shape, pad_position_array)
+
+      pad_value_array = np.array([0.0])
+      pad_value_node = utils.create_constant_node(pad_name + '_pad_value_node', pad_value_array.shape, pad_value_array)
+
+      prev_node_names = self.input_nodes_name.copy()
+      prev_node_names.append(pad_position_node.name)
+      prev_node_names.append(pad_value_node.name)
+
       # build node
-      pad_name = self.node_name
       pad_node = helper.make_node(
           'Pad', 
-          self.input_nodes_name, 
+          prev_node_names, 
           [pad_name], 
           mode='constant', 
-          value=0.0, 
-          pads=[0,0,pad_w0,pad_h0,pad_ch_w,pad_ch_h,pad_w,pad_h], 
           name=pad_name 
       )
 
       # update tables
+      self.node_list.append(pad_position_node)
+      self.node_list.append(pad_value_node)
       self.node_list.append(pad_node)
 
       return self.node_list, self.value_infos, self.weight_node_list, {}

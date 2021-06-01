@@ -43,6 +43,38 @@ def add_name_to_node(g):
         if len(node.name) == 0:
             node.name = node.output[0]
 
+def rename_all_node_name(g):
+    """
+    rename all nodes:
+
+        new_name = old_name + "_kn"
+
+    :param g: the onnx graph
+    """    
+
+    for node in g.node:
+        new_node_name = node.name + "_kn"
+        new_node_output0_name = node.output[0] + "_kn"
+
+        # in order to keep same output node name, skip if it is output node.
+        output_value_info = helper.find_output_by_name(g, node.output[0])
+        if output_value_info != None:
+            continue
+
+        # rename  the input of all the following nodes
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            replace_node_input(following_node, node.output[0], new_node_output0_name )
+
+        # rename value info
+        value_info = helper.find_value_by_name(g, node.output[0])
+        if value_info != None:
+            value_info.name = new_node_output0_name
+
+        # rename node
+        node.output[0] = new_node_output0_name
+        node.name = new_node_name
+
 def add_output_to_value_info(g):
     """
     If output does not present in value_info, copy one
@@ -254,6 +286,16 @@ def topological_sort(g):
     if node_map:
         raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
 
+def remove_zero_value_info(g):
+    value_info_list = list(g.value_info)
+    for vi in value_info_list:
+        if not vi.type.tensor_type.shape.dim:
+            g.value_info.remove(vi)
+
+        for dim in vi.type.tensor_type.shape.dim:
+            if dim.dim_value == 0:
+                g.value_info.remove(vi)
+                break
 
 def inference_shapes(m):
     g = m.graph
@@ -264,14 +306,60 @@ def inference_shapes(m):
             inferencing_shapes = True
         if inference_upsample_shape(g):
             inferencing_shapes = True
+        if inference_resize_shape(g):
+            inferencing_shapes = True
         if inference_split_shape(g):
             inferencing_shapes = True
         if inferencing_shapes:
             topological_sort(g)
             m = onnx.utils.polish_model(m)
             g = m.graph
+    remove_zero_value_info(g)
+    m = onnx.utils.polish_model(m)
     return m
 
+def inference_resize_shape(g):
+    for node in g.node:
+        if node.op_type != 'Resize':
+            continue
+
+        output_value = helper.find_value_by_name(g, node.output[0])
+        output_value = helper.find_output_by_name(g, node.output[0]) if output_value is None else output_value
+        if output_value is not None:
+            continue
+
+        if len(node.input) == 4: # input: X, roi, scales, sizes
+            shape_node = helper.find_node_by_output_name(g, node.input[3])
+            if shape_node.op_type != 'Constant':
+                continue
+
+            _, shape_value = helper.constant_to_list(shape_node)
+            output_value = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    onnx.TensorProto.FLOAT,
+                    [int(v) for v in shape_value])
+            g.value_info.extend([output_value])
+            return True
+        else:
+            # If output shape is not given, inference from scales
+            # Get the input shape
+            input_value = helper.find_value_by_name(g, node.input[0])
+            if input_value is None:
+                continue
+            shape_value = helper.get_shape_from_value_info(input_value)
+            scales_node = helper.find_node_by_output_name(g, node.input[2])
+            if scales_node.op_type != 'Constant':
+                continue
+            _, scales_value = helper.constant_to_list(scales_node)
+            for i in range(len(shape_value)):
+                shape_value[i] *= scales_value[i]
+            output_value = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    onnx.TensorProto.FLOAT,
+                    [int(v) for v in shape_value])
+            g.value_info.extend([output_value])
+            return True
+    return False
 
 def inference_upsample_shape(g):
     """For onnx v1.4.1+, onnx cannot inference upsample output shape. Let's\\
@@ -627,6 +715,70 @@ def add_nop_bn_after(g, value_names):
         g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
     topological_sort(g)
 
+def add_shift_scale_bn_after(g, value_name, channel_shift, channel_scale):
+    """Add do-nothing BatchNormalization nodes after the given value info. It will\\
+    take the given names as the inputs of the new node and replace the inputs\\
+    of the following nodes.
+
+    :param g: the graph\\
+    :param value_name: a list of string which are the name of value_info.
+    """
+    # Find the value first
+    value = helper.find_value_by_name(g, value_name)
+    if value is None:
+        value = helper.find_input_by_name(g, value_name)
+    if value is None:
+        value = helper.find_output_by_name(g, value_name)
+    if value is None:
+        print("Cannot find an value_info named {}".format(value_name))
+        return
+    # Get the channel number from value info
+    shape = helper.get_shape_from_value_info(value)
+    channel = shape[1]
+    # Construct 4 weights
+    node_name = value_name + "_scale_shift_bn"
+    ones = [1.0] * channel
+    zeros = [0.0] * channel
+    scale_node = helper.list_to_constant(node_name + "_scale", [len(channel_scale)], channel_scale)
+    bias_node = helper.list_to_constant(node_name + "_bias", [len(channel_shift)], channel_shift)
+    mean_node = helper.list_to_constant(node_name + "_mean", [channel], zeros)
+    var_node = helper.list_to_constant(node_name + "_var", [channel], ones)
+    # Construct BN node
+    bn_node = onnx.helper.make_node(
+        "BatchNormalization",
+        [value_name,
+        scale_node.output[0],
+        bias_node.output[0],
+        mean_node.output[0],
+        var_node.output[0]],
+        [node_name],
+        name = node_name
+    )
+    # Reconnect the graph
+    following_nodes = helper.find_following_nodes_by_input_value_name(g, value_name)
+    if len(following_nodes) > 0:
+        for following_node in following_nodes:
+            replace_node_input(following_node, value_name, node_name)
+    else:
+        # If the node is the output, replace the output with the previous input.
+        new_value = onnx.helper.make_tensor_value_info(
+            node_name,
+            value.type.tensor_type.elem_type,
+            shape
+        )
+        output_values = []
+        while len(g.output):
+            output_values.append(g.output.pop())
+        while output_values:
+            output_value = output_values.pop()
+            if output_value.name == value_name:
+                g.output.extend([new_value])
+            else:
+                g.output.extend([output_value])
+    # Add node to the graph
+    g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
+    topological_sort(g)
+
 def duplicate_shared_Flatten(g):
     """To feed our compiler, bind Flatten with Gemm. If the output of one\\
     Flatten goes to two Gemm nodes, duplicate the Flatten.
@@ -924,7 +1076,8 @@ def add_bn_before_add(g, quantization_info):
                 mean_node.output[0],
                 var_node.output[0]],
                 [node_name],
-                name = node_name
+                name = node_name,
+                epsilon=0.00000001
             )
             # Reconnect the graph
             replace_node_input(n, value_name, node_name)
@@ -976,7 +1129,8 @@ def add_bn_before_activation(g, quantization_info):
                 mean_node.output[0],
                 var_node.output[0]],
                 [node_name],
-                name = node_name
+                name = node_name,
+                epsilon=0.00000001
             )
             # Reconnect the graph
             replace_node_input(n, value_name, node_name)
@@ -987,10 +1141,6 @@ def add_bn_before_activation(g, quantization_info):
             bn_name = input_node.output[0] + "_nop_bn"
             quantization_info[bn_name] = quantization_info[input_node.output[0]]
     topological_sort(g)
-
-def pytorch_check_initializer_as_input(g):
-    if len(g.input) < len(g.initializer):
-        raise RuntimeError("You need to add option `keep_initializers_as_inputs=True` while exporting the model!")
 
 def rename_output_name(g, original_name, new_name):
     # Output

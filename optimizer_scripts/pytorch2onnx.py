@@ -13,6 +13,7 @@ from tools import replacing
 from tools import other
 from tools import combo
 from tools import special
+from pytorch_exported_onnx_preprocess import torch_exported_onnx_flow
 
 # Debug use
 # logging.basicConfig(level=logging.DEBUG)
@@ -28,8 +29,6 @@ parser.add_argument('--input-size', dest='input_size', nargs=3,
                     help='if you using pth, please use this argument to set up the input size of the model. It should be in \'CH H W\' format, e.g. \'--input-size 3 256 512\'.')
 parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                     help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
-parser.add_argument('--align-corner', dest='align_corner', action='store_true', default=False,
-                    help="set if the Upsample nodes in your pytorch model have align_corner set to true.")
 
 args = parser.parse_args()
 
@@ -58,15 +57,7 @@ elif args.in_file[-4:] == '.pth':
     # model = torchvision.models.resnet34(pretrained=True)
     # Invoke export.
     # torch.save(model, "resnet34.pth")
-    if torch.__version__ < '1.3.0':
-        torch.onnx.export(model, dummy_input, args.out_file)
-        torch.onnx.export(model, dummy_input,
-                          args.out_file + "_backup.onnx")
-    else:
-        torch.onnx.export(model, dummy_input,
-                          args.out_file, keep_initializers_as_inputs=True)
-        torch.onnx.export(
-            model, dummy_input, args.out_file + "_backup.onnx", keep_initializers_as_inputs=True)
+    torch.onnx.export(model, dummy_input, args.out_file, opset_version=11)
 elif args.in_file[-4:] == 'onnx':
     onnx_in = args.in_file
 else:
@@ -82,15 +73,6 @@ onnx_out = args.out_file
 
 m = onnx.load(onnx_in)
 
-other.pytorch_check_initializer_as_input(m.graph)
-m = combo.preprocess(m, args.disable_fuse_bn)
-m = combo.pytorch_constant_folding(m)
-
-m = combo.common_optimization(m)
-
-m = combo.postprocess(m)
-
-if args.align_corner:
-    special.set_upsample_mode_to_align_corner(m.graph)
+m = torch_exported_onnx_flow(m, args.disable_fuse_bn)
 
 onnx.save(m, onnx_out)

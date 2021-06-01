@@ -11,7 +11,7 @@ We parse TFlite model use:
 
 We test our script using:
 * **Python 3**:    Python==3.7.7
-* **ONNX**:    onnx==1.4.1
+* **ONNX**:    onnx==1.6
 * **Tensorflow**:    tensorflow==1.15.0
 * **FlatBuffer**:    flatbuffers==1.12
 * **Python-igraph**:    python-igraph==0.8.3

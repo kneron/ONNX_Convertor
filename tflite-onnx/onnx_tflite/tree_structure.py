@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from conv_layers import Convolution, DepthwiseConvolution, ResizeNearestNeighbor, ResizeBilinear, TransposeConvolution
-from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu, LeakyRelu, Relu6Defused
+from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu, Elu, LeakyRelu, Relu6Defused, ClipDefused
 from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization, NullLayer, SpaceToDepth, DepthToSpace, Maximum
 from merg_layers import Add, Mul, Concatenation
 from pool_layers import MaxPooling2D, AveragePooling2D, Mean
@@ -240,10 +240,15 @@ class Tree:
     
     def __add_clip_after_quantized_node(self, interpreter):
         quantized_node_list = []
+        quantized_node_map = {}
         add_clip_node_list = []
         for item in interpreter.get_tensor_details():
+            layer_scale, layer_zero_point = item["quantization"]
+            layer_min = (0 - layer_zero_point) * layer_scale
+            layer_max = (255 - layer_zero_point) * layer_scale
             if item["quantization"] != (0.0, 0):
                 quantized_node_list.append(item["name"])
+                quantized_node_map[item["name"]] = (layer_min, layer_max)
         
         for node_name in self.__nodes:
             # print(node_name)
@@ -251,7 +256,10 @@ class Tree:
             if node_name not in quantized_node_list:
                 continue
             
-            clip_node = Relu6Defused(op=node.op, op_type=BuiltinOperator.RELU6, tflite_interpreter=interpreter)
+            # clip_node = Relu6Defused(op=node.op, op_type=BuiltinOperator.RELU6, tflite_interpreter=interpreter)
+            layer_min = quantized_node_map[node_name][0]
+            layer_max = quantized_node_map[node_name][1]
+            clip_node = ClipDefused(op=node.op, op_type=BuiltinOperator.RELU6, tflite_interpreter=interpreter, min_val=layer_min, max_val=layer_max)
 
             clip_node.node_idx = -1
 

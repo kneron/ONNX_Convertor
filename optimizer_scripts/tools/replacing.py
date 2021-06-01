@@ -12,57 +12,41 @@ from .other import topological_sort
 def replace_initializer_with_Constant(g):
     """
     Replace initializers with Constant and a corresponding value_info
+    If the initializer has related input, remove it.
 
     :param g: the onnx graph
     """
-    # Creat a set of existed node names
-    node_names = set()
-    for node in g.node:
-        node_names.add(node.name)
-    # Unused initializers should be removed
-    unused_initializer = set()
-    for tensor in g.initializer:
-        unused_initializer.add(tensor.name)
-    for node in g.node:
-        for in_value in node.input:
-            if in_value in unused_initializer:
-                unused_initializer.remove(in_value)
 
     input_map = {i.name: i for i in g.input}
     for tensor in g.initializer:
-        if tensor.name in unused_initializer:
+        # Check for the initializer related input and remove it
+        if tensor.name in input_map:
             value_info = input_map[tensor.name]
             g.input.remove(value_info)
-            continue
-        # Convert init to a constant node
-        if tensor.name not in node_names:
-            new_name = tensor.name
-        else:
-            new_name = tensor.name + '_2'
-            following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
-            for node in following_nodes:
-                modhelper.replace_node_input(node, tensor.name, new_name)
-        new_node = onnx.helper.make_node(
-            "Constant",
-            [],
-            [new_name],
-            name=new_name,
-            value=tensor
-        )
-        # Add node to lists
-        g.node.extend([new_node])
-        # Add value info to lists
-        value_info = input_map[tensor.name]
-        g.value_info.extend([value_info])
-        # Remove original input value info
-        g.input.remove(value_info)
-        # if value info exists, remove it as well.
+        following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
+        for i, node in enumerate(following_nodes):
+            new_name = tensor.name + "_duplicated_No" + str(i) if i > 0 else tensor.name
+            modhelper.replace_node_input(node, tensor.name, new_name)
+            new_node = onnx.helper.make_node(
+                "Constant",
+                [],
+                [new_name],
+                name=new_name,
+                value=tensor
+            )
+            # Add node to lists
+            g.node.extend([new_node])
+
+        # if value info already exists, remove it as well.
         value_info = helper.find_value_by_name(g, tensor.name)
         if value_info is not None:
             g.value_info.remove(value_info)
+
     # Remove original initializer
     while len(g.initializer) != 0:
         g.initializer.pop()
+    
+    topological_sort(g)
 
 def replace_Reshape_with_Flatten(g):
     """
@@ -404,6 +388,54 @@ def replace_shape_with_constant(g):
 
     return replaced
 
+def replace_ConstantOfShape_with_constant(g):
+    """Replace Shape with Constant.\\
+    This is the first step of reshape constant folding.
+
+    :param g: the input graph\\
+    :return: if anything modified, return true.
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find a Shape
+        if node.op_type != 'ConstantOfShape':
+            continue
+        # Check  input
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None:
+            input_value = helper.find_input_by_name(g, node.input[0])
+        if input_value is None or len(input_value.type.tensor_type.shape.dim) == 0:
+            continue
+
+        # Replace to constant node
+        pre_node = helper.find_node_by_output_name(g, node.input[0])
+        _, target_shape = helper.constant_to_list(pre_node)
+
+        value = helper.get_attribute_by_name(node, 'value').i
+
+        node_name = node.output[0]
+        new_node = helper.list_to_constant(
+            node_name, [target_shape[0]], [value] * target_shape[0])
+
+        g.node.extend([new_node])
+
+        # remove old node
+        node_to_remove.append(node)
+
+        # delete value_info
+        val_info_used = sum([input_value.name in node.input for node in g.node])
+        if val_info_used == 1:
+            g.value_info.remove(input_value)
+
+    replaced = True if len(node_to_remove) > 0 else False
+
+    for node in node_to_remove:
+        g.node.remove(node)
+
+    topological_sort(g)
+
+    return replaced
+
 def replace_split_with_slices(g):
     """Replace split node with slice nodes.
     :param g: input graph.
@@ -433,39 +465,48 @@ def replace_split_with_slices(g):
                 split = item.ints
 
         length = input_value.type.tensor_type.shape.dim[axis].dim_value
-
-        outputs = node.output
         if split is not []:
             n_out = len(node.attribute[1].ints)
             pos = 0
             for i in range(n_out):
                 pos += node.attribute[1].ints[i]
                 new_node_name = output_val_names[i]
+                # Construct starts, ends, axes
+                starts_name = new_node_name + '_starts_' + str(i)
+                ends_name = new_node_name + '_ends_' + str(i)
+                axes_name = new_node_name + '_axes_' + str(i)
+                starts_node = helper.list_to_constant(starts_name, (1, ), [int(pos-node.attribute[1].ints[i])])
+                ends_node = helper.list_to_constant(ends_name, (1, ), [int(pos)])
+                axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
+                # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
-                    inputs=[node.input[0]],
+                    inputs=[node.input[0], starts_name, ends_name, axes_name],
                     outputs=[new_node_name],
-                    name=new_node_name,
-                    axes=[axis],
-                    ends=[pos],
-                    starts=[pos-node.attribute[1].ints[i]]
+                    name=new_node_name
                 )
-                g.node.extend([new_node])
+                g.node.extend([starts_node, ends_node, axes_node, new_node])
             node_to_remove.append(node)
         else:
-            n_out = len(outputs)
+            n_out = len(output_val_names)
             width = length//n_out
             for i in range(n_out):
+                new_node_name = output_val_names[i]
+                # Construct starts, ends, axes
+                starts_name = new_node_name + '_starts_' + str(i)
+                ends_name = new_node_name + '_ends_' + str(i)
+                axes_name = new_node_name + '_axes_' + str(i)
+                starts_node = helper.list_to_constant(starts_name, (1, ), [int(i*width)])
+                ends_node = helper.list_to_constant(ends_name, (1, ), [int((1+i)*width)])
+                axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
+                # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
-                    inputs=[node.input[0]],
-                    outputs=[outputs[i]],
-                    name=outputs[i],
-                    axes=[axis],
-                    ends=[(1+i)*width],
-                    starts=[i*width]
+                    inputs=[node.input[0], starts_name, ends_name, axes_name],
+                    outputs=[new_node_name],
+                    name=new_node_name
                 )
-                g.node.extend([new_node])
+                g.node.extend([starts_node, ends_node, axes_node, new_node])
             node_to_remove.append(node)
 
     for old_node in node_to_remove:
@@ -561,16 +602,16 @@ def replace_mul_to_bn(g):
         if not mul_value_node or mul_value_node.op_type != 'Constant':
             continue
 
-        _ , previous_node_output_shape = helper.find_size_shape_from_value(helper.find_value_by_name(g, input_op_node_name))
-        scale_shape, scale_data = helper.constant_to_list(mul_value_node)
-
-
-        # only allow 4 dim data input due to the hardware limitation
-        if len(previous_node_output_shape) != 4:
+        prev_shape_value_info = helper.find_value_by_name(g, input_op_node_name)
+        prev_shape_value_info = helper.find_input_by_name(g, input_op_node_name) if prev_shape_value_info is None else prev_shape_value_info
+        if prev_shape_value_info is None:
             continue
 
+        _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
+        scale_shape, scale_data = helper.constant_to_list(mul_value_node)
+
         # channel dimension
-        c_dim = previous_node_output_shape[1]
+        c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
 
         # only allow channelwise mul or const mul
         if scale_shape != [1, c_dim, 1, 1] and scale_shape != 1:
@@ -578,7 +619,11 @@ def replace_mul_to_bn(g):
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        muls = scale_data * c_dim
+        # If the input is an scaler, expand it.
+        if len(scale_data) == 1:
+            muls = scale_data * c_dim
+        else:
+            muls = scale_data
         bn_name = mul_op_node.output[0]
         mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
         variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
@@ -597,9 +642,7 @@ def replace_mul_to_bn(g):
             epsilon=0.00000001
         )
 
-        mid_val_info = helper.find_value_by_name(g, mul_op_node.output[0])
         scale_val_info = helper.find_value_by_name(g, mul_value_node.output[0])
-        g.value_info.remove(mid_val_info)
         g.value_info.remove(scale_val_info)
 
         g.node.extend([bn_node])
@@ -610,6 +653,84 @@ def replace_mul_to_bn(g):
 
         node_to_del.extend([mul_op_node])
         node_to_del.extend([mul_value_node])
+
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
+
+    topological_sort(g)
+
+def replace_add_to_bn(g):
+    """Replace single Add node with Batchnorm node.
+    :param g: input graph.
+    :return:
+    """
+    node_to_del = []
+    for node in g.node:
+        if node.op_type != 'Add':
+            continue
+
+        add_op_node = node
+
+        # only support one input node
+        if len(add_op_node.input) != 2: # OP node and value node
+            continue
+
+        input_op_node_name = add_op_node.input[0]
+        add_value_node = helper.find_node_by_output_name(g, add_op_node.input[1])
+        if not add_value_node or add_value_node.op_type != 'Constant':
+            continue
+
+        prev_shape_value_info = helper.find_value_by_name(g, input_op_node_name)
+        prev_shape_value_info = helper.find_input_by_name(g, input_op_node_name) if prev_shape_value_info is None else prev_shape_value_info
+        if prev_shape_value_info is None:
+            continue
+
+        _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
+        bias_shape, bias_data = helper.constant_to_list(add_value_node)
+
+        # channel dimension
+        c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
+
+        # only allow channelwise mul or const mul
+        if bias_shape != [1, c_dim, 1, 1] and bias_shape != 1:
+            continue
+
+        ones = [1.0] * c_dim
+        zeros = [0.0] * c_dim
+        # If bias is a scaler, expand it.
+        if len(bias_data) == 1:
+            bias = bias_data * c_dim
+        else:
+            bias = bias_data
+        bn_name = add_op_node.output[0]
+        mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
+        variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
+        scale_value_node = helper.list_to_constant(bn_name+'_mul', np.array(ones).shape, ones)
+        new_add_value_node = helper.list_to_constant(bn_name+'_add', np.array(bias).shape, bias)
+
+        bn_node = onnx.helper.make_node(
+            'BatchNormalization',
+            [input_op_node_name,
+            scale_value_node.output[0],
+            new_add_value_node.output[0],
+            mean_value_node.output[0],
+            variance_value_node.output[0]],
+            [add_op_node.output[0]],
+            name=bn_name,
+            epsilon=0.00000001
+        )
+
+        add_val_info = helper.find_value_by_name(g, add_value_node.output[0])
+        g.value_info.remove(add_val_info)
+
+        g.node.extend([bn_node])
+        g.node.extend([mean_value_node])
+        g.node.extend([variance_value_node])
+        g.node.extend([scale_value_node])
+        g.node.extend([new_add_value_node])
+
+        node_to_del.extend([add_op_node])
+        node_to_del.extend([add_value_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())

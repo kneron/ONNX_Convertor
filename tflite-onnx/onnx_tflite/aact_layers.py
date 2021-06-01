@@ -84,12 +84,21 @@ class Relu6Defused(ActivationDefused):
 
     def generate(self):
         clip_name = self.node_name
+
+        six = np.array([6.0])
+        zero = np.array([0.0])
+        # onnx clip only support no shape tensor in min max node
+        value_max_node = utils.create_constant_node(clip_name + '_max_6', [], six)
+        value_min_node = utils.create_constant_node(clip_name + '_min_0', [], zero)
+
+        prev_node_names = self.input_nodes_name.copy()
+        prev_node_names.append(value_min_node.name)
+        prev_node_names.append(value_max_node.name)
+        
         clip_node = helper.make_node(
             'Clip',
-            inputs=self.input_nodes_name,
+            inputs=prev_node_names,
             outputs=[clip_name],
-            min=0.0,
-            max=6.0,
             name=clip_name)
 
         node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
@@ -100,6 +109,48 @@ class Relu6Defused(ActivationDefused):
         )
 
         self.value_infos.append(out_shape_info)
+        self.node_list.append(value_min_node)
+        self.node_list.append(value_max_node)
+        self.node_list.append(clip_node)
+
+        return self.node_list, self.value_infos, self.weight_node_list, {}
+
+class ClipDefused(ActivationDefused):
+
+    def __init__(self, op, op_type, tflite_interpreter, min_val, max_val):
+        ActivationDefused.__init__(self, op, op_type, tflite_interpreter)
+        self.min_val = min_val
+        self.max_val = max_val
+
+    def generate(self):
+        clip_name = self.node_name
+
+        lower = np.array([self.min_val])
+        upper = np.array([self.max_val])
+        # onnx clip only support no shape tensor in min max node
+        value_max_node = utils.create_constant_node(clip_name + '_max_{}'.format(self.max_val), [], upper)
+        value_min_node = utils.create_constant_node(clip_name + '_min_{}'.format(self.min_val), [], lower)
+
+        prev_node_names = self.input_nodes_name.copy()
+        prev_node_names.append(value_min_node.name)
+        prev_node_names.append(value_max_node.name)
+        
+        clip_node = helper.make_node(
+            'Clip',
+            inputs=prev_node_names,
+            outputs=[clip_name],
+            name=clip_name)
+
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
+        out_shape_info = helper.make_tensor_value_info(
+            clip_name,
+            TensorProto.FLOAT,
+            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+        )
+
+        self.value_infos.append(out_shape_info)
+        self.node_list.append(value_min_node)
+        self.node_list.append(value_max_node)
         self.node_list.append(clip_node)
 
         return self.node_list, self.value_infos, self.weight_node_list, {}
@@ -145,24 +196,36 @@ class Relu6(Layer):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
     def generate(self):
+        clip_name = self.node_name
+
+        six = np.array([6.0])
+        zero = np.array([0.0])
+        # onnx clip only support no shape tensor in min max node
+        value_max_node = utils.create_constant_node(clip_name + '_max_6', [], six)
+        value_min_node = utils.create_constant_node(clip_name + '_min_0', [], zero)
+
+        prev_node_names = self.input_nodes_name.copy()
+        prev_node_names.append(value_min_node.name)
+        prev_node_names.append(value_max_node.name)
+
         clip_node = onnx.helper.make_node(
             'Clip',
-            inputs=self.input_nodes_name,
-            outputs=[self.node_name],
-            min=0.0,
-            max=6.0,
-            name=self.node_name
+            inputs=prev_node_names,
+            outputs=[clip_name],
+            name=clip_name
         )
 
         # original layer output
         node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
         out_shape_info = onnx.helper.make_tensor_value_info(
-            self.node_name,
+            clip_name,
             TensorProto.FLOAT,
             utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
+        self.node_list.append(value_min_node)
+        self.node_list.append(value_max_node)
         self.node_list.append(clip_node)
 
         #Generate Quantization Info and Reverse Quantization for Weights and Bias

@@ -114,9 +114,9 @@ def slice_constant_folding(g, node):
     op_version = helper.get_current_opset_version()
     # only support opset 9 & 11
     if op_version == 11:
-        slice_constant_folding_Opset_11(g, node)
+        return slice_constant_folding_Opset_11(g, node)
     elif op_version == 9:
-        slice_constant_folding_Opset_9(g, node)
+        return slice_constant_folding_Opset_9(g, node)
 
 def slice_constant_folding_Opset_11(g, node):
     """ Fold constant and slice nodes to a single constant node.
@@ -130,20 +130,32 @@ def slice_constant_folding_Opset_11(g, node):
     ends_node = helper.find_node_by_output_name(g, node.input[2])
     _, ends = helper.constant_to_list(ends_node)
 
-    axes_node = helper.find_node_by_output_name(g, node.input[3])
+
+    axes_node = None if len(node.input) <= 3 else helper.find_node_by_output_name(g, node.input[3])
     if not axes_node:
         axes = list(range(len(helper.get_shape(data_list))))
     else:
         _, axes = helper.constant_to_list(axes_node)
 
+    steps_node = None if len(node.input) <= 4 else helper.find_node_by_output_name(g, node.input[4])
+    if not steps_node:
+        steps = [1]*len(helper.get_shape(data_list))
+    else:
+        _, steps = helper.constant_to_list(steps_node)
+
+
     data_list = list(map(int, data_list))
     starts = list(map(int, starts))
     ends = list(map(int, ends))
     axes = list(map(int, axes))
+    steps = list(map(int, steps))
 
     data_list = np.reshape(data_list, pre_shape)
 
-    new_data = helper.slice_data(data_list, starts, ends, axes)
+    new_data = None
+    for idx, _ in enumerate(axes):
+        new_data = np.apply_along_axis( lambda x: x[starts[idx] : ends[idx] : steps[idx]], idx, data_list )
+
     new_node = helper.list_to_constant(node.output[0], helper.get_shape(
         new_data), helper.flatten_to_list(new_data))
     g.node.extend([new_node])
@@ -288,7 +300,7 @@ def reshape_constant_input_folding(g, node):
     new_tensor = onnx.helper.make_tensor(
         name=node.output[0],
         data_type=pre_data_node.attribute[0].t.data_type,
-        dims=shape,
+        dims=new_data.shape,
         vals=helper.flatten_to_list(new_data)
     )
     new_node = onnx.helper.make_node(
@@ -438,8 +450,12 @@ def unsqueeze_constant_folding(g, node):
 
     pre_val_info = helper.find_value_by_name(g, node.input[0])
     next_val_info = helper.find_value_by_name(g, node.output[0])
-    g.value_info.remove(pre_val_info)
-    g.value_info.remove(next_val_info)
+    if pre_val_info is not None:
+        g.value_info.remove(pre_val_info)
+    else:
+        print(node.name)
+    if next_val_info is not None:
+        g.value_info.remove(next_val_info)
 
     new_val_info = onnx.helper.make_tensor_value_info(
         node.output[0],
@@ -701,6 +717,10 @@ def div_constant_folding(g, node):
         new_shape = []
     else:
         new_shape = new_data.shape
+
+    # Check data type if it is int
+    if pre_node_1.attribute[0].t.data_type == 7:
+        new_data = new_data.astype('int64')
 
     new_tensor = onnx.helper.make_tensor(
         name=node.output[0]+'_data',

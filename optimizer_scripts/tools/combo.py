@@ -13,7 +13,7 @@ from . import fusing
 from . import constant_folding
 from . import removing_transpose
 from . import modhelper
-from .torch_pattern import torch_pattern_match
+from .common_pattern import torch_pattern_match, tf_pattern_match
 
 def preprocess(model_proto, disable_fuse_bn=False):
     """The most common used functions before other processing.
@@ -51,6 +51,10 @@ def preprocess(model_proto, disable_fuse_bn=False):
     """
     helper.setup_current_opset_version(model_proto)
     eliminating.eliminate_empty_value_infos(model_proto.graph)
+    other.add_name_to_node(model_proto.graph)
+    other.rename_all_node_name(model_proto.graph)
+    replacing.replace_initializer_with_Constant(model_proto.graph)
+    other.topological_sort(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
     passes = ['extract_constant_to_initializer',
               'eliminate_nop_dropout',
@@ -61,12 +65,12 @@ def preprocess(model_proto, disable_fuse_bn=False):
         passes.append('fuse_bn_into_conv')
     m = optimizer.optimize(m, passes)
     g = m.graph
-    other.add_name_to_node(g)
     replacing.replace_initializer_with_Constant(g)
     other.duplicate_param_shared_constant(g)
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
     g = m.graph
+    eliminating.eliminate_nop_pads(g)
     eliminating.eliminate_Identify_and_Dropout(g)
     eliminating.eliminate_trivial_maxpool(g)
     eliminating.eliminate_no_children_input(g)
@@ -128,17 +132,18 @@ def pytorch_constant_folding(m):
     """
     logging.info("Working on Pytorch constant folding.")
     replacing.replace_shape_with_constant(m.graph)
+    replacing.replace_ConstantOfShape_with_constant(m.graph)
 
     # constant_folding
-    m = modhelper.inference_shapes(m)
+    m = other.inference_shapes(m)
     while constant_folding.constant_folding(m.graph):
         logging.debug("After constant folding jobs.")
         other.topological_sort(m.graph)
         while len(m.graph.value_info) != 0:
             m.graph.value_info.pop()
-        m = modhelper.inference_shapes(m)
+        
+        m = other.inference_shapes(m)
         replacing.replace_shape_with_constant(m.graph)
-
     other.topological_sort(m.graph)
     m = torch_pattern_match(m)
     m = optimizer.optimize(m, ['eliminate_deadend'])
@@ -161,27 +166,35 @@ def tensorflow_optimization(m):
     - fuse Transpose into Constant
     - replace Shape with Constant
     """
-    g = m.graph
-    eliminating.eliminate_consecutive_Cast(g)
-    fusing.fuse_Transpose_into_Constant(g)
-    fusing.fuse_Add_into_Conv(g)
-    fusing.fuse_MatMul_and_Add_into_Gemm(g)
-    eliminating.eliminate_Cast_after_input(g)
-    other.topological_sort(g)
+
+    eliminating.eliminate_consecutive_Cast(m.graph)
+    fusing.fuse_Transpose_into_Constant(m.graph)
+    fusing.fuse_MatMul_and_Add_into_Gemm(m.graph)
+    eliminating.eliminate_Cast_after_input(m.graph)
+    other.topological_sort(m.graph)
 
     m = onnx.utils.polish_model(m)
-    g = m.graph
 
     # constant folding
     replacing.replace_shape_with_constant(m.graph)
 
+    # constant_folding
+    m = other.inference_shapes(m)
     while constant_folding.constant_folding(m.graph):
-        m = onnx.utils.polish_model(m)
-        replacing.replace_shape_with_constant(m.graph)
+        logging.debug("After constant folding jobs.")
+        other.topological_sort(m.graph)
+        while len(m.graph.value_info) != 0:
+            m.graph.value_info.pop()
 
-    eliminating.eliminate_consecutive_reshape(g)
-    eliminating.eliminate_Squeeze_before_Reshape(g)
-    other.topological_sort(g)
+        m = other.inference_shapes(m)
+        replacing.replace_shape_with_constant(m.graph)
+    other.topological_sort(m.graph)
+    m = tf_pattern_match(m)
+    m = optimizer.optimize(m, ['eliminate_deadend'])
+
+    eliminating.eliminate_consecutive_reshape(m.graph)
+    eliminating.eliminate_Squeeze_before_Reshape(m.graph)
+    other.topological_sort(m.graph)
     return m
 
 
@@ -213,7 +226,9 @@ def postprocess(m):
     m = onnx.utils.polish_model(m)
     fusing.fuse_conv_and_add_into_conv(m.graph)
     replacing.replace_mul_to_bn(m.graph)
+    replacing.replace_add_to_bn(m.graph)
 
     other.add_output_to_value_info(m.graph)
+    m = optimizer.optimize(m, ['eliminate_deadend'])
     m.producer_name = 'kneron_formatter'
     return m
