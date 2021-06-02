@@ -9,7 +9,7 @@ from tflite.ActivationFunctionType import ActivationFunctionType
 from tflite.BuiltinOperator import BuiltinOperator
 import numpy as np
 from base_layer import Layer
-import utils
+import tflite_utils
 import warnings
 
 
@@ -68,7 +68,7 @@ class ReluDefused(ActivationDefused):
         out_shape_info = onnx.helper.make_tensor_value_info(
             relu_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -88,8 +88,8 @@ class Relu6Defused(ActivationDefused):
         six = np.array([6.0])
         zero = np.array([0.0])
         # onnx clip only support no shape tensor in min max node
-        value_max_node = utils.create_constant_node(clip_name + '_max_6', [], six)
-        value_min_node = utils.create_constant_node(clip_name + '_min_0', [], zero)
+        value_max_node = tflite_utils.create_constant_node(clip_name + '_max_6', [], six)
+        value_min_node = tflite_utils.create_constant_node(clip_name + '_min_0', [], zero)
 
         prev_node_names = self.input_nodes_name.copy()
         prev_node_names.append(value_min_node.name)
@@ -105,7 +105,7 @@ class Relu6Defused(ActivationDefused):
         out_shape_info = helper.make_tensor_value_info(
             clip_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -175,7 +175,7 @@ class Relu(Layer):
         out_shape_info = onnx.helper.make_tensor_value_info(
             self.node_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -201,8 +201,8 @@ class Relu6(Layer):
         six = np.array([6.0])
         zero = np.array([0.0])
         # onnx clip only support no shape tensor in min max node
-        value_max_node = utils.create_constant_node(clip_name + '_max_6', [], six)
-        value_min_node = utils.create_constant_node(clip_name + '_min_0', [], zero)
+        value_max_node = tflite_utils.create_constant_node(clip_name + '_max_6', [], six)
+        value_min_node = tflite_utils.create_constant_node(clip_name + '_min_0', [], zero)
 
         prev_node_names = self.input_nodes_name.copy()
         prev_node_names.append(value_min_node.name)
@@ -220,7 +220,7 @@ class Relu6(Layer):
         out_shape_info = onnx.helper.make_tensor_value_info(
             clip_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -308,7 +308,7 @@ class PRelu(Layer):
         out_shape_info = onnx.helper.make_tensor_value_info(
             self.node_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
         self.value_infos.append(out_shape_info)
 

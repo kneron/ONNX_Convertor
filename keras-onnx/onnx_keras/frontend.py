@@ -23,7 +23,6 @@ class KerasFrontend(object):
   """
   def __init__(self):
     self.logger = logging.getLogger("onnx-keras")
-    self.logger.setLevel(logging.DEBUG)
     # Keras and Onnx model
     self.kmodel = None
     self.omodel = None

@@ -12,7 +12,7 @@ def tflite2onnx_shape_map(shape_list):
 
     elif len(shape_list) == 3:
         return [shape_list[0],shape_list[2],shape_list[1]]
-        
+
     elif len(shape_list) == 2:
         # not change
         return shape_list

@@ -6,7 +6,7 @@ from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
 from aact_layers import defused_activation_node_generator
-import utils
+import tflite_utils
 
 from tflite.ReshapeOptions import ReshapeOptions
 from tflite.L2NormOptions import L2NormOptions
@@ -312,10 +312,10 @@ class Pad(Layer):
 
 
       pad_position_array = np.array([0,0,pad_w0,pad_h0,pad_ch_w,pad_ch_h,pad_w,pad_h]).astype(np.int64)
-      pad_position_node = utils.create_constant_node(pad_name + '_pad_posision_node', pad_position_array.shape, pad_position_array)
+      pad_position_node = tflite_utils.create_constant_node(pad_name + '_pad_posision_node', pad_position_array.shape, pad_position_array)
 
       pad_value_array = np.array([0.0])
-      pad_value_node = utils.create_constant_node(pad_name + '_pad_value_node', pad_value_array.shape, pad_value_array)
+      pad_value_node = tflite_utils.create_constant_node(pad_name + '_pad_value_node', pad_value_array.shape, pad_value_array)
 
       prev_node_names = self.input_nodes_name.copy()
       prev_node_names.append(pad_position_node.name)
@@ -351,7 +351,7 @@ class Squeeze(Layer):
           'Squeeze',
           inputs=self.input_nodes_name,
           outputs=[squeeze_node_name],
-          axes= utils.channel_last_2_channel_first_axis_mapping( self.tflite_squeeze_parser.SqueezeDimsAsNumpy().tolist() ),
+          axes= tflite_utils.channel_last_2_channel_first_axis_mapping( self.tflite_squeeze_parser.SqueezeDimsAsNumpy().tolist() ),
           name=squeeze_node_name
       )
 

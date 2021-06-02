@@ -6,7 +6,7 @@ from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
 from aact_layers import defused_activation_node_generator
-import utils
+import tflite_utils
 import logging
 
 from tflite.Conv2DOptions import Conv2DOptions
@@ -103,7 +103,7 @@ class Convolution(Layer):
           outputs=[self.node_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, dilation_factor, padding_stradegy),
+          pads=tflite_utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, dilation_factor, padding_stradegy),
           dilations=dilation_factor,
           name=self.node_name,
           group=1
@@ -113,7 +113,7 @@ class Convolution(Layer):
       out_shape_info = onnx.helper.make_tensor_value_info(
           self.node_name,
           TensorProto.FLOAT,
-          utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+          tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
       )
       self.value_infos.append(out_shape_info)
 
@@ -226,7 +226,7 @@ class DepthwiseConvolution(Layer):
           outputs=[self.node_name],
           kernel_shape=kernel_shape,
           strides=strides_len,
-          pads=utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, dilation_factor, padding_stradegy),
+          pads=tflite_utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, dilation_factor, padding_stradegy),
           dilations=dilation_factor,
           name=self.node_name,
 
@@ -238,7 +238,7 @@ class DepthwiseConvolution(Layer):
       out_shape_info = onnx.helper.make_tensor_value_info(
           self.node_name,
           TensorProto.FLOAT,
-          utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+          tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
       )
 
       self.value_infos.append(out_shape_info)
@@ -291,7 +291,7 @@ class ResizeNearestNeighbor(Layer):
         target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.float)
 
         scale_val = target_siz/source_size
-        scale_constant_node = utils.create_constant_node(self.node_name + '_scales' ,scale_val.shape ,scale_val)
+        scale_constant_node = tflite_utils.create_constant_node(self.node_name + '_scales' ,scale_val.shape ,scale_val)
 
         constant_info = onnx.helper.make_tensor_value_info(
             name=scale_constant_node.name,
@@ -302,7 +302,7 @@ class ResizeNearestNeighbor(Layer):
         self.value_infos.append(constant_info)
 
         # create roi constant node
-        roi_constant_node = utils.create_constant_node(self.node_name + 'resize_roi', [], np.array([-1],dtype=np.float32))
+        roi_constant_node = tflite_utils.create_constant_node(self.node_name + 'resize_roi', [], np.array([-1],dtype=np.float32))
         self.node_list.append(roi_constant_node)
 
         previous_onnx_node_names = self.input_nodes_name.copy()
@@ -319,7 +319,7 @@ class ResizeNearestNeighbor(Layer):
         resize_nearest_neighbor_info = onnx.helper.make_tensor_value_info(
             name=self.node_name,
             elem_type=TensorProto.FLOAT,
-            shape=utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            shape=tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         # update tables
@@ -352,7 +352,7 @@ class ResizeBilinear(Layer):
         target_siz = np.array([1.0, 1.0, targwt_height, target_width], dtype=np.float)
 
         scale_val = target_siz/source_size
-        scale_constant_node = utils.create_constant_node(self.node_name + '_scales' ,scale_val.shape ,scale_val)
+        scale_constant_node = tflite_utils.create_constant_node(self.node_name + '_scales' ,scale_val.shape ,scale_val)
 
         constant_info = onnx.helper.make_tensor_value_info(
             name=scale_constant_node.name,
@@ -363,7 +363,7 @@ class ResizeBilinear(Layer):
         self.value_infos.append(constant_info)
 
         # create roi constant node
-        roi_constant_node = utils.create_constant_node(self.node_name + 'resize_roi', [], np.array([-1],dtype=np.float32))
+        roi_constant_node = tflite_utils.create_constant_node(self.node_name + 'resize_roi', [], np.array([-1],dtype=np.float32))
         self.node_list.append(roi_constant_node)
 
         previous_onnx_node_names = self.input_nodes_name.copy()
@@ -380,7 +380,7 @@ class ResizeBilinear(Layer):
         resize_nearest_neighbor_info = onnx.helper.make_tensor_value_info(
             name=self.node_name,
             elem_type=TensorProto.FLOAT,
-            shape=utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            shape=tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         # update tables
@@ -457,7 +457,7 @@ class TransposeConvolution(Layer):
           strides=strides_len,
 
           # TODO: calculate padding for tanspose conv
-          #pads = utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
+          #pads = tflite_utils.getPadding(input_feature_map_shape, kernel_shape, strides_len, padding_stradegy),
           name=self.node_name,
           group=1
       )
@@ -466,7 +466,7 @@ class TransposeConvolution(Layer):
       out_shape_info = onnx.helper.make_tensor_value_info(
           self.node_name,
           TensorProto.FLOAT,
-          utils.tflite2onnx_shape_map(output_shape_value.tolist())
+          tflite_utils.tflite2onnx_shape_map(output_shape_value.tolist())
       )
       self.value_infos.append(out_shape_info)
 

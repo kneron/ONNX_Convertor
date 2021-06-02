@@ -13,7 +13,6 @@ class Layer:
     self.inputs = self.getInputs()
     self.outputs = self.getOutputs()
     self.logger = logging.getLogger("onnx-keras")
-    self.logger.setLevel(logging.DEBUG)
     self.output_shape = None
     self.input_shapes = []
     self.input_keras_shapes = []
