@@ -85,7 +85,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     return m
 
 
-def common_optimization(m, quantization_info = None):
+def common_optimization(m):
     """Common optimizations can be used in most cases.
 
     :param m: the original model input\\

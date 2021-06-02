@@ -128,8 +128,8 @@ class ClipDefused(ActivationDefused):
         lower = np.array([self.min_val])
         upper = np.array([self.max_val])
         # onnx clip only support no shape tensor in min max node
-        value_max_node = utils.create_constant_node(clip_name + '_max_{}'.format(self.max_val), [], upper)
-        value_min_node = utils.create_constant_node(clip_name + '_min_{}'.format(self.min_val), [], lower)
+        value_max_node = tflite_utils.create_constant_node(clip_name + '_max_{}'.format(self.max_val), [], upper)
+        value_min_node = tflite_utils.create_constant_node(clip_name + '_min_{}'.format(self.min_val), [], lower)
 
         prev_node_names = self.input_nodes_name.copy()
         prev_node_names.append(value_min_node.name)
@@ -145,7 +145,7 @@ class ClipDefused(ActivationDefused):
         out_shape_info = helper.make_tensor_value_info(
             clip_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+            tflite_utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)

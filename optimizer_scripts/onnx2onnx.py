@@ -3,7 +3,6 @@ import onnx.utils
 from onnx import optimizer
 import sys
 import argparse
-import json
 
 from tools import eliminating
 from tools import fusing
