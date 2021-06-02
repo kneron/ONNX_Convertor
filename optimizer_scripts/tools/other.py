@@ -983,7 +983,7 @@ def split_ConvTranspose(model):
         g.node.remove(node)
     topological_sort(g)
 
-def add_bn_on_skip_branch(g, quantization_info):
+def add_bn_on_skip_branch(g):
     for n in g.node:
         # Find merge node (Add)
         if n.op_type != 'Add':
@@ -1028,17 +1028,13 @@ def add_bn_on_skip_branch(g, quantization_info):
             [node_name],
             name = node_name
         )
-        # Add BN quantization info
-        if split_node.output[0] in quantization_info:
-            bn_name = split_node.output[0] + "_nop_bn"
-            quantization_info[bn_name] = quantization_info[split_node.output[0]]
         # Reconnect the graph
         replace_node_input(n, value_name, node_name)
         # Add node to the graph
         g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
     topological_sort(g)
 
-def add_bn_before_add(g, quantization_info):
+def add_bn_before_add(g):
     for n in g.node:
         # Find merge node (Add)
         if n.op_type != 'Add':
@@ -1085,17 +1081,11 @@ def add_bn_before_add(g, quantization_info):
             g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
         if not input_node_a.op_type == 'BatchNormalization' or len(helper.find_following_nodes_by_input_value_name(g, input_node_a.output[0])) > 1:
             add_bn_after(input_node_a)
-            if input_node_a.output[0] in quantization_info:
-                bn_name = input_node_a.output[0] + "_nop_bn"
-                quantization_info[bn_name] = quantization_info[input_node_a.output[0]]
         if not input_node_b.op_type == 'BatchNormalization' or len(helper.find_following_nodes_by_input_value_name(g, input_node_b.output[0])) > 1:
             add_bn_after(input_node_b)
-            if input_node_b.output[0] in quantization_info:
-                bn_name = input_node_b.output[0] + "_nop_bn"
-                quantization_info[bn_name] = quantization_info[input_node_b.output[0]]
     topological_sort(g)
 
-def add_bn_before_activation(g, quantization_info):
+def add_bn_before_activation(g):
     activation_nodes = set(['Relu', 'Clip', 'PRelu', 'LeakyRelu'])
     previous_nodes = set(['Conv', 'BatchNormalization'])
     for n in g.node:
@@ -1137,9 +1127,6 @@ def add_bn_before_activation(g, quantization_info):
             # Add node to the graph
             g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
         add_bn_after(input_node)
-        if input_node.output[0] in quantization_info:
-            bn_name = input_node.output[0] + "_nop_bn"
-            quantization_info[bn_name] = quantization_info[input_node.output[0]]
     topological_sort(g)
 
 def rename_output_name(g, original_name, new_name):
