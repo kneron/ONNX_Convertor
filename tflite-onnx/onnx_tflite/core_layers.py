@@ -81,11 +81,11 @@ class Dense(Layer):
       weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
 
       #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info = node_output_detail.get("quantization_parameters", {})
       output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info = node_input_detail.get("quantization_parameters", {})
       input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
-      weight_quantization_info = weights_node_info["quantization_parameters"]
+      weight_quantization_info = weights_node_info.get("quantization_parameters", {})
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
       if weight_quantization_info["scales"]:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
@@ -130,7 +130,7 @@ class Dense(Layer):
           bias_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(2))
           bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
 
-          bias_quantization_info = bias_node_info["quantization_parameters"]
+          bias_quantization_info = bias_node_info.get("quantization_parameters", {})
           bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
           if bias_quantization_info["scales"]:
               bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
@@ -274,9 +274,9 @@ class Reshape(Layer):
                 if o_n_i_n == self.node_name:
                    o_n.input_nodes_name[idx] = transpose_after_node_name
         
-      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info = node_output_detail.get("quantization_parameters", {})
       output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info = node_input_detail.get("quantization_parameters", {})
       input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
       quantization_info = {}
       quantization_info[reshape_node_name] = input_quantization_info

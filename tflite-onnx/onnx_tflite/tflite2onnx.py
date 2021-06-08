@@ -202,7 +202,7 @@ def merge_nested_quantization_info(dumped_info, quantization_info, name):
 
 def check_quantization(tensor_details):
     for node_detail in tensor_details:
-        if len(node_detail["quantization_parameters"]["scales"] > 0):
+        if "quantization_parameters" in node_detail["quantization_parameters"] and len(node_detail["quantization_parameters"]["scales"]) > 0:
             return True
     return False 
 
