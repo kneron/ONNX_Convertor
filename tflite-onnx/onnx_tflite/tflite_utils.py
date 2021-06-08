@@ -103,23 +103,6 @@ def get_value_from_dict(dict_obj, key):
     else:
         raise TypeError('dict_obj is not type of ' + dict.__name__)
 
-def get_quantization_info_in_array(quantization_info):
-    if len(quantization_info["scales"]) == 0:
-        quantization_info["radix"] = 0
-        quantization_info["kneron_scale"] = 0
-    else:
-        dtype_to_power = {"uint8":8, "int32":32}
-        if quantization_info["dtype"] not in dtype_to_power:
-            raise TypeError("Unsupported Fix Point Type")
-        zero_points = quantization_info["zero_points"]
-        scales = quantization_info["scales"]
-        quantization_info["min"] = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))]
-        quantization_info["max"] = [((1 << dtype_to_power[quantization_info["dtype"]]) - zero_points[i]) * scales[i] for i in range(len(zero_points))]
-        radix = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
-        quantization_info["radix"] = radix
-        quantization_info["kneron_scale"] = [1 / ((1 << radix[i]) * scales[i]) for i in range(len(zero_points))]
-    
-    return "1"
 def create_constant_node(node_name, shape, data):
     # default data type
     data_type = onnx.helper.TensorProto.FLOAT
