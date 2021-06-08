@@ -40,31 +40,6 @@ class Convolution(Layer):
       strides_len = [self.tflite_conv_parser.StrideH(),self.tflite_conv_parser.StrideW()]
       dilation_factor = [self.tflite_conv_parser.DilationHFactor(), self.tflite_conv_parser.DilationWFactor()]
 
-      #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail["quantization_parameters"]
-      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
-      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
-      weight_quantization_info = weights_node_info["quantization_parameters"]
-      weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
-      bias_quantization_info = bias_node_info["quantization_parameters"]
-      bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
-
-    #   input_quantization_info_clean = utils.get_quantization_info_in_array(input_quantization_info)
-    #   output_quantization_info_clean = utils.get_quantization_info_in_array(output_quantization_info)
-    #   weight_quantization_info_clean = utils.get_quantization_info_in_array(weight_quantization_info)
-    #   bias_quantization_info_clean = utils.get_quantization_info_in_array(bias_quantization_info)
-      #Nested weight and bias into input
-      input_quantization_info["weight"] =  weight_quantization_info
-      input_quantization_info["bias"] = bias_quantization_info
-
-      weights_array = np.array(weights_array, dtype = np.dtype("f4"))
-      if weight_quantization_info["scales"]:
-          weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
-      bias_array = np.array(bias_array, dtype = np.dtype("f4"))
-      if bias_quantization_info["scales"]:
-          bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
-
       padding_stradegy = 'NONE'
       if self.tflite_conv_parser.Padding() is Padding.SAME:
           padding_stradegy = 'SAME'
@@ -127,14 +102,8 @@ class Convolution(Layer):
           for idx, o_n_i_n in enumerate(o_n.input_nodes_name):
               if o_n_i_n == self.node_name:
                   o_n.input_nodes_name[idx] = self.node_list[-1].name
-      
-      quantization_info = {}
-      quantization_info[weight_onnx_node_name] = weight_quantization_info
-      quantization_info[bias_onnx_node_name] = bias_quantization_info
-      quantization_info[previous_onnx_node_names[0]] = input_quantization_info
-      quantization_info[self.node_name] = output_quantization_info
 
-      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
+      return self.node_list, self.value_infos, self.weight_node_list
 
   def defuse_activation_function(self):
       return defused_activation_node_generator(
@@ -160,26 +129,6 @@ class DepthwiseConvolution(Layer):
 
       weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
       bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
-      
-      #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail["quantization_parameters"]
-      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
-      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
-      weight_quantization_info = weights_node_info["quantization_parameters"]
-      weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
-      bias_quantization_info = bias_node_info["quantization_parameters"]
-      bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
-      #Nested weight and bias into input
-      input_quantization_info["weight"] =  weight_quantization_info
-      input_quantization_info["bias"] = bias_quantization_info
-
-      weights_array = np.array(weights_array, dtype = np.dtype("f4"))
-      if weight_quantization_info["scales"]:
-          weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
-      bias_array = np.array(bias_array, dtype = np.dtype("f4"))
-      if bias_quantization_info["scales"]:
-          bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
 
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
       channel = weights_array.shape[3]
@@ -253,15 +202,9 @@ class DepthwiseConvolution(Layer):
           for idx, o_n_i_n in enumerate(o_n.input_nodes_name):
               if o_n_i_n == self.node_name:
                   o_n.input_nodes_name[idx] = self.node_list[-1].name
-      
-      quantization_info = {}
-      quantization_info[weight_onnx_node_name] = weight_quantization_info
-      quantization_info[bias_onnx_node_name] = bias_quantization_info
-      quantization_info[previous_onnx_node_names[0]] = input_quantization_info
-      quantization_info[self.node_name] = output_quantization_info
 
-      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
-      
+      return self.node_list, self.value_infos, self.weight_node_list
+
   def defuse_activation_function(self):
       return defused_activation_node_generator(
           activation_function_type=self.tflite_conv_parser.FusedActivationFunction(),
@@ -326,8 +269,8 @@ class ResizeNearestNeighbor(Layer):
         self.node_list.append(resize_nearest_neighbor_node)
         self.value_infos.append(resize_nearest_neighbor_info)
 
-        quantization_info = {}
-        return self.node_list, self.value_infos, self.weight_node_list, quantization_info
+
+        return self.node_list, self.value_infos, self.weight_node_list
 
 
 class ResizeBilinear(Layer):
@@ -387,8 +330,8 @@ class ResizeBilinear(Layer):
         self.node_list.append(resize_nearest_neighbor_node)
         self.value_infos.append(resize_nearest_neighbor_info)
 
-        quantization_info = {}
-        return self.node_list, self.value_infos, self.weight_node_list, quantization_info
+
+        return self.node_list, self.value_infos, self.weight_node_list
 
 
 class TransposeConvolution(Layer):
@@ -412,19 +355,6 @@ class TransposeConvolution(Layer):
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
 
       strides_len = [self.tflite_tconv_parser.StrideH(),self.tflite_tconv_parser.StrideW()]
-
-      #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail["quantization_parameters"]
-      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
-      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
-      weight_quantization_info = weights_node_info["quantization_parameters"]
-      weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
-      weights_array = np.array(weights_array, dtype = np.dtype("f4"))
-      if weight_quantization_info["scales"]:
-          weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
-      #Nested weight quantization info into input
-      input_quantization_info["weight"] = weight_quantization_info
 
       padding_stradegy = 'NONE'
       if self.tflite_tconv_parser.Padding() is Padding.SAME:
@@ -474,9 +404,5 @@ class TransposeConvolution(Layer):
       self.weight_node_list.append(weight_onnx_node)
       self.node_list.append(tconv_onnx_node)
 
-      quantization_info = {}
-      quantization_info[weight_onnx_node_name] = weight_quantization_info
-      quantization_info[previous_onnx_node_names[0]] = input_quantization_info
-      quantization_info[self.node_name] = output_quantization_info
 
-      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
+      return self.node_list, self.value_infos, self.weight_node_list
