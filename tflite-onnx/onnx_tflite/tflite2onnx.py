@@ -150,12 +150,18 @@ def merge_quantization_info(dumped_info, quantization_info):
             if "weight" in quantization_info[name]:
                 merge_nested_quantization_info(curr_dict, quantization_info[name]["weight"], "weight")
             if "bias" in quantization_info[name]:
-                merge_nested_quantization_info(curr_dict, quantization_info[name]["bias"], "weight") 
+                merge_nested_quantization_info(curr_dict, quantization_info[name]["bias"], "bias") 
 
         curr_dict["scales"] = curr_dict["scales"].tolist()
         curr_dict["zero_points"] = curr_dict["zero_points"].tolist()
 
-        dumped_info[name] = curr_dict
+        dumped_dict = {}
+        dumped_dict["min"] = curr_dict["min"]
+        dumped_dict["max"] = curr_dict["max"]
+        dumped_dict["desired_radix"] = curr_dict["radix"]
+        dumped_dict["desired_scale"] = curr_dict["scale"]
+
+        dumped_info[name] = dumped_dict
     
     return 
 
@@ -180,29 +186,43 @@ def merge_nested_quantization_info(dumped_info, quantization_info, name):
         if len(maxs) == 1:
             quantization_info["max"] = {"all":maxs[0]}
         
-        radixs = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
+        def get_radix(scale, max_perchannel, min_perchannel):
+            range_tflite = max_perchannel - min_perchannel
+            range_kneron = max(abs(max_perchannel), abs(min_perchannel)) * 2
+            ratio = range_tflite / range_kneron
+            radix = math.floor(math.log(ratio / scale, 2))
+            return radix
+
+        radixs = [get_radix(scales[i], maxs[i], mins[i]) for i in range(len(zero_points))]
+
         quantization_info["radix"] = radixs
         if len(radixs) == 1:
             quantization_info["radix"] = {"all":radixs[0]}
-        
-        kneron_scales = [1 / ((1 << radixs[i]) * scales[i]) for i in range(len(zero_points))]
+
+        kneron_scales = []
+        for i in range(len(zero_points)):
+            if radixs[i] >= 0:
+                kneron_scales.append(1 / ((1 << radixs[i]) * scales[i]))
+            elif radixs[i] < 0:
+                kneron_scales.append((1 / 2 **(-radixs[i])) * scales[i]) 
+
         quantization_info["scale"] = kneron_scales
         if len(kneron_scales) == 1:
             quantization_info["scale"] = {"all":kneron_scales[0]}
 
-        # quantization_info["min"] = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))]
-        # quantization_info["max"] = [((1 << dtype_to_power[quantization_info["dtype"]]) - zero_points[i]) * scales[i] for i in range(len(zero_points))]
-        # radix = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
-        # quantization_info["radix"] = radix
-        # quantization_info["kneron_scale"] = [1 / ((1 << radix[i]) * scales[i]) for i in range(len(zero_points))]
-    
-    dumped_info[name] = quantization_info
+    dumped_dict = {}
+    dumped_dict["min"] = quantization_info["min"]
+    dumped_dict["max"] = quantization_info["max"]
+    dumped_dict["desired_scale"] = quantization_info["scale"]
+    dumped_dict["desired_radix"] = quantization_info["radix"]
+
+    dumped_info[name] = dumped_dict
     return 
 
 
 def check_quantization(tensor_details):
     for node_detail in tensor_details:
-        if "quantization_parameters" in node_detail["quantization_parameters"] and len(node_detail["quantization_parameters"]["scales"]) > 0:
+        if "quantization_parameters" in node_detail and len(node_detail["quantization_parameters"]["scales"]) > 0:
             return True
     return False 
 

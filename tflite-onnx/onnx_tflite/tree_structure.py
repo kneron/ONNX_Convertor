@@ -210,7 +210,7 @@ class Tree:
             layer_scale, layer_zero_point = item["quantization"]
             layer_min = (0 - layer_zero_point) * layer_scale
             layer_max = (255 - layer_zero_point) * layer_scale
-            if item["quantization"] != (0.0, 0):
+            if item["quantization"] != (0.0, 0) and layer_min == 0:
                 quantized_node_list.append(item["name"])
                 quantized_node_map[item["name"]] = (layer_min, layer_max)
         
