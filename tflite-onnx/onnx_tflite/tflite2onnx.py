@@ -155,11 +155,17 @@ def merge_quantization_info(dumped_info, quantization_info):
         curr_dict["scales"] = curr_dict["scales"].tolist()
         curr_dict["zero_points"] = curr_dict["zero_points"].tolist()
 
+        print(quantization_info)
+        print(curr_dict)
         dumped_dict = {}
-        dumped_dict["min"] = curr_dict["min"]
-        dumped_dict["max"] = curr_dict["max"]
-        dumped_dict["desired_radix"] = curr_dict["radix"]
-        dumped_dict["desired_scale"] = curr_dict["scale"]
+        if "min" in curr_dict:
+            dumped_dict["min"] = curr_dict["min"]
+        if "max" in curr_dict:
+            dumped_dict["max"] = curr_dict["max"]
+        if "radix" in curr_dict:
+            dumped_dict["desired_radix"] = curr_dict["radix"]
+        if "scale" in curr_dict:
+            dumped_dict["desired_scale"] = curr_dict["scale"]
 
         dumped_info[name] = dumped_dict
     
@@ -211,10 +217,14 @@ def merge_nested_quantization_info(dumped_info, quantization_info, name):
             quantization_info["scale"] = {"all":kneron_scales[0]}
 
     dumped_dict = {}
-    dumped_dict["min"] = quantization_info["min"]
-    dumped_dict["max"] = quantization_info["max"]
-    dumped_dict["desired_scale"] = quantization_info["scale"]
-    dumped_dict["desired_radix"] = quantization_info["radix"]
+    if "min" in quantization_info:
+        dumped_dict["min"] = quantization_info["min"]
+    if "max" in quantization_info:
+        dumped_dict["max"] = quantization_info["max"]
+    if "scale" in quantization_info:
+        dumped_dict["desired_scale"] = quantization_info["scale"]
+    if "radix" in quantization_info:
+        dumped_dict["desired_radix"] = quantization_info["radix"]
 
     dumped_info[name] = dumped_dict
     return 

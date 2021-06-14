@@ -87,7 +87,7 @@ class Dense(Layer):
       input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
       weight_quantization_info = weights_node_info.get("quantization_parameters", {})
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
-      if weight_quantization_info["scales"]:
+      if "scales" in weight_quantization_info and len(weight_quantization_info["scales"]) > 0:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
       #Nested weight quantization into input
       input_quantization_info["weight"] = weight_quantization_info
@@ -132,7 +132,7 @@ class Dense(Layer):
 
           bias_quantization_info = bias_node_info.get("quantization_parameters", {})
           bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
-          if bias_quantization_info["scales"]:
+          if "scales" in bias_quantization_info and len(bias_quantization_info["scales"]) > 0:
               bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
 
           # make bias onnx node
@@ -280,7 +280,8 @@ class Reshape(Layer):
       input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
       quantization_info = {}
       quantization_info[reshape_node_name] = input_quantization_info
-      quantization_info[transpose_after_node_name] = output_quantization_info
+      if self.tflite_reshape_parser:
+        quantization_info[transpose_after_node_name] = output_quantization_info
 
       return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
