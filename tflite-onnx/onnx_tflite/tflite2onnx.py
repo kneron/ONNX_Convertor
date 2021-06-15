@@ -123,10 +123,11 @@ def merge_quantization_info(dumped_info, quantization_info):
                 curr_dict["max"] = {"all":maxs[0]}
             
             def get_radix(scale, max_perchannel, min_perchannel):
-                range_tflite = max_perchannel - min_perchannel
+                # range_tflite = max_perchannel - min_perchannel
+                # ratio = range_tflite / range_kneron
+                # radix = math.floor(math.log(ratio / scale, 2))
                 range_kneron = max(abs(max_perchannel), abs(min_perchannel)) * 2
-                ratio = range_tflite / range_kneron
-                radix = math.floor(math.log(ratio / scale, 2))
+                radix = math.floor(math.log((1 << 8) / range_kneron, 2))
                 return radix
 
             # radixs = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
@@ -138,25 +139,23 @@ def merge_quantization_info(dumped_info, quantization_info):
 
             kneron_scales = []
             for i in range(len(zero_points)):
-                if radixs[i] >= 0:
-                    kneron_scales.append(1 / ((1 << radixs[i]) * scales[i]))
-                elif radixs[i] < 0:
-                    kneron_scales.append((1 / 2 **(-radixs[i])) * scales[i]) 
+                uppper_limit = 1 << (7 - radixs[i]) if (7 - radixs[i]) >= 0 else  1 >> (radixs[i] - 7)
+                curr_upper_limit = max(abs(maxs[i]), abs(mins[i]))
+                kneron_scales.append(uppper_limit/curr_upper_limit)
+
 
             curr_dict["scale"] = kneron_scales
             if len(kneron_scales) == 1:
                 curr_dict["scale"] = {"all":kneron_scales[0]}
 
-            if "weight" in quantization_info[name]:
-                merge_nested_quantization_info(curr_dict, quantization_info[name]["weight"], "weight")
-            if "bias" in quantization_info[name]:
-                merge_nested_quantization_info(curr_dict, quantization_info[name]["bias"], "bias") 
+            # if "weight" in quantization_info[name]:
+            #     merge_nested_quantization_info(curr_dict, quantization_info[name]["weight"], "weight")
+            # if "bias" in quantization_info[name]:
+            #     merge_nested_quantization_info(curr_dict, quantization_info[name]["bias"], "bias") 
 
         curr_dict["scales"] = curr_dict["scales"].tolist()
         curr_dict["zero_points"] = curr_dict["zero_points"].tolist()
 
-        print(quantization_info)
-        print(curr_dict)
         dumped_dict = {}
         if "min" in curr_dict:
             dumped_dict["min"] = curr_dict["min"]
@@ -296,7 +295,6 @@ def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_
             onnx_node_list.extend(nodes)
         if len(quantization_info) != 0:
             merge_quantization_info(dumped_quantization_info, quantization_info)
-            #print(dumped_quantization_info)
 
     if check_quantization(interpreter.get_tensor_details()): 
         json_save_path = model_save_path[:-5] + "_user_config.json"
