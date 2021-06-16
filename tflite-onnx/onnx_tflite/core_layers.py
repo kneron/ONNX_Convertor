@@ -79,7 +79,18 @@ class Dense(Layer):
       
 
       weights_array = self.tflite_interpreter.get_tensor(weights_node_info['index'])
-      
+
+      #Generate Quantization Info and Reverse Quantization for Weights and Bias
+      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      weight_quantization_info = weights_node_info["quantization_parameters"]
+      weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
+      if weight_quantization_info["scales"]:
+          weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
+      #Nested weight quantization into input
+      input_quantization_info["weight"] = weight_quantization_info
 
       # transpose because shape define diffent between tflite and onnx
       weights_array = np.transpose(weights_array, (1,0))
@@ -101,6 +112,7 @@ class Dense(Layer):
       node_name_before_fc.extend(self.input_nodes_name)
       node_name_before_fc.append(weight_onnx_node_name)
 
+      bias_quantization_info = {}
       if self.op.Inputs(2) is -1: # no bias node
           zeros = [0]*weights_node_info['shape'][0]
           bias_array = np.array(zeros)
@@ -117,6 +129,12 @@ class Dense(Layer):
       else:
           bias_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(2))
           bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
+
+          bias_quantization_info = bias_node_info["quantization_parameters"]
+          bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
+          if bias_quantization_info["scales"]:
+              bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
+
           # make bias onnx node
           bias_onnx_node_name = fc_name + "_bias"
           bias_onnx_node = onnx.helper.make_tensor(
@@ -156,9 +174,16 @@ class Dense(Layer):
           for idx, o_n_i_n in enumerate(o_n.input_nodes_name):
               if o_n_i_n == self.node_name:
                   o_n.input_nodes_name[idx] = self.node_list[-1].name
+      
+      quantization_info = {}
+      quantization_info[weight_onnx_node_name] = weight_quantization_info
+      print(self.input_nodes_name)
+      quantization_info[self.input_nodes_name[0]] = input_quantization_info
+      quantization_info[self.node_name] = output_quantization_info
+      if bias_quantization_info:
+          quantization_info[bias_onnx_node_name] = bias_quantization_info
 
-
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
   def defuse_activation_function(self):
       return defused_activation_node_generator(
@@ -248,9 +273,16 @@ class Reshape(Layer):
             for idx, o_n_i_n in enumerate(o_n.input_nodes_name):
                 if o_n_i_n == self.node_name:
                    o_n.input_nodes_name[idx] = transpose_after_node_name
+        
+      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      quantization_info = {}
+      quantization_info[reshape_node_name] = input_quantization_info
+      quantization_info[transpose_after_node_name] = output_quantization_info
 
-      return self.node_list, self.value_infos, self.weight_node_list
-
+      return self.node_list, self.value_infos, self.weight_node_list, quantization_info
 
 class Pad(Layer):
 
@@ -303,7 +335,7 @@ class Pad(Layer):
       self.node_list.append(pad_value_node)
       self.node_list.append(pad_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
 class Squeeze(Layer):
 
@@ -326,7 +358,7 @@ class Squeeze(Layer):
       # update tables
       self.node_list.append(squeeze_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
 class L2Normalization(Layer):
 
@@ -355,7 +387,7 @@ class L2Normalization(Layer):
       # update tables
       self.node_list.append(l2norm_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
 class SpaceToDepth(Layer):
 
@@ -383,7 +415,7 @@ class SpaceToDepth(Layer):
       # update tables
       self.node_list.append(space2depth_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
 class DepthToSpace(Layer):
 
@@ -411,7 +443,7 @@ class DepthToSpace(Layer):
       # update tables
       self.node_list.append(depth2space_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
 class Maximum(Layer):
 
@@ -432,7 +464,7 @@ class Maximum(Layer):
       # update tables
       self.node_list.append(max_node)
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
 
 class NullLayer(Layer):
 
@@ -442,4 +474,4 @@ class NullLayer(Layer):
 
   def generate(self):
 
-      return self.node_list, self.value_infos, self.weight_node_list
+      return self.node_list, self.value_infos, self.weight_node_list, {}
