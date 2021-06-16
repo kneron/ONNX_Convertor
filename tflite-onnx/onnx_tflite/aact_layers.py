@@ -182,7 +182,7 @@ class Relu(Layer):
         self.node_list.append(relu_node)
 
         #Generate Quantization Info and Reverse Quantization for Weights and Bias
-        output_quantization_info = node_output_detail["quantization_parameters"]
+        output_quantization_info = node_output_detail.get("quantization_parameters", {})
         output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
         quantization_info = {}
         quantization_info[self.node_name] = output_quantization_info
@@ -229,7 +229,7 @@ class Relu6(Layer):
         self.node_list.append(clip_node)
 
         #Generate Quantization Info and Reverse Quantization for Weights and Bias
-        output_quantization_info = node_output_detail["quantization_parameters"]
+        output_quantization_info = node_output_detail.get("quantization_parameters", {})
         output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
         quantization_info = {}
         quantization_info[self.node_name] = output_quantization_info
@@ -313,7 +313,7 @@ class PRelu(Layer):
         self.value_infos.append(out_shape_info)
 
         #Generate Quantization Info and Reverse Quantization for Weights and Bias
-        output_quantization_info = node_output_detail["quantization_parameters"]
+        output_quantization_info = node_output_detail.get("quantization_parameters", {})
         output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
         quantization_info = {}
         quantization_info[self.node_name] = output_quantization_info

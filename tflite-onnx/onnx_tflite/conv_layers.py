@@ -41,13 +41,13 @@ class Convolution(Layer):
       dilation_factor = [self.tflite_conv_parser.DilationHFactor(), self.tflite_conv_parser.DilationWFactor()]
 
       #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info = node_output_detail.get("quantization_parameters", {})
       output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info = node_input_detail.get("quantization_parameters", {})
       input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
-      weight_quantization_info = weights_node_info["quantization_parameters"]
+      weight_quantization_info = weights_node_info.get("quantization_parameters", {})
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
-      bias_quantization_info = bias_node_info["quantization_parameters"]
+      bias_quantization_info = bias_node_info.get("quantization_parameters", {})
       bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
 
     #   input_quantization_info_clean = utils.get_quantization_info_in_array(input_quantization_info)
@@ -59,10 +59,10 @@ class Convolution(Layer):
       input_quantization_info["bias"] = bias_quantization_info
 
       weights_array = np.array(weights_array, dtype = np.dtype("f4"))
-      if weight_quantization_info["scales"]:
+      if "scales" in weight_quantization_info and len(weight_quantization_info["scales"]) > 0:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
       bias_array = np.array(bias_array, dtype = np.dtype("f4"))
-      if bias_quantization_info["scales"]:
+      if "scales" in bias_quantization_info and len(bias_quantization_info["scales"]) > 0:
           bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
 
       padding_stradegy = 'NONE'
@@ -162,23 +162,23 @@ class DepthwiseConvolution(Layer):
       bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
       
       #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info = node_output_detail.get("quantization_parameters", {})
       output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info = node_input_detail.get("quantization_parameters", {})
       input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
-      weight_quantization_info = weights_node_info["quantization_parameters"]
+      weight_quantization_info = weights_node_info.get("quantization_parameters", {})
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
-      bias_quantization_info = bias_node_info["quantization_parameters"]
+      bias_quantization_info = bias_node_info.get("quantization_parameters", {})
       bias_quantization_info["dtype"] = str(bias_node_info["dtype"]).split(".")[1].split("'")[0]
       #Nested weight and bias into input
       input_quantization_info["weight"] =  weight_quantization_info
       input_quantization_info["bias"] = bias_quantization_info
 
       weights_array = np.array(weights_array, dtype = np.dtype("f4"))
-      if weight_quantization_info["scales"]:
+      if "scales" in weight_quantization_info and len(weight_quantization_info["scales"]) > 0:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
       bias_array = np.array(bias_array, dtype = np.dtype("f4"))
-      if bias_quantization_info["scales"]:
+      if "scales" in bias_quantization_info and len(bias_quantization_info["scales"]) > 0:
           bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
 
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
@@ -414,14 +414,14 @@ class TransposeConvolution(Layer):
       strides_len = [self.tflite_tconv_parser.StrideH(),self.tflite_tconv_parser.StrideW()]
 
       #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail["quantization_parameters"]
+      output_quantization_info = node_output_detail.get("quantization_parameters", {})
       output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail["quantization_parameters"]
+      input_quantization_info = node_input_detail.get("quantization_parameters", {})
       input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
-      weight_quantization_info = weights_node_info["quantization_parameters"]
+      weight_quantization_info = weights_node_info.get("quantization_parameters", {})
       weight_quantization_info["dtype"] = str(weights_node_info["dtype"]).split(".")[1].split("'")[0]
       weights_array = np.array(weights_array, dtype = np.dtype("f4"))
-      if weight_quantization_info["scales"]:
+      if "scales" in weight_quantization_info and len(weight_quantization_info["scales"]) > 0:
           weights_array = (weights_array - weight_quantization_info["zero_points"][0]) * weight_quantization_info["scales"][0]
       #Nested weight quantization info into input
       input_quantization_info["weight"] = weight_quantization_info
