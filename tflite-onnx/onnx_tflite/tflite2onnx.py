@@ -112,34 +112,29 @@ def merge_quantization_info(dumped_info, quantization_info):
             zero_points = curr_dict["zero_points"]
             scales = curr_dict["scales"]
 
-            mins = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))]
+            mins = [(-1 * zero_points[i]) * scales[i] for i in range(len(zero_points))] if "bias" not in name else curr_dict.get("min", [])
             curr_dict["min"] = mins
             if len(mins) == 1:
                 curr_dict["min"] = {"all":mins[0]}
             
-            maxs = [((1 << dtype_to_power[curr_dict["dtype"]]) - zero_points[i] - 1) * scales[i] for i in range(len(zero_points))]
+            maxs = [((1 << dtype_to_power[curr_dict["dtype"]]) - zero_points[i] - 1) * scales[i] for i in range(len(zero_points))] if "bias" not in name else curr_dict.get("max", [])
             curr_dict["max"] = maxs
             if len(maxs) == 1:
                 curr_dict["max"] = {"all":maxs[0]}
             
             def get_radix(scale, max_perchannel, min_perchannel):
-                # range_tflite = max_perchannel - min_perchannel
-                # ratio = range_tflite / range_kneron
-                # radix = math.floor(math.log(ratio / scale, 2))
                 range_kneron = max(abs(max_perchannel), abs(min_perchannel)) * 2
                 radix = math.floor(math.log((1 << 8) / range_kneron, 2))
                 return radix
 
-            # radixs = [int(1 / scales[i]).bit_length() - 1 for i in range(len(zero_points))]
-            radixs = [get_radix(scales[i], maxs[i], mins[i]) for i in range(len(zero_points))]
-            #radixs = [-int(math.log(scales[i],2)) for i in range(len(zero_points))]
+            radixs = [get_radix(scales[i], maxs[i], mins[i]) for i in range(len(zero_points))] 
             curr_dict["radix"] = radixs
             if len(radixs) == 1:
                 curr_dict["radix"] = {"all":radixs[0]}
 
             kneron_scales = []
             for i in range(len(zero_points)):
-                uppper_limit = 1 << (7 - radixs[i]) if (7 - radixs[i]) >= 0 else  1 >> (radixs[i] - 7)
+                uppper_limit = 1 << (7 - radixs[i]) if (7 - radixs[i]) >= 0 else  (2 ** (7 - radixs[i]))
                 curr_upper_limit = max(abs(maxs[i]), abs(mins[i]))
                 kneron_scales.append(uppper_limit/curr_upper_limit)
 
