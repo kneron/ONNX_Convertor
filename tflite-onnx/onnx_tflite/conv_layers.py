@@ -64,6 +64,8 @@ class Convolution(Layer):
       bias_array = np.array(bias_array, dtype = np.dtype("f4"))
       if "scales" in bias_quantization_info and len(bias_quantization_info["scales"]) > 0:
           bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
+          bias_quantization_info["min"] = [float(min(bias_array))]
+          bias_quantization_info["max"] = [float(max(bias_array))]
 
       padding_stradegy = 'NONE'
       if self.tflite_conv_parser.Padding() is Padding.SAME:
@@ -180,6 +182,9 @@ class DepthwiseConvolution(Layer):
       bias_array = np.array(bias_array, dtype = np.dtype("f4"))
       if "scales" in bias_quantization_info and len(bias_quantization_info["scales"]) > 0:
           bias_array = (bias_array - bias_quantization_info["zero_points"][0]) * bias_quantization_info["scales"][0]
+          bias_quantization_info["min"] = [float(min(bias_array))]
+          bias_quantization_info["max"] = [float(max(bias_array))]
+
 
       kernel_shape=[weights_array.shape[1], weights_array.shape[2]]
       channel = weights_array.shape[3]
