@@ -292,7 +292,10 @@ def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_
             merge_quantization_info(dumped_quantization_info, quantization_info)
 
     if check_quantization(interpreter.get_tensor_details()): 
-        json_save_path = model_save_path[:-5] + "_user_config.json"
+        path_items = model_save_path.split("/")[:-1]
+        path_items.append("user_config.json")
+        json_save_path = "/".join(path_items)
+        # json_save_path = model_save_path[:-5] + "_user_config.json"
         with open (json_save_path, "w") as f:
             print(json_save_path)
             json.dump(dumped_quantization_info, f, indent = 1)
