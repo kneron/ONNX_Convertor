@@ -225,9 +225,14 @@ def merge_nested_quantization_info(dumped_info, quantization_info, name):
 
 
 def check_quantization(tensor_details):
-    for node_detail in tensor_details:
-        if "quantization_parameters" in node_detail and len(node_detail["quantization_parameters"]["scales"]) > 0:
-            return True
+    if int(tf.__version__[0]) >= 2:
+        for node_detail in tensor_details:
+            if "quantization_parameters" in node_detail and len(node_detail["quantization_parameters"]["scales"]) > 0:
+                return True
+    elif int(tf.__version__[0]) < 2:
+        for node_detail in tensor_details:
+            if "quantization" in node_detail and node_detail["quantization"][0] != 0:
+                return True
     return False 
 
 def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
