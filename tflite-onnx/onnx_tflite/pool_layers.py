@@ -7,6 +7,7 @@ import numpy as np
 from base_layer import Layer
 from aact_layers import defused_activation_node_generator
 import tflite_utils
+import tensorflow as tf
 
 from tflite.ReducerOptions import ReducerOptions
 from tflite.Pool2DOptions import Pool2DOptions
@@ -57,10 +58,15 @@ class MaxPooling2D(Layer):
       self.node_list.append(max_pool_node)
       
       #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail.get("quantization_parameters", {})
-      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail.get("quantization_parameters", {})
-      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      if int(tf.__version__[0]) >= 2:
+        output_quantization_info = node_output_detail.get("quantization_parameters", {})
+        output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+        input_quantization_info = node_input_detail.get("quantization_parameters", {})
+        input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      elif int(tf.__version__[0]) < 2:
+        output_quantization_info =  {"parameters" : node_output_detail.get("quantization", (0, 0))} 
+        input_quantization_info = {"parameters" : node_input_detail.get("quantization", (0, 0))} 
+
       quantization_info = {}
       quantization_info[self.input_nodes_name[0]] = input_quantization_info
       quantization_info[max_pool_name] = output_quantization_info
@@ -118,10 +124,15 @@ class AveragePooling2D(Layer):
       self.node_list.append(avg_pool_node)
 
       #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail.get("quantization_parameters", {})
-      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
-      input_quantization_info = node_input_detail.get("quantization_parameters", {})
-      input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      if int(tf.__version__[0]) >= 2:
+        output_quantization_info = node_output_detail.get("quantization_parameters", {})
+        output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+        input_quantization_info = node_input_detail.get("quantization_parameters", {})
+        input_quantization_info["dtype"] = str(node_input_detail["dtype"]).split(".")[1].split("'")[0]
+      elif int(tf.__version__[0]) < 2:
+        output_quantization_info =  {"parameters" : node_output_detail.get("quantization", (0, 0))} 
+        input_quantization_info = {"parameters" : node_input_detail.get("quantization", (0, 0))} 
+
       quantization_info = {}
       quantization_info[self.input_nodes_name[0]] = input_quantization_info
       quantization_info[avg_pool_name] = output_quantization_info
@@ -193,8 +204,12 @@ class Mean(Layer):
       ##################  add squeeze  ###############
 
       #Generate Quantization Info and Reverse Quantization for Weights and Bias
-      output_quantization_info = node_output_detail.get("quantization_parameters", {})
-      output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+      if int(tf.__version__[0]) >= 2:
+        output_quantization_info = node_output_detail.get("quantization_parameters", {})
+        output_quantization_info["dtype"] = str(node_output_detail["dtype"]).split(".")[1].split("'")[0]
+      elif int(tf.__version__[0]) < 2:
+        output_quantization_info =  {"parameters" : node_output_detail.get("quantization", (0, 0))} 
+        
       quantization_info = {}
       quantization_info[mean_node_name] = output_quantization_info
 
