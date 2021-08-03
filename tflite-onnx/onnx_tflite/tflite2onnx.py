@@ -99,8 +99,7 @@ def merge_quantization_info_tf1(dumped_info, quantization_info):
     for name in quantization_info:
         if name in dumped_info and ("weight" not in quantization_info[name] and "bias" not in quantization_info[name]):
             continue
-        if "quantized_dimension" not in quantization_info[name] or quantization_info[name]["quantized_dimension"] != 0:
-            continue
+
         curr_dict = quantization_info[name]
         if curr_dict["parameters"] == (0.0, 0):
                 curr_dict["radix"] = 0
@@ -111,7 +110,7 @@ def merge_quantization_info_tf1(dumped_info, quantization_info):
 
             if "bias" not in name:
                 layer_min = -1 * zero_point * scale
-                layer_max = (1 << 8 - zero_point - 1) * scale
+                layer_max = ((1 << 8) - zero_point - 1) * scale
             else:
                 layer_min = curr_dict.get("min", [])[0]
                 layer_max = curr_dict.get("max", [])[0]
@@ -131,9 +130,6 @@ def merge_quantization_info_tf1(dumped_info, quantization_info):
             curr_upper_limit = max(abs(layer_max), abs(layer_min))
             kneron_scale = uppper_limit/curr_upper_limit
             curr_dict["scale"] = {"all":kneron_scale}
-
-        curr_dict["scales"] = curr_dict["scales"].tolist()
-        curr_dict["zero_points"] = curr_dict["zero_points"].tolist()
 
         dumped_dict = {}
         if "min" in curr_dict:
@@ -359,7 +355,6 @@ def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_
         json_save_path = "/".join(path_items)
         # json_save_path = model_save_path[:-5] + "_user_config.json"
         with open (json_save_path, "w") as f:
-            print(json_save_path)
             json.dump(dumped_quantization_info, f, indent = 1)
             print("New Qunatized information saved")
 
