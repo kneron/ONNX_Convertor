@@ -95,6 +95,56 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name, trans
 
     return transpose_node
 
+def merge_quantization_info_tf1(dumped_info, quantization_info):
+    for name in quantization_info:
+        if name in dumped_info and ("weight" not in quantization_info[name] and "bias" not in quantization_info[name]):
+            continue
+
+        curr_dict = quantization_info[name]
+        if curr_dict["parameters"] == (0.0, 0):
+                curr_dict["radix"] = 0
+                curr_dict["kneron_scale"] = 0
+        else:
+            zero_point = curr_dict["parameters"][1]
+            scale = curr_dict["parameters"][0]
+
+            if "bias" not in name:
+                layer_min = -1 * zero_point * scale
+                layer_max = ((1 << 8) - zero_point - 1) * scale
+            else:
+                layer_min = curr_dict.get("min", [])[0]
+                layer_max = curr_dict.get("max", [])[0]
+
+            curr_dict["min"] = {"all":layer_min}
+            curr_dict["max"] = {"all":layer_max}        
+            
+            def get_radix(scale, max_perchannel, min_perchannel):
+                range_kneron = max(abs(max_perchannel), abs(min_perchannel)) * 2
+                radix = math.floor(math.log((1 << 8) / range_kneron, 2))
+                return radix
+
+            radix = get_radix(scale, layer_max, layer_min) 
+            curr_dict["radix"] = {"all":radix}
+
+            uppper_limit = 1 << (7 - radix) if (7 - radix) >= 0 else  (2 ** (7 - radix))
+            curr_upper_limit = max(abs(layer_max), abs(layer_min))
+            kneron_scale = uppper_limit/curr_upper_limit
+            curr_dict["scale"] = {"all":kneron_scale}
+
+        dumped_dict = {}
+        if "min" in curr_dict:
+            dumped_dict["min"] = curr_dict["min"]
+        if "max" in curr_dict:
+            dumped_dict["max"] = curr_dict["max"]
+        if "radix" in curr_dict:
+            dumped_dict["desired_radix"] = curr_dict["radix"]
+        if "scale" in curr_dict:
+            dumped_dict["desired_scale"] = curr_dict["scale"]
+
+        dumped_info[name] = dumped_dict
+    
+    return 
+
 def merge_quantization_info(dumped_info, quantization_info):
     for name in quantization_info:
         if name in dumped_info and ("weight" not in quantization_info[name] and "bias" not in quantization_info[name]):
@@ -225,9 +275,14 @@ def merge_nested_quantization_info(dumped_info, quantization_info, name):
 
 
 def check_quantization(tensor_details):
-    for node_detail in tensor_details:
-        if "quantization_parameters" in node_detail and len(node_detail["quantization_parameters"]["scales"]) > 0:
-            return True
+    if int(tf.__version__[0]) >= 2:
+        for node_detail in tensor_details:
+            if "quantization_parameters" in node_detail and len(node_detail["quantization_parameters"]["scales"]) > 0:
+                return True
+    elif int(tf.__version__[0]) < 2:
+        for node_detail in tensor_details:
+            if "quantization" in node_detail and node_detail["quantization"][0] != 0:
+                return True
     return False 
 
 def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
@@ -289,7 +344,10 @@ def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_
         if len(nodes) != 0:
             onnx_node_list.extend(nodes)
         if len(quantization_info) != 0:
-            merge_quantization_info(dumped_quantization_info, quantization_info)
+            if int(tf.__version__[0]) >= 2:
+                merge_quantization_info(dumped_quantization_info, quantization_info)
+            elif int(tf.__version__[0]) < 2:
+                merge_quantization_info_tf1(dumped_quantization_info, quantization_info)
 
     if check_quantization(interpreter.get_tensor_details()): 
         path_items = model_save_path.split("/")[:-1]
@@ -297,7 +355,6 @@ def main(model_path, model_save_path=None, add_transpose_for_channel_last_first_
         json_save_path = "/".join(path_items)
         # json_save_path = model_save_path[:-5] + "_user_config.json"
         with open (json_save_path, "w") as f:
-            print(json_save_path)
             json.dump(dumped_quantization_info, f, indent = 1)
             print("New Qunatized information saved")
 
