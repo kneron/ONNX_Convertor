@@ -1,4 +1,5 @@
 import collections
+import logging
 import struct
 import onnx
 import numpy as np
@@ -89,6 +90,7 @@ def eliminate_shape_changing_after_input(g):
     node_to_remove = []
     REMOVE_LIST = ["Reshape", "Transpose", "Flatten", "Dropout", "Squeeze", "Unsqueeze"]
     for node in g.node:
+        # Here we iterate over nodes to eliminate multiple nodes after input.
         # Find an input and the shape node
         if node.op_type not in REMOVE_LIST:
             continue
@@ -96,13 +98,10 @@ def eliminate_shape_changing_after_input(g):
         if old_input is None:
             continue
         # If the input is used by multiple nodes, skip.
-        counter = 0
-        for tnode in g.node:
-            if old_input.name in tnode.input:
-                counter += 1
-        if counter > 1:
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, old_input.name)
+        if len(following_nodes) > 1:
             continue
-        # Remove Weight if any.
+        # Find node output value_info
         output_val_info = helper.find_value_by_name(g, node.output[0])
 
         if node.op_type == 'Reshape':
@@ -110,28 +109,22 @@ def eliminate_shape_changing_after_input(g):
             if shape_node.op_type != 'Constant':
                 continue
 
-            # manuelly set the input shape
-            shape_info = helper.find_value_by_name(g, shape_node.output[0])
-            old_size, old_shape = helper.find_size_shape_from_value(shape_info)
+            # Use the output value info as the new input
+            if output_val_info is None:
+                logging.warn("Cannot eliminate " + node.name + " in the beginning of graph.")
+                continue
+            new_input = output_val_info
 
-            _, new_shape = helper.constant_to_list(shape_node)
-            for i in range(len(new_shape)):
-                if new_shape[i] == -1:
-                    dim = int(old_size//np.prod(new_shape)*(-1))
-                    new_shape[i] = dim
-            new_input = onnx.helper.make_tensor_value_info(
-                output_val_info.name,
-                output_val_info.type.tensor_type.elem_type,
-                new_shape
-            )
-
+            # Delete node
             node_to_remove.append(node)
 
+            # Delete weight
             shape_outputs = helper.find_nodes_by_input_name(g, shape_node.output[0])
             if len(shape_outputs) == 1:
                 node_to_remove.append(shape_node)
                 g.value_info.remove(helper.find_value_by_name(g, shape_node.output[0]))
-            
+
+            # Delete value info
             g.input.remove(old_input)
             g.input.extend([new_input])
             g.value_info.remove(output_val_info)
@@ -178,7 +171,7 @@ def eliminate_shape_changing_after_input(g):
             g.input.remove(old_input)
             g.input.extend([output_val_info])
             g.value_info.remove(output_val_info)
-            
+
             node_to_remove.append(node)
         elif node.op_type == 'Squeeze':
             axis = list(node.attribute[0].ints)
@@ -356,21 +349,27 @@ def eliminate_no_children_input(g):
 def eliminate_consecutive_reshape(g):
     """Replace consecutive reshape nodes by a single node.
     """
-    node_to_del = []
     for node in g.node:
+        # Check if this is a reshape
         if node.op_type != 'Reshape':
             continue
         pre_data_node = helper.find_node_by_output_name(g, node.input[0])
         pre_shape_node = helper.find_node_by_output_name(g, node.input[1])
         if not pre_data_node or not pre_shape_node:
             continue
+        # Check if the shape is a constant
         if pre_shape_node.op_type != 'Constant':
             continue
+        # Check if the previous node is reshape
         if pre_data_node.op_type != 'Reshape':
             continue
-        
+        # Check if the weight of the previous node is a constant
         pre_pre_shape_node = helper.find_node_by_output_name(g, pre_data_node.input[1])
         if pre_pre_shape_node.op_type != 'Constant':
+            continue
+        # Check if the previous node has only one output connected
+        post_pre_nodes = helper.find_nodes_by_input_name(g, node.input[0])
+        if len(post_pre_nodes) != 1:
             continue
 
         new_reshape_node = onnx.helper.make_node(
@@ -381,18 +380,16 @@ def eliminate_consecutive_reshape(g):
         )
 
         g.node.extend([new_reshape_node])
-        node_to_del.append(node)
-        node_to_del.append(pre_data_node)
-        node_to_del.append(pre_pre_shape_node)
+        g.node.remove(node)
+        g.node.remove(pre_data_node)
+        g.node.remove(pre_pre_shape_node)
 
         val_info_to_del1 = helper.find_value_by_name(g, node.input[0])
         val_info_to_del2 = helper.find_value_by_name(g, pre_data_node.input[1])
-        g.value_info.remove(val_info_to_del1)
-        g.value_info.remove(val_info_to_del2)
-
-    while node_to_del:
-        node = node_to_del.pop()
-        g.node.remove(node)
+        if val_info_to_del1 is not None:
+            g.value_info.remove(val_info_to_del1)
+        if val_info_to_del2 is not None:
+            g.value_info.remove(val_info_to_del2)
 
 def eliminate_single_input_Concat(g):
     """
@@ -578,3 +575,27 @@ def eliminate_nop_pads(g):
         #     node_to_remove.append(constant_value_node)
     for node in node_to_remove:
         g.node.remove(node)
+
+
+def eliminate_nop_reshape(g):
+    for node in g.node:
+        # Check if this is a reshape
+        if node.op_type != 'Reshape':
+            continue
+        pre_shape_node = helper.find_node_by_output_name(g, node.input[1])
+        # Check if the shape is a constant
+        if pre_shape_node.op_type != 'Constant':
+            continue
+        # Check if the input shape equals the output shape
+        input_value_info = helper.find_value_by_name(g, node.input[0])
+        output_value_info = helper.find_value_by_name(g, node.output[0])
+        if input_value_info is None or output_value_info is None or \
+            helper.get_shape_from_value_info(input_value_info) != helper.get_shape_from_value_info(output_value_info):
+            continue
+        # Connect previous node and the next node
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+        # delete the node
+        g.node.remove(node)
+        g.value_info.remove(output_value_info)

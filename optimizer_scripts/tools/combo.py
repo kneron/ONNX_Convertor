@@ -65,6 +65,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
         passes.append('fuse_bn_into_conv')
     m = optimizer.optimize(m, passes)
     g = m.graph
+    other.add_name_to_node(g)
     replacing.replace_initializer_with_Constant(g)
     other.duplicate_param_shared_constant(g)
     other.topological_sort(g)
@@ -141,7 +142,7 @@ def pytorch_constant_folding(m):
         other.topological_sort(m.graph)
         while len(m.graph.value_info) != 0:
             m.graph.value_info.pop()
-        
+
         m = other.inference_shapes(m)
         replacing.replace_shape_with_constant(m.graph)
     other.topological_sort(m.graph)
@@ -193,7 +194,9 @@ def tensorflow_optimization(m):
     m = optimizer.optimize(m, ['eliminate_deadend'])
 
     eliminating.eliminate_consecutive_reshape(m.graph)
+    eliminating.eliminate_nop_reshape(m.graph)
     eliminating.eliminate_Squeeze_before_Reshape(m.graph)
+    replacing.replace_Reshape_with_Flatten(m.graph)
     other.topological_sort(m.graph)
     return m
 

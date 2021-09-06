@@ -45,7 +45,7 @@ def replace_initializer_with_Constant(g):
     # Remove original initializer
     while len(g.initializer) != 0:
         g.initializer.pop()
-    
+
     topological_sort(g)
 
 def replace_Reshape_with_Flatten(g):
@@ -68,8 +68,18 @@ def replace_Reshape_with_Flatten(g):
                 break
         if not found:
             continue
+        # Must be constant shape
         shape_node = helper.find_node_by_output_name(g, node.input[1])
         if shape_node.op_type != 'Constant':
+            continue
+        # The first dimension must be the same
+        input_value = helper.find_value_by_name(g, node.input[0])
+        output_value = helper.find_value_by_name(g, node.output[0])
+        if input_value is None or len(input_value.type.tensor_type.shape.dim) < 2:
+            continue
+        if output_value is None or len(output_value.type.tensor_type.shape.dim) != 2:
+            continue
+        if input_value.type.tensor_type.shape.dim[0].dim_value != output_value.type.tensor_type.shape.dim[0].dim_value:
             continue
         # Replace it
         node.op_type = "Flatten"

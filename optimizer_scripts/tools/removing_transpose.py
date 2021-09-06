@@ -26,7 +26,7 @@ def eliminate_transposes(m):
 
 def swap_transpose_with_single_next_node(g):
   swapped = False
-  passable_nodes = set(['Relu', 'Neg', 'LeakyRelu', 'Sqrt', 'Reciprocal', 'Add', 'Mul', 'Tanh'])
+  passable_nodes = set(['Relu', 'Neg', 'LeakyRelu', 'Sqrt', 'Reciprocal', 'Add', 'Mul', 'Tanh', 'Selu'])
   for node in g.node:
     trans_node = node
     # Check for transpose node

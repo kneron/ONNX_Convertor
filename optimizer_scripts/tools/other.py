@@ -53,6 +53,8 @@ def rename_all_node_name(g):
     """    
 
     for node in g.node:
+        if len(node.name) > 3 and node.name[-3:] == '_kn':
+            continue
         new_node_name = node.name + "_kn"
         new_node_output0_name = node.output[0] + "_kn"
 
@@ -90,6 +92,8 @@ def find_first_sequential_outputs(g, node):
         value = helper.find_output_by_name(g, value_name)
         if value is not None:
             return value
+    if len(helper.find_nodes_by_input_name(g, node.output[0])) == 0:
+        return None
     return find_first_sequential_outputs(g, helper.find_nodes_by_input_name(g, node.output[0])[0])
 
 def remove_nodes(g, cut_nodes=[], cut_types=[]):
@@ -105,6 +109,8 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
     new_output = set()
     for node in node_to_delete:
         original_output = find_first_sequential_outputs(g, node)
+        if original_output is None:
+            continue
         if original_output.name not in output_mapping:
             output_mapping[original_output.name] = []
         for input_name in node.input:
@@ -138,6 +144,8 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
     # Mapping outputs again
     for node in node_to_delete:
         original_output = find_first_sequential_outputs(g, node)
+        if original_output is None:
+            continue
         if original_output.name not in output_mapping:
             output_mapping[original_output.name] = []
         for input_name in node.input:
@@ -282,9 +290,19 @@ def topological_sort(g):
                 del in_degree[next_node_name]
     g.node.extend(sorted_nodes)
     if in_degree:
-        raise RuntimeError("Unreachable nodes exist: {}".format(in_degree.keys()))
+        bad_nodes = "["
+        for k in in_degree.keys():
+            bad_nodes += k + ',\n'
+        bad_nodes = bad_nodes[:-2] + ']'
+        logging.warn("Unreachable nodes exist: {}".format(bad_nodes))
+        # raise RuntimeError("Unreachable nodes exist: {}".format(in_degree.keys()))
     if node_map:
-        raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
+        bad_nodes = ""
+        for k in node_map.keys():
+            bad_nodes += k + ',\n'
+        bad_nodes = bad_nodes[:-2] + ']'
+        logging.warn("Unused nodes exist: {}".format(bad_nodes))
+        # raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
 
 def remove_zero_value_info(g):
     value_info_list = list(g.value_info)
