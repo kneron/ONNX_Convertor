@@ -134,6 +134,44 @@ def list_to_constant(name, shape, data, data_type=None):
 def numpy_to_constant(name, np_array):
     return list_to_constant(name, np_array.shape, np_array.flatten().tolist())
 
+def initializer_to_numpy(tensor):
+    """Generate a list from the constant node
+
+    :node: the Constant node\\
+    :returns: the shape of the constant node, the data of the constant node
+    """
+    # 1. check data type
+    # 2. get data from raw or data
+    # 3. get shape from dim
+    if tensor.data_type == onnx.helper.TensorProto.INT32:
+        if len(tensor.int32_data) != 0:
+            data = list(tensor.int32_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('i', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.INT64:
+        if len(tensor.int64_data) != 0:
+            data = list(tensor.int64_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('q', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.FLOAT:
+        if len(tensor.float_data) != 0:
+            data = list(tensor.float_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('f', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.DOUBLE:
+        if len(tensor.double_data) != 0:
+            data = list(tensor.double_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
+    else:
+        print("Not supported data type {}".format(tensor.data_type))
+        raise RuntimeError
+    if len(tensor.dims) == 0:
+        shape = len(data)
+    else:
+        shape = list(tensor.dims)
+    return np.array(data).reshape(shape)
+
 def constant_to_list(node):
     """Generate a list from the constant node
 
@@ -181,6 +219,15 @@ def constant_to_numpy(node):
     """
     shape, data = constant_to_list(node)
     return np.array(data).reshape(shape)
+
+def weight_to_numpy(g, wname):
+    init = find_initializer_by_name(g, wname)
+    if init is not None:
+        return initializer_to_numpy(init)
+    cons = find_node_by_output_name(g, wname)
+    if cons is not None and cons.op_type == 'Constant':
+        return constant_to_numpy(cons)
+    return None
 
 def all_constant_input(node):
     """Find the inputs of the given node. If the inputs of this node are all\\
@@ -577,4 +624,15 @@ def subtract(data_set_1, data_set_2):
 
     return new_data
 
-    
+def find_initializer_by_name(g, name):
+    """
+    Find an initializer in the graph by name
+
+    :param g: the onnx graph\\
+    :param name: the target value_info name\\
+    :returns: the value_info find by name
+    """
+    for i in g.initializer:
+        if i.name == name:
+            return i
+    return None

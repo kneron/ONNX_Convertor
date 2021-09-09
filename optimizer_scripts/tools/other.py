@@ -294,14 +294,14 @@ def topological_sort(g):
         for k in in_degree.keys():
             bad_nodes += k + ',\n'
         bad_nodes = bad_nodes[:-2] + ']'
-        logging.warn("Unreachable nodes exist: {}".format(bad_nodes))
+        logging.warn("Unreachable nodes exist: {} nodes".format(len(bad_nodes)))
         # raise RuntimeError("Unreachable nodes exist: {}".format(in_degree.keys()))
     if node_map:
         bad_nodes = ""
         for k in node_map.keys():
             bad_nodes += k + ',\n'
         bad_nodes = bad_nodes[:-2] + ']'
-        logging.warn("Unused nodes exist: {}".format(bad_nodes))
+        logging.warn("Unused nodes exist: {} nodes".format(len(bad_nodes)))
         # raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
 
 def remove_zero_value_info(g):
