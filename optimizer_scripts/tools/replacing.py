@@ -113,6 +113,9 @@ def replace_Squeeze_with_Reshape(g):
         if output_value is None:
             raise RuntimeError("Cannot get shape for Squeeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        if len(shape) == 0:
+            g.value_info.remove(output_value)
+            continue
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.
         new_node = onnx.helper.make_node(
@@ -148,6 +151,9 @@ def replace_Unsqueeze_with_Reshape(g):
         if output_value is None:
             raise RuntimeError("Cannot get shape for Unsqueeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        if len(shape) == 0:
+            g.value_info.remove(output_value)
+            continue
 
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.

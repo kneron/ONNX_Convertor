@@ -116,12 +116,20 @@ def list_to_constant(name, shape, data, data_type=None):
             data_type = onnx.helper.TensorProto.INT64
         else:
             data_type = onnx.helper.TensorProto.FLOAT
-    tensor = onnx.helper.make_tensor(
-        name,
-        data_type,
-        shape,
-        data
-    )
+    if len(shape) == 1 and shape[0] == 1:
+        tensor = onnx.helper.make_tensor(
+            name,
+            data_type,
+            (),
+            data
+        )
+    else:
+        tensor = onnx.helper.make_tensor(
+            name,
+            data_type,
+            shape,
+            data
+        )
     new_w_node = onnx.helper.make_node(
         "Constant",
         [],

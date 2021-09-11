@@ -485,7 +485,10 @@ def gather_constant_folding(g, node):
         indices = indices[0]
 
     np_data = np.reshape(data, shape)
-    axis = node.attribute[0].i
+    if len(node.attribute) == 0:
+        axis = 0
+    else:
+        axis = node.attribute[0].i
 
     new_data = np.take(np_data, indices, axis=axis)
     new_shape = new_data.shape

@@ -498,16 +498,24 @@ def fuse_MatMul_and_Add_into_Gemm(g):
     for node in g.node:
         if node.op_type != 'MatMul':
             continue
-        add_node = None
-        for i in g.node:
-            if not i.input:
-                continue
-            if i.input[0] == node.output[0]:
-                add_node = i
-                break
+        add_node = helper.find_nodes_by_input_name(g, node.output[0])
         value_to_remove = helper.find_value_by_name(g, node.output[0])
+        if len(add_node) != 1:
+            continue
+        add_node = add_node[0]
         if add_node is None or value_to_remove is None or add_node.op_type != 'Add':
             continue
+        # Check if the inputs of the add_node
+        if add_node.input[0] != node.output[0]:
+            continue
+        add_2nd_input_node = helper.find_node_by_output_name(g, add_node.input[1])
+        if add_2nd_input_node is None or add_2nd_input_node.op_type != 'Constant':
+            continue
+        # Check input shape
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None or len(helper.get_shape_from_value_info(input_value)) != 2:
+            continue
+        # Fuse
         input_list = node.input
         input_list.append(add_node.input[1]),
         new_node = onnx.helper.make_node(
@@ -880,6 +888,8 @@ def fuse_branched_Transpose(g):
             continue
         # Check if this is a branch beginning
         input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None:
+            continue
         branched_nodes = helper.find_nodes_by_input_name(g, input_value.name)
         if len(branched_nodes) < 2:
             continue
