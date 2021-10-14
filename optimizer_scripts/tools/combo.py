@@ -195,9 +195,14 @@ def tensorflow_optimization(m):
 
     eliminating.eliminate_consecutive_reshape(m.graph)
     eliminating.eliminate_nop_reshape(m.graph)
+    eliminating.eliminate_nop_flatten(m.graph)
     eliminating.eliminate_Squeeze_before_Reshape(m.graph)
     replacing.replace_Reshape_with_Flatten(m.graph)
     other.topological_sort(m.graph)
+    while len(m.graph.value_info) != 0:
+        m.graph.value_info.pop()
+    m = other.inference_shapes(m)
+    m = optimizer.optimize(m, ['eliminate_deadend'])
     return m
 
 
