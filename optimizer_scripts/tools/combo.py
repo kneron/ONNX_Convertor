@@ -107,6 +107,7 @@ def common_optimization(m):
     fusing.fuse_BN_with_Reshape_into_Gemm(g)
     fusing.fuse_Gemm_into_Gemm(g)
     fusing.fuse_consecutive_reducemean(g)
+    fusing.fuse_slice_nodes_into_conv(g)
     other.duplicate_shared_Flatten(g)
     replacing.replace_average_pool_with_GAP(g)
 

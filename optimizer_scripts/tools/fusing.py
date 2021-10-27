@@ -867,3 +867,149 @@ def fuse_consecutive_reducemean(g):
         g.node.remove(node)
 
     topological_sort(g)
+
+def fuse_slice_nodes_into_conv(g):
+    # define pattern checker
+    def check_is_slice(node):
+        if node.op_type == 'Concat':
+            return True
+        if node.op_type != 'Slice':
+            return False
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        if len(following_nodes) != 1:
+            return False
+        # also check attributes
+        if len(node.input) != 5:
+            return False
+        # starts should be 0 or 1
+        starts_node = helper.find_node_by_output_name(g, node.input[1])
+        if starts_node.op_type != 'Constant':
+            return False
+        _, starts_list = helper.constant_to_list(starts_node)
+        for num in starts_list:
+            if num != 0 and num != 1:
+                return False
+        # ends
+        ends_node = helper.find_node_by_output_name(g, node.input[2])
+        if ends_node.op_type != 'Constant':
+            return False
+        # axes should be 2 or 3
+        axes_node = helper.find_node_by_output_name(g, node.input[3])
+        if axes_node.op_type != 'Constant':
+            return False
+        _, axes_list = helper.constant_to_list(axes_node)
+        for num in axes_list:
+            if num != 2 and num != 3:
+                return False
+        # Steps can only be 2
+        steps_node = helper.find_node_by_output_name(g, node.input[4])
+        if steps_node.op_type != 'Constant':
+            return False
+        _, steps_list = helper.constant_to_list(steps_node)
+        for num in steps_list:
+            if num != 2:
+                return False
+        # Recursion
+        return check_is_slice(following_nodes[0])
+    # defind concat finder
+    def find_concat_node(node):
+        while node.op_type != 'Concat':
+            node = helper.find_following_nodes_by_input_value_name(g, node.output[0])[0]
+        return node
+    # define remove node function.
+    def remove_nodes(input_name):
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, input_name)
+        # Remove concat directly
+        if len(following_nodes) == 1 and following_nodes[0].op_type == 'Concat':
+            g.node.remove(following_nodes[0])
+            return
+        for following_node in following_nodes:
+            # Recursion first
+            remove_nodes(following_node.output[0])
+            # Remove weights
+            for i in range(1, len(following_node.input)):
+                if len(helper.find_following_nodes_by_input_value_name(g, following_node.input[i])) > 1:
+                    # More than one following nodes. Skip.
+                    continue
+                input_weight = helper.find_node_by_output_name(g, following_node.input[i])
+                g.node.remove(input_weight)
+            # Remove Slice nodes
+            g.node.remove(following_node)
+    # define remove value_info function
+    def remove_value_infos(input_name):
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, input_name)
+        if following_nodes[0].op_type == 'Concat':
+            return
+        for following_node in following_nodes:
+            output_value = helper.find_value_by_name(g, following_node.output[0])
+            # Remove output values
+            if output_value is not None:
+                g.value_info.remove(output_value)
+            # Remove weight values
+            for i in range(1, len(following_node.input)):
+                input_value = helper.find_value_by_name(g, following_node.input[i])
+                if input_value is not None:
+                    g.value_info.remove(input_value)
+            # Recursion
+            remove_value_infos(following_node.output[0])
+    # define get slice position
+    def get_slice_position(final_slice_output):
+        slice_position = [0, 0]
+        prev_node = helper.find_node_by_output_name(g, final_slice_output)
+        while prev_node is not None:
+            starts_np = helper.constant_to_numpy(helper.find_node_by_output_name(g, prev_node.input[1]))
+            axes_np = helper.constant_to_numpy(helper.find_node_by_output_name(g, prev_node.input[3]))
+            for i in range(len(axes_np)):
+                if axes_np[i] == 2:
+                    slice_position[0] = starts_np[i]
+                elif axes_np[i] == 3:
+                    slice_position[1] = starts_np[i]
+            prev_node = helper.find_node_by_output_name(g, prev_node.input[0])
+        return slice_position
+    # Check pattern from each input
+    for input_value in g.input:
+        nodes_after_input = helper.find_following_nodes_by_input_value_name(g, input_value.name)
+        pattern_matched = True
+        for following_node in nodes_after_input:
+            if following_node.op_type != 'Slice':
+                pattern_matched = False
+                break
+            else:
+                pattern_matched = check_is_slice(following_node)
+        if not pattern_matched:
+            continue
+        # Pattern found. Check limitation
+        # Currently only support 2D
+        if len(nodes_after_input) != 4:
+            continue
+        # Get the concat node
+        concat_node = find_concat_node(nodes_after_input[0])
+        # Get basic information
+        input_shape = helper.get_shape_from_value_info(input_value)
+        channel_num = input_shape[1]
+        # Construct weight
+        weight_np = np.zeros((input_shape[1] * 4, input_shape[1], 3, 3), dtype=np.float32)
+        for i in range(4):
+            # Check each branch
+            slice_position = get_slice_position(concat_node.input[i])
+            for j in range(channel_num):
+                weight_np[i * channel_num + j, j, slice_position[0], slice_position[1]] = 1
+        weight_node = helper.numpy_to_constant(concat_node.name + '_weight', weight_np)
+        # Construct Conv node
+        new_conv = onnx.helper.make_node(
+            'Conv',
+            [input_value.name, concat_node.name + '_weight'],
+            [concat_node.output[0]],
+            name = concat_node.name + '_fused',
+            dilations = [1, 1],
+            group = 1,
+            kernel_shape = [3, 3],
+            strides = [2, 2],
+            pads = [0, 0, 2, 2]
+        )
+        # Delete old nodes, weights and value_infos
+        remove_value_infos(input_value.name)
+        remove_nodes(input_value.name)
+        # Replace node
+        g.node.append(weight_node)
+        g.node.append(new_conv)
