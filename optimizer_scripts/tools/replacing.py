@@ -737,6 +737,102 @@ def replace_add_to_bn(g):
 
     topological_sort(g)
 
+def replace_sub_to_bn(g):
+    """Replace single Sub node with BatchNorm node.
+    :param g: input graph.
+    :return:
+    """
+    node_to_del = []
+    for node in g.node:
+        if node.op_type != 'Sub':
+            continue
+
+        sub_op_node = node
+
+        # only support one input node
+        if len(sub_op_node.input) != 2: # OP node and value node
+            continue
+
+        # Check the input type
+        input_1st_name = sub_op_node.input[0]
+        input_2nd_name = sub_op_node.input[1]
+        input_1st_node = helper.find_node_by_output_name(g, input_1st_name)
+        input_2nd_node = helper.find_node_by_output_name(g, input_2nd_name)
+        if input_1st_node is not None and input_1st_node.op_type == 'Constant':
+            real_input_name = input_2nd_name
+            reverse = True
+            constant_node = input_1st_node
+        elif input_2nd_node is not None and input_2nd_node.op_type == 'Constant':
+            real_input_name = input_1st_name
+            reverse = False
+            constant_node = input_2nd_node
+        else:
+            continue
+
+        # Get shapes
+        prev_shape_value_info = helper.find_value_by_name(g, real_input_name)
+        prev_shape_value_info = helper.find_input_by_name(g, real_input_name) if prev_shape_value_info is None else prev_shape_value_info
+        if prev_shape_value_info is None:
+            continue
+
+        _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
+        bias_shape, bias_data = helper.constant_to_list(constant_node)
+
+        # channel dimension
+        c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
+
+        # only allow channelwise sub or const sub
+        if bias_shape != [1, c_dim, 1, 1] and bias_shape != 1:
+            continue
+
+        ones = [1.0] * c_dim
+        zeros = [0.0] * c_dim
+        # If bias is a scaler, expand it.
+        if len(bias_data) == 1:
+            bias = bias_data * c_dim
+        else:
+            bias = bias_data
+        # If reversed provide special scaler
+        if reverse:
+            scale = [-1.0] * c_dim
+        else:
+            scale = ones
+            bias *= -1
+        bn_name = sub_op_node.output[0]
+        mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
+        variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
+        scale_value_node = helper.list_to_constant(bn_name+'_mul', np.array(scale).shape, scale)
+        new_add_value_node = helper.list_to_constant(bn_name+'_add', np.array(bias).shape, bias)
+
+        bn_node = onnx.helper.make_node(
+            'BatchNormalization',
+            [real_input_name,
+            scale_value_node.output[0],
+            new_add_value_node.output[0],
+            mean_value_node.output[0],
+            variance_value_node.output[0]],
+            [sub_op_node.output[0]],
+            name=bn_name,
+            epsilon=0.00000001
+        )
+
+        add_val_info = helper.find_value_by_name(g, constant_node.output[0])
+        g.value_info.remove(add_val_info)
+
+        g.node.extend([bn_node])
+        g.node.extend([mean_value_node])
+        g.node.extend([variance_value_node])
+        g.node.extend([scale_value_node])
+        g.node.extend([new_add_value_node])
+
+        node_to_del.extend([sub_op_node])
+        node_to_del.extend([constant_node])
+
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
+
+    topological_sort(g)
+
 def replace_Sum_with_Adds(g):
     node_to_del = []
 
