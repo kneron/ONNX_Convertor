@@ -1,5 +1,6 @@
 """Special operations on model.
 """
+import logging
 import onnx.helper
 import numpy as np
 from . import helper
@@ -194,4 +195,225 @@ def add_rgb2yynn_node(m):
     g.node.extend([new_weight, new_conv])
     g.value_info.extend([weight_value, old_input_value])
     # topological sort
+    other.topological_sort(g)
+
+def swap_MatMul_inputs(g, original_matmul_node):
+    # Create Transpose nodes
+    input_a_value = helper.find_value_by_name(g, original_matmul_node.input[0])
+    input_a_shape = helper.get_shape_from_value_info(input_a_value)
+    if len(input_a_shape) == 2:
+        perm = [1, 0]
+    else:
+        perm = [0, 2, 1]
+    new_input_b_node = onnx.helper.make_node(
+        'Transpose',
+        inputs = [input_a_value.name],
+        outputs = [input_a_value.name + '_transposed'],
+        name = input_a_value.name + '_transposed',
+        perm = perm
+    )
+    input_b_value = helper.find_value_by_name(g, original_matmul_node.input[1])
+    input_b_shape = helper.get_shape_from_value_info(input_b_value)
+    if len(input_b_shape) == 3:
+        perm = [0, 2, 1]
+    else:
+        perm = [0, 1, 3, 2]
+    new_input_a_node = onnx.helper.make_node(
+        'Transpose',
+        inputs = [input_b_value.name],
+        outputs = [input_b_value.name + '_transposed'],
+        name = input_b_value.name + '_transposed',
+        perm = perm
+    )
+    # Create new MatMul node
+    new_matmul_node = onnx.helper.make_node(
+        'MatMul',
+        inputs = [new_input_a_node.name, new_input_b_node.name],
+        outputs = [original_matmul_node.output[0] + '_transposed'],
+        name = original_matmul_node.output[0] + '_transposed'
+    )
+    # Create final Transpose node
+    output_value = helper.find_value_by_name(g, original_matmul_node.output[0])
+    output_shape = helper.get_shape_from_value_info(output_value)
+    if len(output_shape) == 3:
+        perm = [0, 2, 1]
+    else:
+        perm = [0, 1, 3, 2]
+    new_final_transpose_node = onnx.helper.make_node(
+        'Transpose',
+        inputs = [new_matmul_node.output[0]],
+        outputs = [original_matmul_node.output[0]],
+        name = original_matmul_node.output[0] + '_final_transpose',
+        perm = perm
+    )
+    # Add new nodes
+    g.node.extend([new_input_a_node, new_input_b_node, new_matmul_node, new_final_transpose_node])
+    # Delete original nodes
+    g.node.remove(original_matmul_node)
+
+def split_MatMul_batch_then_concat(g, original_matmul_node):
+    new_nodes = []
+    final_concat_inputs = []
+    # Get the batch count
+    input_a_value = helper.find_value_by_name(g, original_matmul_node.input[0])
+    input_a_shape = helper.get_shape_from_value_info(input_a_value)
+    input_b_value = helper.find_value_by_name(g, original_matmul_node.input[1])
+    input_b_shape = helper.get_shape_from_value_info(input_b_value)
+    if len(input_a_shape) == 3:
+        batch_count = input_a_shape[0]
+    else:
+        batch_count = input_a_shape[1]
+    for i in range(batch_count):
+        # Create Split nodes for input A
+        starts_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_starts", (1, ), [i])
+        ends_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_ends", (1, ), [i+1])
+        axes_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_axes", (1, ), [len(input_a_shape) - 3])
+        new_sliced_a_node = onnx.helper.make_node(
+            'Slice',
+            inputs = [input_a_value.name, starts_node.name, ends_node.name, axes_node.name],
+            outputs = [f"{input_a_value.name}_sliced_{i}"],
+            name = f"{input_a_value.name}_sliced_{i}"
+        )
+        new_nodes.extend([starts_node, ends_node, axes_node, new_sliced_a_node])
+        # Create Split nodes for input B
+        starts_node = helper.list_to_constant(f"{input_b_value.name}_sliced_{i}_starts", (1, ), [i])
+        ends_node = helper.list_to_constant(f"{input_b_value.name}_sliced_{i}_ends", (1, ), [i+1])
+        axes_node = helper.list_to_constant(f"{input_b_value.name}_sliced_{i}_axes", (1, ), [len(input_b_shape) - 3])
+        new_sliced_b_node = onnx.helper.make_node(
+            'Slice',
+            inputs = [input_b_value.name, starts_node.name, ends_node.name, axes_node.name],
+            outputs = [f"{input_b_value.name}_sliced_{i}"],
+            name = f"{input_b_value.name}_sliced_{i}"
+        )
+        new_nodes.extend([starts_node, ends_node, axes_node, new_sliced_b_node])
+        # Create MatMul nodes
+        new_matmul_node = onnx.helper.make_node(
+            'MatMul',
+            inputs = [new_sliced_a_node.name, new_sliced_b_node.name],
+            outputs = [f"{original_matmul_node.output[0]}_sliced_{i}"],
+            name = f"{original_matmul_node.output[0]}_sliced_{i}"
+        )
+        new_nodes.append(new_matmul_node)
+        final_concat_inputs.append(f"{original_matmul_node.output[0]}_sliced_{i}")
+    # Create Concat nodes
+    output_value = helper.find_value_by_name(g, original_matmul_node.output[0])
+    output_shape = helper.get_shape_from_value_info(output_value)
+    new_concat_node = onnx.helper.make_node(
+        "Concat",
+        inputs = final_concat_inputs,
+        outputs = [original_matmul_node.output[0]],
+        name = f"{original_matmul_node.output[0]}_final_concat",
+        axis = len(output_shape) - 3
+    )
+    new_nodes.append(new_concat_node)
+    # Add new nodes
+    g.node.extend(new_nodes)
+    # Delete original nodes
+    g.node.remove(original_matmul_node)
+
+
+def split_MatMul_Constant_input_then_concat(g, original_matmul_node):
+    new_nodes = []
+    final_concat_inputs = []
+    # Get the batch count
+    input_b_node = helper.find_node_by_output_name(g, original_matmul_node.input[1])
+    input_b_np = helper.constant_to_numpy(input_b_node)
+    if len(input_b_np.shape) == 3:
+        batch_count = input_b_np.shape[0]
+    else:
+        batch_count = input_b_np.shape[1]
+    for i in range(batch_count):
+        # Create new constant node
+        if len(input_b_np.shape) == 3:
+            new_np = input_b_np[i:i+1, ...]
+        else:
+            new_np = input_b_np[:, i:i+1, ...]
+        new_weight = helper.numpy_to_constant(f"{input_b_node.name}_sliced_{i}", new_np)
+        new_nodes.append(new_weight)
+        # Create MatMul nodes
+        new_matmul_node = onnx.helper.make_node(
+            'MatMul',
+            inputs = [original_matmul_node.input[0], f"{input_b_node.name}_sliced_{i}"],
+            outputs = [f"{original_matmul_node.output[0]}_sliced_{i}"],
+            name = f"{original_matmul_node.output[0]}_sliced_{i}"
+        )
+        new_nodes.append(new_matmul_node)
+        final_concat_inputs.append(f"{original_matmul_node.output[0]}_sliced_{i}")
+    # Create Concat nodes
+    output_value = helper.find_value_by_name(g, original_matmul_node.output[0])
+    output_shape = helper.get_shape_from_value_info(output_value)
+    new_concat_node = onnx.helper.make_node(
+        "Concat",
+        inputs = final_concat_inputs,
+        outputs = [original_matmul_node.output[0]],
+        name = f"{original_matmul_node.output[0]}_final_concat",
+        axis = len(output_shape) - 3
+    )
+    new_nodes.append(new_concat_node)
+    # Add new nodes
+    g.node.extend(new_nodes)
+    # Delete original value info
+    input_b_value = helper.find_value_by_name(g, original_matmul_node.input[1])
+    if input_b_value is not None:
+        g.value_info.remove(input_b_value)
+    # Delete original nodes
+    g.node.remove(original_matmul_node)
+    g.node.remove(input_b_node)
+
+
+def special_MatMul_process(g):
+    for node in g.node:
+        if node.op_type != 'MatMul':
+            continue
+        input_a_name = node.input[0]
+        input_a_value = helper.find_value_by_name(g, input_a_name)
+        input_b_name = node.input[1]
+        input_b_value = helper.find_value_by_name(g, input_b_name)
+        if input_a_value is None or input_b_value is None:
+            continue
+        input_a_shape = helper.get_shape_from_value_info(input_a_value)
+        input_b_shape = helper.get_shape_from_value_info(input_b_value)
+        # Check shapes and choose the process
+        # Normal case, Skip
+        if len(input_b_shape) == 2:
+            continue
+        # Too many dimensions or too few dimensions. Not supported. Skip
+        if len(input_a_shape) > 4 or len(input_b_shape) > 4:
+            logging.warning(f"Unsupported MatMul: {node.name}")
+            continue
+        if len(input_a_shape) < 2 or len(input_b_shape) < 2:
+            logging.warning(f"Unsupported MatMul: {node.name}")
+            continue
+        # For 4 dimension, check the first dimension (should be 1) and treated as 3 dimensions.
+        if len(input_a_shape) == 4:
+            if input_a_shape[0] != 1:
+                logging.warning(f"Unsupported MatMul: {node.name}")
+                continue
+            else:
+                input_a_shape = input_a_shape[1:]
+        if len(input_b_shape) == 4:
+            if input_b_shape[0] != 1:
+                logging.warning(f"Unsupported MatMul: {node.name}")
+                continue
+            else:
+                input_b_shape = input_b_shape[1:]
+        # Check input B dimension
+        # If B is 1 x W x V, it is the same as normal case.
+        if input_b_shape[0] == 1:
+            continue
+        # If B is B x W x V, but B is a constant.
+        input_b_node = helper.find_node_by_output_name(g, input_b_name)
+        if input_b_node is not None and input_b_node.op_type == 'Constant':
+            # Constant input
+            split_MatMul_Constant_input_then_concat(g, node)
+        # If B is B x W x V and A is 1 x H x W, do the swap.
+        elif len(input_a_shape) == 2 or input_a_shape[0] == 1:
+            swap_MatMul_inputs(g, node)
+        # If B is B x W x V and A is B x H x W, do the split.
+        elif input_b_shape[0] == input_a_shape[0]:
+            split_MatMul_batch_then_concat(g, node)
+        # Other cases are not supported: If B is B x W x V but A is X x H x W.
+        else:
+            logging.warning(f"Unsupported MatMul: {node.name}")
+            continue
     other.topological_sort(g)
