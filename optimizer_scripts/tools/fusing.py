@@ -603,9 +603,9 @@ def fuse_mul_and_add_into_bn(g):
             continue
 
         scale_shape, scale_data = helper.constant_to_list(const_mul)
-        bais_shape, __ = helper.constant_to_list(const_add)
+        bias_shape, __ = helper.constant_to_list(const_add)
         c_dim = len(scale_data)
-        if scale_shape != bais_shape:
+        if scale_shape != bias_shape:
             continue
 
         _ , previous_node_output_shape = helper.find_size_shape_from_value(helper.find_value_by_name(g, data_input_name))
@@ -618,18 +618,18 @@ def fuse_mul_and_add_into_bn(g):
             continue
 
         if scale_shape == [1, c_dim, 1, 1]:
-
             # remove all '1'
             for _ in range(3):
                 const_add.attribute[0].t.dims.remove(1)
                 const_mul.attribute[0].t.dims.remove(1)
-
         elif scale_shape == [1, c_dim]:
-
             # remove all '1'
             const_add.attribute[0].t.dims.remove(1)
             const_mul.attribute[0].t.dims.remove(1)
-
+        elif scale_shape == 1 and c_dim == 1:
+            # Single value weight
+            const_add.attribute[0].t.dims.append(1)
+            const_mul.attribute[0].t.dims.append(1)
         else:
             continue
 
