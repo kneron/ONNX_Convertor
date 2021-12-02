@@ -108,6 +108,7 @@ def common_optimization(m):
     fusing.fuse_BN_with_Reshape_into_Gemm(g)
     fusing.fuse_Gemm_into_Gemm(g)
     fusing.fuse_consecutive_reducemean(g)
+    fusing.fuse_slice_nodes_into_conv(g)
     other.duplicate_shared_Flatten(g)
     replacing.replace_average_pool_with_GAP(g)
 
@@ -235,6 +236,7 @@ def postprocess(m):
     fusing.fuse_conv_and_add_into_conv(m.graph)
     replacing.replace_mul_to_bn(m.graph)
     replacing.replace_add_to_bn(m.graph)
+    replacing.replace_sub_to_bn(m.graph)
     m = onnx.utils.polish_model(m)
 
     other.add_output_to_value_info(m.graph)
