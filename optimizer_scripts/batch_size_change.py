@@ -1,12 +1,13 @@
-from tools import other, helper
+from tools import other, helper, replacing
 from onnx import optimizer
 import sys
 import onnx
 import onnx.helper
+import argparse
 
 # StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/time_distributed_564/Reshape_1_kn
-def change_reshape_size(g):
-    reshape_node = helper.find_node_by_node_name(g, "StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/time_distributed_564/Reshape_1_kn")
+def change_reshape_size(g, rehape_name):
+    reshape_node = helper.find_node_by_node_name(g, rehape_name)
     reshape_output = helper.find_value_by_name(g, reshape_node.output[0])
     flatten_node = onnx.helper.make_node(
         "Flatten",
@@ -19,10 +20,26 @@ def change_reshape_size(g):
     g.node.append(flatten_node)
     g.value_info.remove(reshape_output)
 
+parser = argparse.ArgumentParser(description="Edit an ONNX model.")
+parser.add_argument('in_file', type=str, help='input ONNX FILE')
+parser.add_argument('out_file', type=str, help="ouput ONNX FILE")
+parser.add_argument('-i', '--input', dest='input_change', type=str, nargs='+', help="change input shape (e.g. -i 'input_0 1 3 224 224')")
+parser.add_argument('-o', '--output', dest='output_change', type=str, nargs='+', help="change output shape (e.g. -o 'input_0 1 3 224 224')")
+parser.add_argument('--replace-reshape-with-flatten', dest='replace_reshape', type=str, nargs='+', help="Replace the strange reshape with flatten.")
 
-m = onnx.load(sys.argv[1])
-change_reshape_size(m.graph)
+args = parser.parse_args()
+
+m = onnx.load(args.in_file)
+m = onnx.utils.polish_model(m)
+g = m.graph
+other.topological_sort(g)
+# Change input and output shapes as requested
+if args.input_change is not None:
+    other.change_input_shape(g, args.input_change)
+if args.output_change is not None:
+    other.change_output_shape(g, args.output_change)
+change_reshape_size(m.graph, args.replace_reshape)
 other.topological_sort(m.graph)
 m = other.inference_shapes(m)
 m = optimizer.optimize(m, ['eliminate_deadend'])
-onnx.save(m, sys.argv[2])
+onnx.save(m, args.out_file)
