@@ -12,7 +12,15 @@ from tools import special
 from tools import combo
 # from tools import temp
 
-def onnx2onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False, bn_on_skip=False, bn_before_add=False, bgr=False, norm=False, rgba2yynn=False, eliminate_tail=False) -> onnx.ModelProto:
+def onnx2onnx_flow(m: onnx.ModelProto,
+                    disable_fuse_bn=False,
+                    bn_on_skip=False,
+                    bn_before_add=False,
+                    bgr=False,
+                    norm=False,
+                    rgba2yynn=False,
+                    eliminate_tail=False,
+                    opt_matmul=False) -> onnx.ModelProto:
     """Optimize the onnx.
 
     Args:
@@ -55,6 +63,12 @@ def onnx2onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False, bn_on_skip=False, 
 
     # Postprocessing
     m = combo.postprocess(m)
+
+    # Put matmul after postprocess to avoid transpose moving downwards
+    if opt_matmul:
+        special.special_MatMul_process(m.graph)
+        m = onnx.utils.polish_model(m)
+
     return m
 
 # Main process
@@ -74,6 +88,8 @@ if __name__ == "__main__":
                         help='whether remove the last unsupported node for hardware')
     parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
+    parser.add_argument('--opt-matmul', dest='opt_matmul', action='store_true', default=False,
+                        help="set if you want to optimize the MatMul operations for the kneron hardware.")
     args = parser.parse_args()
 
     if args.out_file is None:
@@ -95,6 +111,6 @@ if __name__ == "__main__":
     # Basic model organize
     m = onnx.load(args.in_file)
 
-    m = onnx2onnx_flow(m, args.disable_fuse_bn, args.bn_on_skip, args.bn_before_add, args.bgr, args.norm, args.rgba2yynn, args.eliminate_tail)
+    m = onnx2onnx_flow(m, args.disable_fuse_bn, args.bn_on_skip, args.bn_before_add, args.bgr, args.norm, args.rgba2yynn, args.eliminate_tail, args.opt_matmul)
 
     onnx.save(m, outfile)
