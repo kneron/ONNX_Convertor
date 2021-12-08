@@ -591,9 +591,11 @@ def change_output_shape(g, target_list):
             if output_value is None:
                 print("Cannot find output {}".format(name))
                 continue
-            if len(shape) != len(output_value.type.tensor_type.shape.dim):
+            if len(shape) > len(output_value.type.tensor_type.shape.dim):
                 print("The dimension doesn't match for output {}".format(name))
                 continue
+            while len(shape) < len(output_value.type.tensor_type.shape.dim):
+                output_value.type.tensor_type.shape.dim.pop()
             for i in range(len(shape)):
                 output_value.type.tensor_type.shape.dim[i].dim_value = shape[i]
         except TypeError:

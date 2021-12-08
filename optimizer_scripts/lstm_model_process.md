@@ -14,5 +14,14 @@ On how to use `tf2onnx` to export onnx, please check its Github repository <http
 
 1. Use `onnx2onnx.py` to automatically optimize the model.
 2. Eliminate remaining Reshape nodes using `force_shape_adjust.py`.
-3. Use `tensorflow2onnx.py` to check the output model shape and optimize the model again.
-4. Change the batch size if the batch size is not 1, adjust it using `batch_size_change.py`.
+3. Change the batch size if the batch size is not 1, adjust it using `batch_size_change.py`.
+
+## Step by Step Commands
+
+Here we provide the commands for an example onnx called `lstm.onnx`:
+
+1. ` python ONNX_Convertor/optimizer_scripts/force_node_cut.py lstm.onnx lstm.1.onnx -c 'StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/concatenate_50/concat:0' -s "1 25 96"`
+2. `python ONNX_Convertor/optimizer_scripts/tensorflow2onnx.py lstm.1.onnx lstm.2.onnx`
+3. `python ONNX_Convertor/optimizer_scripts/onnx2onnx.py lstm.2.onnx -o lstm.3.onnx`
+4. `python ONNX_Convertor/optimizer_scripts/force_shape_adjust.py lstm.3.onnx lstm.4.onnx`
+5. `python ONNX_Convertor/optimizer_scripts/batch_size_change.py lstm.4.onnx lstm.5.onnx -i "Transpose__1545_kn_0 1 3 54 58" "Transpose__1491_kn_0 1 3 1 45" -o "StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/concatenate_50/concat:0 1 96" --replace-reshape-with-flatten StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/time_distributed_478/Reshape_1_kn StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/time_distributed_464/Reshape_1_kn StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/time_distributed_564/Reshape_1_kn`

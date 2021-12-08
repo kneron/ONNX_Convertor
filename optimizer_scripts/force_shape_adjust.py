@@ -6,6 +6,7 @@ from onnx import optimizer
 from tools import other, helper, eliminating, modhelper
 import sys
 import onnx
+from tensorflow2onnx import tf2onnx_onnx_flow
 
 if __name__ != '__main__':
     logging.error("This module can only be called directly")
@@ -107,6 +108,8 @@ def add_pair_of_transpose_nodes(g):
         )
     # Reconnect the graph
     following_node = helper.find_node_by_output_name(g, "StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/add_58/add:0_kn")
+    if following_node is None:
+        return
     modhelper.replace_node_input(following_node, input_name, input_name + '_extra_transpose_b')
     # Add to the graph
     g.node.extend([transpose_a, transpose_b])
@@ -128,6 +131,8 @@ def add_pair_of_transpose_nodes(g):
         )
     # Reconnect the graph
     following_node = helper.find_node_by_output_name(g, "StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/add_58/add:0_kn")
+    if following_node is None:
+        return
     modhelper.replace_node_input(following_node, input_name, input_name + '_extra_transpose_b')
     # Add to the graph
     g.node.extend([transpose_a, transpose_b])
@@ -160,4 +165,5 @@ while len(m.graph.value_info) != 0:
     m.graph.value_info.pop()
 m = other.inference_shapes(m)
 m = optimizer.optimize(m, ['eliminate_deadend'])
+m = tf2onnx_onnx_flow(m)
 onnx.save(m, args.out_file)

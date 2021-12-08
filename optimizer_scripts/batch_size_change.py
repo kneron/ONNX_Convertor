@@ -1,4 +1,4 @@
-from tools import other, helper, replacing
+from tools import other, helper, replacing, eliminating
 from onnx import optimizer
 import sys
 import onnx
@@ -18,7 +18,8 @@ def change_reshape_size(g, rehape_name):
         )
     g.node.remove(reshape_node)
     g.node.append(flatten_node)
-    g.value_info.remove(reshape_output)
+    if reshape_output is not None:
+        g.value_info.remove(reshape_output)
 
 parser = argparse.ArgumentParser(description="Edit an ONNX model.")
 parser.add_argument('in_file', type=str, help='input ONNX FILE')
@@ -38,8 +39,14 @@ if args.input_change is not None:
     other.change_input_shape(g, args.input_change)
 if args.output_change is not None:
     other.change_output_shape(g, args.output_change)
-change_reshape_size(m.graph, args.replace_reshape)
+onnx.save(m, "debugx.onnx")
+if args.replace_reshape is not None:
+    for replace_reshape_name in args.replace_reshape:
+        change_reshape_size(m.graph, replace_reshape_name)
 other.topological_sort(m.graph)
+# Reinference the shapes
+eliminating.clear_value_infos(m.graph)
+onnx.save(m, "debug.onnx")
 m = other.inference_shapes(m)
 m = optimizer.optimize(m, ['eliminate_deadend'])
 onnx.save(m, args.out_file)
