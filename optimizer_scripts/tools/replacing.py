@@ -464,25 +464,29 @@ def replace_split_with_slices(g):
             if item.name == 'split':
                 split = item.ints
 
+        # For opset 11, axis could be negative.
+        if axis < 0:
+            axis = len(shape) + axis
+
         length = input_value.type.tensor_type.shape.dim[axis].dim_value
-        if split is not []:
-            n_out = len(node.attribute[1].ints)
+        if len(split) > 0:
+            n_out = len(split)
             pos = 0
             for i in range(n_out):
-                pos += node.attribute[1].ints[i]
+                pos += split[i]
                 new_node_name = output_val_names[i]
                 # Construct starts, ends, axes
                 starts_name = new_node_name + '_starts_' + str(i)
                 ends_name = new_node_name + '_ends_' + str(i)
                 axes_name = new_node_name + '_axes_' + str(i)
-                starts_node = helper.list_to_constant(starts_name, (1, ), [int(pos-node.attribute[1].ints[i])])
+                starts_node = helper.list_to_constant(starts_name, (1, ), [int(pos-split[i])])
                 ends_node = helper.list_to_constant(ends_name, (1, ), [int(pos)])
                 axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
                 # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
                     inputs=[node.input[0], starts_name, ends_name, axes_name],
-                    outputs=[new_node_name],
+                    outputs=[node.output[i]],
                     name=new_node_name
                 )
                 g.node.extend([starts_node, ends_node, axes_node, new_node])
@@ -503,7 +507,7 @@ def replace_split_with_slices(g):
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
                     inputs=[node.input[0], starts_name, ends_name, axes_name],
-                    outputs=[new_node_name],
+                    outputs=[node.output[i]],
                     name=new_node_name
                 )
                 g.node.extend([starts_node, ends_node, axes_node, new_node])

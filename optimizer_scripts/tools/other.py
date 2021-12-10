@@ -45,14 +45,17 @@ def add_name_to_node(g):
 
 def rename_all_node_name(g):
     """
-    rename all nodes:
+    rename all nodes if the node name is a number:
 
         new_name = old_name + "_kn"
 
     :param g: the onnx graph
-    """    
+    """
 
     for node in g.node:
+        if not node.name.isdigit():
+            # Skip not number names
+            continue
         new_node_name = node.name + "_kn"
         new_node_output0_name = node.output[0] + "_kn"
 

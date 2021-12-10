@@ -78,8 +78,7 @@ def preprocess(model_proto, disable_fuse_bn=False):
     other.topological_sort(g)
     m = other.inference_shapes(m)
     g = m.graph
-    if helper.get_current_opset_version() < 10:
-        replacing.replace_split_with_slices(g)
+    replacing.replace_split_with_slices(g)
     other.topological_sort(g)
 
     return m
