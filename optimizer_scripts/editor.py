@@ -21,7 +21,7 @@ parser.add_argument('-o', '--output', dest='output_change', type=str, nargs='+',
 parser.add_argument('--add-conv', dest='add_conv', type=str, nargs='+', help='add nop conv using specific input')
 parser.add_argument('--add-bn', dest='add_bn', type=str, nargs='+', help='add nop bn using specific input')
 parser.add_argument('--rename-output', dest='rename_output', type=str, nargs='+', help='Rename the specific output(e.g. --rename-output old_name new_name)')
-parser.add_argument('--pixel-shift-value', dest='pixel_shift_value', type=str, nargs='+', help='(per channel) set pixel value shift bn layer at model front for normalization( e.g. --pixel_shift_value "[104.0, 117.0, 123.0]" )')
+parser.add_argument('--pixel-bias-value', dest='pixel_bias_value', type=str, nargs='+', help='(per channel) set pixel value bias bn layer at model front for normalization( e.g. --pixel_bias_value "[104.0, 117.0, 123.0]" )')
 parser.add_argument('--pixel-scale-value', dest='pixel_scale_value', type=str, nargs='+', help='(per channel) set pixel value scale bn layer at model front for normalization( e.g. --pixel_scale_value "[0.0078125, 0.0078125, 0.0078125]" )')
 
 args = parser.parse_args()
@@ -53,22 +53,24 @@ if args.add_bn is not None:
     other.add_nop_bn_after(g, args.add_bn)
     other.topological_sort(g)
 
-# Add shift scale BN node
-if args.pixel_shift_value is not None or args.pixel_scale_value is not None:
-    pixel_shift_value = [0, 0, 0]
+# Add bias scale BN node
+if args.pixel_bias_value is not None or args.pixel_scale_value is not None:
+    pixel_bias_value = [0, 0, 0]
     pixel_scale_value = [1, 1, 1]
 
-    if args.pixel_shift_value is not None and len(args.pixel_shift_value) == 1:
-        pixel_shift_value = [float(n) for n in args.pixel_shift_value[0].replace( '[' , '' ).replace( ']' , '' ).split(',')]
+    if args.pixel_bias_value is not None and len(args.pixel_bias_value) == 1:
+        pixel_bias_value = [float(n) for n in args.pixel_bias_value[0].replace( '[' , '' ).replace( ']' , '' ).split(',')]
 
     if args.pixel_scale_value is not None and len(args.pixel_scale_value) == 1:
         pixel_scale_value = [float(n) for n in args.pixel_scale_value[0].replace( '[' , '' ).replace( ']' , '' ).split(',')]
 
-    for i_n in g.input:
-        if i_n.type.tensor_type.shape.dim[1].dim_value != 3:
-            raise ValueError("Only support 3 channel input, found input node channel not equal to 3: node name... " + i_n.name)
-        other.add_shift_scale_bn_after(g, i_n.name,  pixel_shift_value, pixel_scale_value)
+    if len(g.input) > 1:
+        raise ValueError(" '--pixel-bias-value' and '--pixel-scale-value' only support one input node model currently")
 
+    i_n = g.input[0]
+    if i_n.type.tensor_type.shape.dim[1].dim_value != len(pixel_bias_value) or  i_n.type.tensor_type.shape.dim[1].dim_value != len(pixel_scale_value):
+        raise ValueError("--pixel-bias-value (" + str(pixel_bias_value) + ") and --pixel-scale-value (" + str(pixel_scale_value) + ") should be same as input dimension:" + str(i_n.type.tensor_type.shape.dim[1].dim_value) )
+    other.add_bias_scale_bn_after(g, i_n.name,  pixel_bias_value, pixel_scale_value)
 
 # Change input and output shapes as requested
 if args.input_change is not None:

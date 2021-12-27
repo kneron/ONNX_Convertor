@@ -718,7 +718,7 @@ def add_nop_bn_after(g, value_names):
         g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
     topological_sort(g)
 
-def add_shift_scale_bn_after(g, value_name, channel_shift, channel_scale):
+def add_bias_scale_bn_after(g, value_name, channel_bias, channel_scale):
     """Add do-nothing BatchNormalization nodes after the given value info. It will\\
     take the given names as the inputs of the new node and replace the inputs\\
     of the following nodes.
@@ -743,7 +743,7 @@ def add_shift_scale_bn_after(g, value_name, channel_shift, channel_scale):
     ones = [1.0] * channel
     zeros = [0.0] * channel
     scale_node = helper.list_to_constant(node_name + "_scale", [len(channel_scale)], channel_scale)
-    bias_node = helper.list_to_constant(node_name + "_bias", [len(channel_shift)], channel_shift)
+    bias_node = helper.list_to_constant(node_name + "_bias", [len(channel_bias)], channel_bias)
     mean_node = helper.list_to_constant(node_name + "_mean", [channel], zeros)
     var_node = helper.list_to_constant(node_name + "_var", [channel], ones)
     # Construct BN node
