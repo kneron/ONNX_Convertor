@@ -55,8 +55,14 @@ if args.add_bn is not None:
 
 # Add bias scale BN node
 if args.pixel_bias_value is not None or args.pixel_scale_value is not None:
-    pixel_bias_value = [0, 0, 0]
-    pixel_scale_value = [1, 1, 1]
+
+    if len(g.input) > 1:
+        raise ValueError(" '--pixel-bias-value' and '--pixel-scale-value' only support one input node model currently")
+        
+    i_n = g.input[0]
+
+    pixel_bias_value = [0] * i_n.type.tensor_type.shape.dim[1].dim_value
+    pixel_scale_value = [1] * i_n.type.tensor_type.shape.dim[1].dim_value
 
     if args.pixel_bias_value is not None and len(args.pixel_bias_value) == 1:
         pixel_bias_value = [float(n) for n in args.pixel_bias_value[0].replace( '[' , '' ).replace( ']' , '' ).split(',')]
@@ -64,10 +70,7 @@ if args.pixel_bias_value is not None or args.pixel_scale_value is not None:
     if args.pixel_scale_value is not None and len(args.pixel_scale_value) == 1:
         pixel_scale_value = [float(n) for n in args.pixel_scale_value[0].replace( '[' , '' ).replace( ']' , '' ).split(',')]
 
-    if len(g.input) > 1:
-        raise ValueError(" '--pixel-bias-value' and '--pixel-scale-value' only support one input node model currently")
 
-    i_n = g.input[0]
     if i_n.type.tensor_type.shape.dim[1].dim_value != len(pixel_bias_value) or  i_n.type.tensor_type.shape.dim[1].dim_value != len(pixel_scale_value):
         raise ValueError("--pixel-bias-value (" + str(pixel_bias_value) + ") and --pixel-scale-value (" + str(pixel_scale_value) + ") should be same as input dimension:" + str(i_n.type.tensor_type.shape.dim[1].dim_value) )
     other.add_bias_scale_bn_after(g, i_n.name,  pixel_bias_value, pixel_scale_value)
