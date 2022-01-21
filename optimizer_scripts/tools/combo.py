@@ -204,6 +204,8 @@ def postprocess(m):
     :param m: the original model input\\
     :return: the new model after preprocessing
     """
+    while len(m.graph.value_info) > 0:
+        m.graph.value_info.pop()
     m = onnx.utils.polish_model(m)
     eliminating.eliminate_single_input_Concat(m.graph)
     eliminating.eliminate_nop_Maxpool_and_AveragePool(m.graph)
