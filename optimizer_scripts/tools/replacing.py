@@ -58,18 +58,20 @@ def replace_Reshape_with_Flatten(g):
     for node in g.node:
         if node.op_type != 'Reshape':
             continue
-        found = False
-        # Flatten must be followed by Gemm
+        found_Gemm = False
+        # Flatten could be followed by Gemm
         for i in g.node:
             if len(i.input) == 0 or i.input[0] != node.output[0]:
                 continue
             if i.op_type == 'Gemm':
                 found = True
                 break
-        if not found:
-            continue
+        # Check weight
         shape_node = helper.find_node_by_output_name(g, node.input[1])
         if shape_node.op_type != 'Constant':
+            continue
+        shape_value = helper.constant_to_numpy(shape_node)
+        if (shape_value.size != 2 or shape_value[0] != 1) and not found_Gemm:
             continue
         # Replace it
         node.op_type = "Flatten"
