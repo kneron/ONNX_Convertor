@@ -32,6 +32,7 @@ def onnx2onnx_flow(m: onnx.ModelProto,
         norm (bool, optional): add an Conv layer to add 0.5 tp the input. Defaults to False.
         rgba2yynn (bool, optional): add an Conv layer to convert rgb input to yynn . Defaults to False.
         eliminate_tail (bool, optional): remove the trailing NPU unsupported nodes. Defaults to False.
+        opt_matmul(bool, optional): optimize the MatMul layers according to the NPU limit. Defaults to False.
 
     Returns:
         ModelProto: the optimized onnx model object.
