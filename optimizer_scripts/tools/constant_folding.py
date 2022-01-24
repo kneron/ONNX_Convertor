@@ -2,12 +2,14 @@ import onnx.utils
 import onnx
 import numpy as np
 import logging
+import traceback
 
 from . import helper
 from .general_graph import Graph, Node
 from .other import topological_sort
 from .replacing import replace_shape_with_constant
 
+logger = logging.getLogger("Kneron ONNX Converter")
 
 def are_all_inputs_Constant_with_one_child(g, node):
     for input_name in node.input:
@@ -26,29 +28,34 @@ def constant_folding(g):
     :param g: The onnx GraphProto\\
     :return: If any node is folded, return True. Otherwise, return False.
     """
-    # Before constant folding, duplicate the constant nodes.
-    duplicate_constant_node(g)
     keep_folding = True  # Keep the while loop
     folded = False      # Return value
-    while keep_folding:
-        keep_folding = False
-        for node in g.node:
-            # Check if the node is foldable
-            if node.op_type not in constant_folding_nodes.keys():
-                continue
-            # Check if the parents of the node are all single follower constant node.
-            if not are_all_inputs_Constant_with_one_child(g, node):
-                continue
-            # Constant folding for the specific node
-            if constant_folding_nodes[node.op_type](g, node):
-                logging.debug("Constant nodes and %s %s are folded.",
-                              node.op_type, node.name)
-                folded = True
-                keep_folding = True
-            else:
-                logging.debug(
-                    "Constant nodes and %s %s are skipped.", node.op_type, node.name)
+    try:
+        # Before constant folding, duplicate the constant nodes.
+        duplicate_constant_node(g)
+        while keep_folding:
+            keep_folding = False
+            for node in g.node:
+                # Check if the node is foldable
+                if node.op_type not in constant_folding_nodes.keys():
+                    continue
+                # Check if the parents of the node are all single follower constant node.
+                if not are_all_inputs_Constant_with_one_child(g, node):
+                    continue
+                # Constant folding for the specific node
+                if constant_folding_nodes[node.op_type](g, node):
+                    logging.debug("Constant nodes and %s %s are folded.",
+                                  node.op_type, node.name)
+                    folded = True
+                    keep_folding = True
+                else:
+                    logging.debug(
+                        "Constant nodes and %s %s are skipped.", node.op_type, node.name)
+    except Exception as e:
+        logger.error("An exception is raised while constant folding.")
+        logger.error(traceback.format_exc())
     return folded
+
 
 
 def duplicate_constant_node(g):
@@ -485,7 +492,10 @@ def gather_constant_folding(g, node):
         indices = indices[0]
 
     np_data = np.reshape(data, shape)
-    axis = node.attribute[0].i
+    if len(node.attribute) < 1:
+        axis = 0
+    else:
+        axis = node.attribute[0].i
 
     new_data = np.take(np_data, indices, axis=axis)
     new_shape = new_data.shape
@@ -508,9 +518,12 @@ def gather_constant_folding(g, node):
         new_shape
     )
 
-    g.value_info.remove(val_info_1)
-    g.value_info.remove(val_info_2)
-    g.value_info.remove(val_info_3)
+    if val_info_1 is not None:
+        g.value_info.remove(val_info_1)
+    if val_info_2 is not None:
+        g.value_info.remove(val_info_2)
+    if val_info_3 is not None:
+        g.value_info.remove(val_info_3)
     g.value_info.extend([new_val_info])
 
     while node_to_del:
