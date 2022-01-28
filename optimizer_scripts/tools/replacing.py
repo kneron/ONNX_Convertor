@@ -1,5 +1,6 @@
 """Optimizations that replace one node with another.
 """
+from os import dup
 import struct
 import copy
 import logging
@@ -9,7 +10,7 @@ from . import helper
 from . import modhelper
 from .other import topological_sort
 
-def replace_initializer_with_Constant(g):
+def replace_initializer_with_Constant(g, duplicate_shared_weights=True):
     """
     Replace initializers with Constant and a corresponding value_info
     If the initializer has related input, remove it.
@@ -24,9 +25,21 @@ def replace_initializer_with_Constant(g):
             value_info = input_map[tensor.name]
             g.input.remove(value_info)
         following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
-        for i, node in enumerate(following_nodes):
-            new_name = tensor.name + "_duplicated_No" + str(i) if i > 0 else tensor.name
-            modhelper.replace_node_input(node, tensor.name, new_name)
+        if duplicate_shared_weights:
+            for i, node in enumerate(following_nodes):
+                new_name = tensor.name + "_duplicated_No" + str(i) if i > 0 else tensor.name
+                modhelper.replace_node_input(node, tensor.name, new_name)
+                new_node = onnx.helper.make_node(
+                    "Constant",
+                    [],
+                    [new_name],
+                    name=new_name,
+                    value=tensor
+                )
+                # Add node to lists
+                g.node.extend([new_node])
+        else:
+            new_name = tensor.name
             new_node = onnx.helper.make_node(
                 "Constant",
                 [],
@@ -45,7 +58,7 @@ def replace_initializer_with_Constant(g):
     # Remove original initializer
     while len(g.initializer) != 0:
         g.initializer.pop()
-    
+
     topological_sort(g)
 
 def replace_Reshape_with_Flatten(g):
