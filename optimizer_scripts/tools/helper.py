@@ -154,6 +154,11 @@ def constant_to_list(node):
             data = list(tensor.int64_data)
         else:
             data = [i[0] for i in struct.iter_unpack('q', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.INT8:
+        if len(tensor.int32_data) != 0:
+            data = list(tensor.int32_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('b', tensor.raw_data)]
     elif tensor.data_type == onnx.helper.TensorProto.FLOAT:
         if len(tensor.float_data) != 0:
             data = list(tensor.float_data)

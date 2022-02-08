@@ -1013,3 +1013,44 @@ def fuse_slice_nodes_into_conv(g):
         # Replace node
         g.node.append(weight_node)
         g.node.append(new_conv)
+
+
+def fuse_relu_min_into_clip(g):
+    node_to_del = []
+    for node in g.node:
+        # Check Min node
+        if node.op_type != 'Min':
+            continue
+        min_node = node
+        # Check Constant node
+        min_const = helper.find_node_by_output_name(g, min_node.input[1])
+        if not min_const or min_const.op_type != 'Constant':
+            continue
+        min_shape, min_value = helper.constant_to_list(min_const)
+        if min_shape != 1:
+            continue
+        # Check Relu node
+        relu_node = helper.find_node_by_output_name(g, min_node.input[0])
+        if not relu_node or relu_node.op_type != 'Relu':
+            continue
+
+        # Create Clip node
+        relu_min_const_node = helper.list_to_constant(relu_node.name+'_min_value', [], [0.0])
+        clip_node = onnx.helper.make_node(
+            "Clip",
+            [relu_node.input[0], relu_min_const_node.output[0], min_const.output[0]],
+            [min_node.output[0]],
+            name=min_node.name
+        )
+
+        node_to_del.extend([relu_node, min_node])
+
+        old_relu_const_val_info = helper.find_value_by_name(g, min_node.input[0])
+        if old_relu_const_val_info:
+            g.value_info.remove(old_relu_const_val_info)
+        g.node.extend([relu_min_const_node, clip_node])
+
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
+
+    topological_sort(g)

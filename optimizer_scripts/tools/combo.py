@@ -15,11 +15,15 @@ from . import removing_transpose
 from . import modhelper
 from .common_pattern import torch_pattern_match, tf_pattern_match
 
-def preprocess(model_proto, disable_fuse_bn=False):
+def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True):
     """The most common used functions before other processing.
 
-    :param model_proto: the original model input\\
-    :return: the new model after preprocessing
+    Args:
+        model_proto: the original model input
+        duplicate_shared_weights(bool, optional): duplicate shared weights. Defaults to True.
+
+    Return:
+        the new model after preprocessing
 
     It includes:
 
@@ -65,8 +69,11 @@ def preprocess(model_proto, disable_fuse_bn=False):
         passes.append('fuse_bn_into_conv')
     m = optimizer.optimize(m, passes)
     g = m.graph
-    replacing.replace_initializer_with_Constant(g)
-    other.duplicate_param_shared_constant(g)
+    if duplicate_shared_weights:
+        replacing.replace_initializer_with_Constant(g, duplicate_shared_weights=True)
+        other.duplicate_param_shared_constant(g)
+    else:
+        replacing.replace_initializer_with_Constant(g, duplicate_shared_weights=False)
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
     g = m.graph
@@ -107,6 +114,7 @@ def common_optimization(m):
     fusing.fuse_Gemm_into_Gemm(g)
     fusing.fuse_consecutive_reducemean(g)
     fusing.fuse_slice_nodes_into_conv(g)
+    fusing.fuse_relu_min_into_clip(g)
     other.duplicate_shared_Flatten(g)
     replacing.replace_average_pool_with_GAP(g)
 

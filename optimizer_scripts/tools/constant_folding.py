@@ -925,12 +925,61 @@ def bn_constant_folding(g, node):
     return True
 
 
+def DequantizeLinear_constant_folding(g, node):
+    """ Fold constant and mul nodes to a single constant node.
+    """
+    # Prepare data
+    node_to_del = []
+    x_node = helper.find_node_by_output_name(g, node.input[0])
+    x_scale_node = helper.find_node_by_output_name(g, node.input[1])
+    if len(node.input) > 2:
+        x_zero_point_node = helper.find_node_by_output_name(g, node.input[2])
+    else:
+        x_zero_point_node = None
+
+    input_value_info = []
+    for i in range(len(node.input)):
+        input_value_info.append(helper.find_value_by_name(g, node.input[i]))
+
+    if input_value_info[0] is None:
+        return False
+
+    x_data = helper.constant_to_numpy(x_node)
+    x_scale_data = helper.constant_to_numpy(x_scale_node)
+    if x_zero_point_node is not None:
+        x_zero_point_data = helper.constant_to_numpy(x_zero_point_node)
+    else:
+        x_zero_point_data = np.array([0.0])
+
+    # Calculate new node
+    new_data = (x_data.astype(np.float32) - x_zero_point_data.astype(np.float32)) * x_scale_data
+
+    new_node = helper.numpy_to_constant(node.output[0], new_data)
+
+    # Reconnect the graph
+    node_to_del.extend([node, x_node, x_scale_node])
+    if x_zero_point_node is not None:
+        node_to_del.append(x_zero_point_node)
+    g.node.extend([new_node])
+
+    for value in input_value_info:
+        if value is not None:
+            g.value_info.remove(value)
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
 # Available constant folding names to function map.
 constant_folding_nodes = {
     'Add': add_constant_folding,
     'BatchNormalization': bn_constant_folding,
     'Cast': cast_constant_folding,
     'Concat': concat_constant_folding,
+    'DequantizeLinear': DequantizeLinear_constant_folding,
     'Div': div_constant_folding,
     'Floor': floor_constant_folding,
     'Gather': gather_constant_folding,

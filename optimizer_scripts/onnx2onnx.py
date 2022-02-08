@@ -20,7 +20,8 @@ def onnx2onnx_flow(m: onnx.ModelProto,
                     norm=False,
                     rgba2yynn=False,
                     eliminate_tail=False,
-                    opt_matmul=False) -> onnx.ModelProto:
+                    opt_matmul=False,
+                    duplicate_shared_weights=True) -> onnx.ModelProto:
     """Optimize the onnx.
 
     Args:
@@ -33,12 +34,13 @@ def onnx2onnx_flow(m: onnx.ModelProto,
         rgba2yynn (bool, optional): add an Conv layer to convert rgb input to yynn . Defaults to False.
         eliminate_tail (bool, optional): remove the trailing NPU unsupported nodes. Defaults to False.
         opt_matmul(bool, optional): optimize the MatMul layers according to the NPU limit. Defaults to False.
+        duplicate_shared_weights(bool, optional): duplicate shared weights. Defaults to True.
 
     Returns:
         ModelProto: the optimized onnx model object.
     """
     # temp.weight_broadcast(m.graph)
-    m = combo.preprocess(m, disable_fuse_bn)
+    m = combo.preprocess(m, disable_fuse_bn, duplicate_shared_weights)
     # temp.fuse_bias_in_consecutive_1x1_conv(m.graph)
 
     # Add BN on skip branch
@@ -91,6 +93,8 @@ if __name__ == "__main__":
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
     parser.add_argument('--opt-matmul', dest='opt_matmul', action='store_true', default=False,
                         help="set if you want to optimize the MatMul operations for the kneron hardware.")
+    parser.add_argument('--no-duplicate-shared-weights', dest='no_duplicate_shared_weights', action='store_true', default=False,
+                        help='do not duplicate shared weights. Defaults to False.')
     args = parser.parse_args()
 
     if args.out_file is None:
@@ -112,6 +116,6 @@ if __name__ == "__main__":
     # Basic model organize
     m = onnx.load(args.in_file)
 
-    m = onnx2onnx_flow(m, args.disable_fuse_bn, args.bn_on_skip, args.bn_before_add, args.bgr, args.norm, args.rgba2yynn, args.eliminate_tail, args.opt_matmul)
+    m = onnx2onnx_flow(m, args.disable_fuse_bn, args.bn_on_skip, args.bn_before_add, args.bgr, args.norm, args.rgba2yynn, args.eliminate_tail, args.opt_matmul, not args.no_duplicate_shared_weights)
 
     onnx.save(m, outfile)
