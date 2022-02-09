@@ -88,12 +88,16 @@ def add_output_to_value_info(g):
         if helper.find_value_by_name(g, output.name) is None:
             g.value_info.extend([output])
 
-def find_first_sequential_outputs(g, node):
+def find_first_sequential_output(g, node):
     for value_name in node.output:
         value = helper.find_output_by_name(g, value_name)
         if value is not None:
             return value
-    return find_first_sequential_outputs(g, helper.find_nodes_by_input_name(g, node.output[0])[0])
+    next_nodes = helper.find_nodes_by_input_name(g, node.output[0])
+    if len(next_nodes) == 0:
+        # No following nodes
+        return None
+    return find_first_sequential_output(g, next_nodes[0])
 
 def remove_nodes(g, cut_nodes=[], cut_types=[]):
     node_to_delete = []
@@ -103,11 +107,11 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
             continue
         else:
             node_to_delete.append(node)
-    # Mapping outputs
+    # Mapping originnal outputs to new outputs. This mapping is to keep the output order.
     output_mapping = {}
     new_output = set()
     for node in node_to_delete:
-        original_output = find_first_sequential_outputs(g, node)
+        original_output = find_first_sequential_output(g, node)
         if original_output.name not in output_mapping:
             output_mapping[original_output.name] = []
         for input_name in node.input:
@@ -140,7 +144,9 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
             node_to_delete.append(node)
     # Mapping outputs again
     for node in node_to_delete:
-        original_output = find_first_sequential_outputs(g, node)
+        original_output = find_first_sequential_output(g, node)
+        if original_output is None:
+            continue
         if original_output.name not in output_mapping:
             output_mapping[original_output.name] = []
         for input_name in node.input:
