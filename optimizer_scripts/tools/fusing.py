@@ -801,20 +801,6 @@ def fuse_conv_and_add_into_conv(g):
 
         node_to_del.append(add_node)
 
-        old_add_const_val_info = helper.find_value_by_name(g, add_node.input[1])
-        old_conv_output_val_info = helper.find_value_by_name(g, conv_node.output[0])
-        if old_add_const_val_info:
-            g.value_info.remove(old_add_const_val_info)
-        if old_conv_output_val_info:
-            g.value_info.remove(old_conv_output_val_info)
-
-        new_add_const_val_info = onnx.helper.make_tensor_value_info(
-            add_const.output[0],
-            add_const.attribute[0].t.data_type,
-            add_const.attribute[0].t.dims
-        )
-        g.value_info.extend([new_add_const_val_info])
-
     while node_to_del:
         g.node.remove(node_to_del.pop())
 

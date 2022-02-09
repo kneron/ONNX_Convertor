@@ -15,7 +15,7 @@ from tools import combo
 from tools import special
 
 # Debug use
-# logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.INFO)
 
 # Define general pytorch exported onnx optimize process
 def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.ModelProto:
@@ -28,11 +28,14 @@ def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.
     Returns:
         ModelProto: the optimized onnx model
     """
+    logger = logging.getLogger("optimizer_scripts")
+    logger.info("Preprocessing the model...")
     m = combo.preprocess(m, disable_fuse_bn)
+    logger.info("Constant folding...")
     m = combo.pytorch_constant_folding(m)
-
+    logger.info("Doing various optimizations... ")
     m = combo.common_optimization(m)
-
+    logger.info("Postprocessing the model...")
     m = combo.postprocess(m)
 
     return m
