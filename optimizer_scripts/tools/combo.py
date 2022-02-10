@@ -70,6 +70,8 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
         passes.append('fuse_bn_into_conv')
     m = optimizer.optimize(m, passes)
     g = m.graph
+    # Add name again since onnx optimizer higher than 1.7 may remove node names.
+    other.add_name_to_node(g)
     if duplicate_shared_weights:
         replacing.replace_initializer_with_Constant(g, duplicate_shared_weights=True)
         other.duplicate_param_shared_constant(g)
