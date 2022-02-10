@@ -678,6 +678,86 @@ def replace_mul_to_bn(g):
 
     topological_sort(g)
 
+def replace_div_to_bn(g):
+    """Replace single Div node with Batchnorm node.
+    :param g: input graph.
+    :return:
+    """
+    node_to_del = []
+    for node in g.node:
+        if node.op_type != 'Div':
+            continue
+
+        div_op_node = node
+
+        # only support one input node
+        if len(div_op_node.input) != 2: # OP node and value node
+            continue
+
+        input_op_node_name = div_op_node.input[0]
+        div_value_node = helper.find_node_by_output_name(g, div_op_node.input[1])
+        if not div_value_node or div_value_node.op_type != 'Constant':
+            continue
+
+        prev_shape_value_info = helper.find_value_by_name(g, input_op_node_name)
+        prev_shape_value_info = helper.find_input_by_name(g, input_op_node_name) if prev_shape_value_info is None else prev_shape_value_info
+        if prev_shape_value_info is None:
+            continue
+
+        _ , previous_node_output_shape = helper.find_size_shape_from_value(prev_shape_value_info)
+        scale_shape, scale_data = helper.constant_to_list(div_value_node)
+
+        # channel dimension
+        c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
+
+        # only allow channelwise mul or const mul
+        if scale_shape != [1, c_dim, 1, 1] and scale_shape != 1:
+            continue
+
+        ones = [1.0] * c_dim
+        zeros = [0.0] * c_dim
+        # If the input is an scaler, expand it.
+        if len(scale_data) == 1:
+            muls = scale_data * c_dim
+        else:
+            muls = scale_data
+        muls = (1 / np.array(muls)).tolist()
+        bn_name = div_op_node.output[0]
+        mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
+        variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
+        bias_value_node = helper.list_to_constant(bn_name+'_add', np.array(zeros).shape, zeros)
+        new_mul_value_node = helper.list_to_constant(bn_name+'_mul', np.array(muls).shape, muls)
+
+        bn_node = onnx.helper.make_node(
+            'BatchNormalization',
+            [input_op_node_name,
+            new_mul_value_node.output[0],
+            bias_value_node.output[0],
+            mean_value_node.output[0],
+            variance_value_node.output[0]],
+            [div_op_node.output[0]],
+            name=bn_name,
+            epsilon=0.00000001
+        )
+
+        scale_val_info = helper.find_value_by_name(g, div_value_node.output[0])
+        g.value_info.remove(scale_val_info)
+
+        g.node.extend([bn_node])
+        g.node.extend([mean_value_node])
+        g.node.extend([variance_value_node])
+        g.node.extend([bias_value_node])
+        g.node.extend([new_mul_value_node])
+
+        node_to_del.extend([div_op_node])
+        node_to_del.extend([div_value_node])
+
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
+
+    topological_sort(g)
+
+
 def replace_add_to_bn(g):
     """Replace single Add node with Batchnorm node.
     :param g: input graph.

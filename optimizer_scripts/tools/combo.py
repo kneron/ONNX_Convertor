@@ -14,6 +14,7 @@ from . import constant_folding
 from . import removing_transpose
 from . import modhelper
 from .common_pattern import torch_pattern_match, tf_pattern_match
+from .helper import logger
 
 def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True):
     """The most common used functions before other processing.
@@ -69,6 +70,8 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
         passes.append('fuse_bn_into_conv')
     m = optimizer.optimize(m, passes)
     g = m.graph
+    # Add name again since onnx optimizer higher than 1.7 may remove node names.
+    other.add_name_to_node(g)
     if duplicate_shared_weights:
         replacing.replace_initializer_with_Constant(g, duplicate_shared_weights=True)
         other.duplicate_param_shared_constant(g)
@@ -138,7 +141,7 @@ def pytorch_constant_folding(m):
     :param m: the original model input\\
     :return: the new model after preprocessing
     """
-    logging.info("Working on Pytorch constant folding.")
+    logger.info("Working on Pytorch constant folding.")
     replacing.replace_shape_with_constant(m.graph)
     replacing.replace_ConstantOfShape_with_constant(m.graph)
 
@@ -217,7 +220,7 @@ def postprocess(m):
     m = onnx.utils.polish_model(m)
     eliminating.eliminate_single_input_Concat(m.graph)
     eliminating.eliminate_nop_Maxpool_and_AveragePool(m.graph)
-
+    eliminating.eliminate_trivial_elementwise_calculation(m.graph)
     m = onnx.utils.polish_model(m)
 
     replacing.replace_depthwise_1x1_with_bn(m.graph)
@@ -235,7 +238,9 @@ def postprocess(m):
     fusing.fuse_mul_and_add_into_gemm(m.graph)
     m = onnx.utils.polish_model(m)
     fusing.fuse_conv_and_add_into_conv(m.graph)
+    m = onnx.utils.polish_model(m)
     replacing.replace_mul_to_bn(m.graph)
+    replacing.replace_div_to_bn(m.graph)
     replacing.replace_add_to_bn(m.graph)
     replacing.replace_sub_to_bn(m.graph)
     m = onnx.utils.polish_model(m)

@@ -4,8 +4,11 @@ import onnx
 import onnx.helper
 import struct
 import numpy as np
+import logging
 
 __ONNX_VERSION__ =  -1
+
+logger = logging.getLogger("optimizer_scripts")
 
 def setup_current_opset_version(m):
     global __ONNX_VERSION__

@@ -10,6 +10,7 @@ import logging
 from . import helper
 from .modhelper import replace_node_input
 import copy
+from .helper import logger
 
 def format_value_info_shape(g):
     """
@@ -187,14 +188,14 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
     while output_values:
         output_value = output_values.pop()
         if output_value.name in reachable_values:
-            logging.info("Keep output {}".format(output_value.name))
+            logger.info("Keep output {}".format(output_value.name))
             g.output.extend([output_value])
         elif output_value.name in output_mapping:
             real_outputs = [i for i in output_mapping[output_value.name] if i.name in reachable_values]
-            logging.info("Replace output {} with {}".format(output_value.name, [i.name for i in real_outputs]))
+            logger.info("Replace output {} with {}".format(output_value.name, [i.name for i in real_outputs]))
             g.output.extend(real_outputs)
         else:
-            logging.info("Abandon output {}".format(output_value.name))
+            logger.info("Abandon output {}".format(output_value.name))
             continue
 
 def transpose_B_in_Gemm(g):

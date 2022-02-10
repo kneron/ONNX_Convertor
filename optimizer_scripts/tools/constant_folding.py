@@ -8,8 +8,7 @@ from . import helper
 from .general_graph import Graph, Node
 from .other import topological_sort
 from .replacing import replace_shape_with_constant
-
-logger = logging.getLogger("Kneron ONNX Converter")
+from .helper import logger
 
 def are_all_inputs_Constant_with_one_child(g, node):
     for input_name in node.input:
