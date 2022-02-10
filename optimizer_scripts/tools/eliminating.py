@@ -578,3 +578,55 @@ def eliminate_nop_pads(g):
         #     node_to_remove.append(constant_value_node)
     for node in node_to_remove:
         g.node.remove(node)
+
+def eliminate_trivial_elementwise_calculation(g):
+    """Eliminate Add, Sub, Mul, Sub nodes which do nothing.
+    """
+    node_to_remove = []
+    for node in g.node:
+        weight_node = None
+        if node.op_type == 'Add' or node.op_type == 'Sub':
+            # For add and sub, check if the weights are 0s.
+            weight_node = helper.find_node_by_output_name(g, node.input[1])
+            if weight_node is None or weight_node.op_type != 'Constant':
+                continue
+            weight_np = helper.constant_to_numpy(weight_node)
+            if np.any(weight_np):
+                continue
+        elif node.op_type == 'Mul' or node.op_type == 'Div':
+            # For Mul and Div, check if the weights are 1s.
+            weight_node = helper.find_node_by_output_name(g, node.input[1])
+            if weight_node is None or weight_node.op_type != 'Constant':
+                continue
+            weight_np = helper.constant_to_numpy(weight_node)
+            weight_np = weight_np - 1
+            if np.any(weight_np):
+                continue
+        else:
+            # For other nodes, just skip
+            continue
+        # Remove the node
+        node_to_remove.append(node)
+        output_value_info = helper.find_value_by_name(g, node.output[0])
+        if output_value_info is not None:
+            g.value_info.remove(output_value_info)
+        # Replace next node input if any.
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+        todel_output = helper.find_output_by_name(g, node.output[0])
+        if todel_output is not None:
+            g.output.remove(todel_output)
+            previous_output = helper.find_output_by_name(g, node.input[0])
+            if previous_output is None:
+                the_input_value = helper.find_value_by_name(g, node.input[0])
+                g.output.extend([the_input_value])
+        # Delete the constant node if it is not used by other nodes
+        constant_following_nodes = helper.find_following_nodes_by_input_value_name(g, weight_node.output[0])
+        if len(constant_following_nodes) == 1:
+            node_to_remove.append(weight_node)
+            output_value_info = helper.find_value_by_name(g, weight_node.output[0])
+            if output_value_info is not None:
+                g.value_info.remove(output_value_info)
+    for node in node_to_remove:
+        g.node.remove(node)

@@ -2,7 +2,7 @@ import onnx.helper
 import numpy as np
 from . import helper
 from .other import topological_sort
-from .modhelper import delete_value_with_name_if_exists
+from .modhelper import delete_value_with_name_if_exists, replace_node_input
 
 def fuse_Transpose_into_Constant(g):
     """
@@ -775,6 +775,7 @@ def fuse_mul_and_add_into_gemm(g):
 def fuse_conv_and_add_into_conv(g):
     node_to_del = []
     for node in g.node:
+        # Check if two nodes can be fused
         if node.op_type != 'Add':
             continue
         add_node = node
@@ -795,11 +796,29 @@ def fuse_conv_and_add_into_conv(g):
         for _ in range(3):
             add_const.attribute[0].t.dims.remove(1)
 
+        # Link the add weight to constant.
         conv_node.input.extend([add_const.output[0]])
-        conv_node.output.pop()
-        conv_node.output.extend([add_node.output[0]])
 
-        node_to_del.append(add_node)
+        # Remove the node
+        node_to_del.append(node)
+        output_value_info = helper.find_value_by_name(g, add_node.output[0])
+        if output_value_info is not None:
+            g.value_info.remove(output_value_info)
+        add_weight_value_info = helper.find_value_by_name(g, add_const.output[0])
+        if add_weight_value_info is not None:
+            g.value_info.remove(add_weight_value_info)
+        # Replace next node input if any.
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, add_node.output[0])
+        for following_node in following_nodes:
+            replace_node_input(following_node, add_node.output[0], add_node.input[0])
+        # Replace output if any
+        todel_output = helper.find_output_by_name(g, add_node.output[0])
+        if todel_output is not None:
+            g.output.remove(todel_output)
+            previous_output = helper.find_output_by_name(g, add_node.input[0])
+            if previous_output is None:
+                the_input_value = helper.find_value_by_name(g, add_node.input[0])
+                g.output.extend([the_input_value])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())

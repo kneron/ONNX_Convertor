@@ -218,7 +218,7 @@ def postprocess(m):
     m = onnx.utils.polish_model(m)
     eliminating.eliminate_single_input_Concat(m.graph)
     eliminating.eliminate_nop_Maxpool_and_AveragePool(m.graph)
-
+    eliminating.eliminate_trivial_elementwise_calculation(m.graph)
     m = onnx.utils.polish_model(m)
 
     replacing.replace_depthwise_1x1_with_bn(m.graph)
@@ -236,8 +236,6 @@ def postprocess(m):
     fusing.fuse_mul_and_add_into_gemm(m.graph)
     m = onnx.utils.polish_model(m)
     fusing.fuse_conv_and_add_into_conv(m.graph)
-    while len(m.graph.value_info) > 0:
-        m.graph.value_info.pop()
     m = onnx.utils.polish_model(m)
     replacing.replace_mul_to_bn(m.graph)
     replacing.replace_add_to_bn(m.graph)
