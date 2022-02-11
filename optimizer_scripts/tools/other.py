@@ -308,6 +308,8 @@ def remove_zero_value_info(g):
                 break
 
 def inference_shapes(m):
+    while len(m.graph.value_info) > 0:
+        m.graph.value_info.pop()
     g = m.graph
     inferencing_shapes = True
     while inferencing_shapes:
@@ -437,6 +439,11 @@ def inference_cov_shape(g):
             continue
 
         # Now start the inference.
+        # Check kernel shape
+        kernel_value_info = helper.find_value_by_name(g, node.input[1])
+        _, kernel_shape = helper.find_size_shape_from_value(kernel_value_info)
+        if not kernel_shape:
+            continue
         # If auto_pad is set, use the auto_pad.
         auto_pad = helper.get_var_attribute_by_name(node, 'auto_pad', 'string')
         pads = None
@@ -445,7 +452,7 @@ def inference_cov_shape(g):
                 new_output_value_info = onnx.helper.make_tensor_value_info(
                     node.output[0],
                     input_value_info.type.tensor_type.elem_type,
-                    input_shape
+                    [input_shape[0], kernel_shape[0], input_shape[2], input_shape[3]]
                 )
                 if output_value_info:
                     g.value_info.remove(output_value_info)
@@ -455,12 +462,9 @@ def inference_cov_shape(g):
             elif auto_pad == 'VALID':
                 pads = [0, 0, 0, 0]
             else:
-                print("Unrecognized auto_pad value: " + str(auto_pad))
+                logger.error("Unrecognized auto_pad value: " + str(auto_pad))
                 exit(1)
-        kernel_value_info = helper.find_value_by_name(g, node.input[1])
-        _, kernel_shape = helper.find_size_shape_from_value(kernel_value_info)
-        if not input_shape or not kernel_shape:
-            continue
+
         strides = helper.get_attribute_by_name(node, 'strides').ints
         if not pads:
             pads = helper.get_attribute_by_name(node, 'pads').ints
@@ -468,9 +472,9 @@ def inference_cov_shape(g):
 
         # Pytorch model has the case where strides only have one number
         if len(strides) == 1:
-            return strides.append(strides[0])
+            strides.append(strides[0])
         if len(dilation) == 1:
-            return dilation.append(dilation[0])
+            dilation.append(dilation[0])
 
         H = math.floor((input_shape[2]+pads[0]+pads[2]-\
             dilation[0]*(kernel_shape[2]-1)-1)/strides[0]+1)

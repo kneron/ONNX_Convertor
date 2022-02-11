@@ -14,9 +14,6 @@ from tools import other
 from tools import combo
 from tools import special
 
-# Debug use
-# logging.basicConfig(level=logging.INFO)
-
 # Define general pytorch exported onnx optimize process
 def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.ModelProto:
     """Optimize the Pytorch exported onnx.
@@ -28,14 +25,9 @@ def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.
     Returns:
         ModelProto: the optimized onnx model
     """
-    logger = logging.getLogger("optimizer_scripts")
-    logger.info("Preprocessing the model...")
     m = combo.preprocess(m, disable_fuse_bn)
-    logger.info("Constant folding...")
     m = combo.pytorch_constant_folding(m)
-    logger.info("Doing various optimizations... ")
     m = combo.common_optimization(m)
-    logger.info("Postprocessing the model...")
     m = combo.postprocess(m)
 
     return m
@@ -46,10 +38,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Optimize a Pytorch generated model for Kneron compiler")
     parser.add_argument('in_file', help='input ONNX')
     parser.add_argument('out_file', help="ouput ONNX FILE")
+    parser.add_argument('--log', default='i', type=str, help="set log level")
     parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
 
     args = parser.parse_args()
+
+    if args.log == 'w':
+        logging.basicConfig(level=logging.WARN)
+    elif args.log == 'd':
+        logging.basicConfig(level=logging.DEBUG)
+    elif args.log == 'e':
+        logging.basicConfig(level=logging.ERROR)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
     if len(args.in_file) <= 4:
         # When the filename is too short.
