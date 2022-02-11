@@ -3,6 +3,7 @@ import onnx.utils
 from onnx import optimizer
 import sys
 import argparse
+import logging
 
 from tools import eliminating
 from tools import fusing
@@ -10,6 +11,7 @@ from tools import replacing
 from tools import other
 from tools import special
 from tools import combo
+from tools.helper import logger
 # from tools import temp
 
 def onnx2onnx_flow(m: onnx.ModelProto,
@@ -80,6 +82,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Optimize an ONNX model for Kneron compiler")
     parser.add_argument('in_file', help='input ONNX FILE')
     parser.add_argument('-o', '--output', dest='out_file', type=str, help="ouput ONNX FILE")
+    parser.add_argument('--log', default='i', type=str, help="set log level")
     parser.add_argument('--bgr', action='store_true', default=False, help="set if the model is trained in BGR mode")
     parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
     parser.add_argument('--rgba2yynn', action='store_true', default=False, help="set if the model has yynn input but you want to take rgba images")
@@ -101,6 +104,15 @@ if __name__ == "__main__":
         outfile = args.in_file[:-5] + "_polished.onnx"
     else:
         outfile = args.out_file
+
+    if args.log == 'w':
+        logging.basicConfig(level=logging.WARN)
+    elif args.log == 'd':
+        logging.basicConfig(level=logging.DEBUG)
+    elif args.log == 'e':
+        logging.basicConfig(level=logging.ERROR)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
     # onnx Polish model includes:
     #    -- nop

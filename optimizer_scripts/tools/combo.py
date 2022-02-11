@@ -54,6 +54,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     - fuse_pad_into_conv
 
     """
+    logger.info("Preprocessing the model...")
     helper.setup_current_opset_version(model_proto)
     eliminating.eliminate_empty_value_infos(model_proto.graph)
     other.add_name_to_node(model_proto.graph)
@@ -109,6 +110,7 @@ def common_optimization(m):
     - replace Squeeze/Unsqueeze with Reshape
     - replace Reshape with Flatten
     """
+    logger.info("Doing nodes fusion and replacement... ")
     m = onnx.utils.polish_model(m)
     g = m.graph
     other.transpose_B_in_Gemm(g)
@@ -141,7 +143,7 @@ def pytorch_constant_folding(m):
     :param m: the original model input\\
     :return: the new model after preprocessing
     """
-    logger.info("Working on Pytorch constant folding.")
+    logger.info("Working on constant folding.")
     replacing.replace_shape_with_constant(m.graph)
     replacing.replace_ConstantOfShape_with_constant(m.graph)
 
@@ -215,6 +217,7 @@ def postprocess(m):
     :param m: the original model input\\
     :return: the new model after preprocessing
     """
+    logger.info("Postprocessing the model...")
     while len(m.graph.value_info) > 0:
         m.graph.value_info.pop()
     m = onnx.utils.polish_model(m)
