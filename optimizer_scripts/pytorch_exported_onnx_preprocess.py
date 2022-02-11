@@ -14,8 +14,8 @@ from tools import other
 from tools import combo
 from tools import special
 
-# Debug use
-# logging.basicConfig(level=logging.INFO)
+# logging config
+logging.basicConfig(level=logging.INFO)
 
 # Define general pytorch exported onnx optimize process
 def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.ModelProto:

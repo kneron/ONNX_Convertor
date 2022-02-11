@@ -633,16 +633,17 @@ def replace_mul_to_bn(g):
         c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
 
         # only allow channelwise mul or const mul
-        if scale_shape != [1, c_dim, 1, 1] and scale_shape != 1:
+        if scale_shape == [1, c_dim, 1, 1]:
+            muls = scale_data
+        elif scale_shape == [c_dim, 1, 1]:
+            muls = scale_data
+        elif scale_shape == 1:
+            muls = scale_data * c_dim
+        else:
             continue
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        # If the input is an scaler, expand it.
-        if len(scale_data) == 1:
-            muls = scale_data * c_dim
-        else:
-            muls = scale_data
         bn_name = mul_op_node.output[0]
         mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
         variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
@@ -710,17 +711,18 @@ def replace_div_to_bn(g):
         # channel dimension
         c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
 
-        # only allow channelwise mul or const mul
-        if scale_shape != [1, c_dim, 1, 1] and scale_shape != 1:
+        # only allow channelwise div or const div
+        if scale_shape == [1, c_dim, 1, 1]:
+            muls = scale_data
+        elif scale_shape == [c_dim, 1, 1]:
+            muls = scale_data
+        elif scale_shape == 1:
+            muls = scale_data * c_dim
+        else:
             continue
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        # If the input is an scaler, expand it.
-        if len(scale_data) == 1:
-            muls = scale_data * c_dim
-        else:
-            muls = scale_data
         muls = (1 / np.array(muls)).tolist()
         bn_name = div_op_node.output[0]
         mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
@@ -790,17 +792,18 @@ def replace_add_to_bn(g):
         # channel dimension
         c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
 
-        # only allow channelwise mul or const mul
-        if bias_shape != [1, c_dim, 1, 1] and bias_shape != 1:
+        # only allow channelwise add or const add
+        if bias_shape == [1, c_dim, 1, 1]:
+            bias = bias_data
+        elif bias_shape == [c_dim, 1, 1]:
+            bias = bias_data
+        elif bias_shape == 1:
+            bias = bias_data * c_dim
+        else:
             continue
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        # If bias is a scaler, expand it.
-        if len(bias_data) == 1:
-            bias = bias_data * c_dim
-        else:
-            bias = bias_data
         bn_name = add_op_node.output[0]
         mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
         variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
@@ -881,16 +884,17 @@ def replace_sub_to_bn(g):
         c_dim = previous_node_output_shape[1] if len(previous_node_output_shape) > 1 else 1
 
         # only allow channelwise sub or const sub
-        if bias_shape != [1, c_dim, 1, 1] and bias_shape != 1:
+        if bias_shape == [1, c_dim, 1, 1]:
+            bias = bias_data
+        elif bias_shape == [c_dim, 1, 1]:
+            bias = bias_data
+        elif bias_shape == 1:
+            bias = bias_data * c_dim
+        else:
             continue
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        # If bias is a scaler, expand it.
-        if len(bias_data) == 1:
-            bias = bias_data * c_dim
-        else:
-            bias = bias_data
         # If reversed provide special scaler
         if reverse:
             scale = [-1.0] * c_dim
