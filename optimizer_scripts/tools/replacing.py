@@ -936,6 +936,74 @@ def replace_sub_to_bn(g):
 
     topological_sort(g)
 
+def replace_sub_with_bn_and_add(g):
+    """Replace two input Sub node with BN and Add: A - B = A + (-1) * B
+    :param g: input graph.
+    :return:
+    """
+    for node in g.node:
+        if node.op_type != 'Sub':
+            continue
+
+        sub_op_node = node
+
+        # only support one input node
+        if len(sub_op_node.input) != 2: # OP node and value node
+            continue
+
+        # Check the input type
+        input_1st_name = sub_op_node.input[0]
+        input_2nd_name = sub_op_node.input[1]
+        input_1st_node = helper.find_node_by_output_name(g, input_1st_name)
+        input_2nd_node = helper.find_node_by_output_name(g, input_2nd_name)
+        if input_1st_node is not None and input_1st_node.op_type == 'Constant':
+            continue
+        elif input_2nd_node is not None and input_2nd_node.op_type == 'Constant':
+            continue
+
+        # Get shapes
+        input_2nd_value_info = helper.find_value_by_name(g, input_2nd_name)
+        if input_2nd_value_info is None:
+            input_2nd_value_info = helper.find_input_by_name(g, input_2nd_name)
+        if input_2nd_value_info is None:
+            continue
+
+        # Get channel dimension
+        _ , input_2nd_shape = helper.find_size_shape_from_value(input_2nd_value_info)
+        if len(input_2nd_shape) < 2:
+            helper.logger.debug(f"{sub_op_node.name} cannot be replaced due to the input shape.")
+        c_dim = input_2nd_shape[1]
+
+        # Create * -1 bn node.
+        ones = [1.0] * c_dim
+        zeros = [0.0] * c_dim
+        scale = [-1.0] * c_dim
+        bn_name = input_2nd_name + '_neg'
+        mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
+        variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
+        scale_value_node = helper.list_to_constant(bn_name+'_mul', np.array(scale).shape, scale)
+        bias_value_node = helper.list_to_constant(bn_name+'_add', np.array(zeros).shape, zeros)
+        bn_node = onnx.helper.make_node(
+            'BatchNormalization',
+            [input_2nd_name,
+            scale_value_node.output[0],
+            bias_value_node.output[0],
+            mean_value_node.output[0],
+            variance_value_node.output[0]],
+            [bn_name],
+            name=bn_name,
+            epsilon=0.00000001
+        )
+
+        # Change sub to add
+        sub_op_node.op_type = "Add"
+        # Replace add input
+        modhelper.replace_node_input(sub_op_node, input_2nd_name, bn_name)
+
+        g.node.extend([scale_value_node, bias_value_node, mean_value_node, variance_value_node, bn_node])
+
+    topological_sort(g)
+
 def replace_Sum_with_Adds(g):
     node_to_del = []
 
