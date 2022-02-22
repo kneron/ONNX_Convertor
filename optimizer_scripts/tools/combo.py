@@ -246,6 +246,7 @@ def postprocess(m):
     replacing.replace_div_to_bn(m.graph)
     replacing.replace_add_to_bn(m.graph)
     replacing.replace_sub_to_bn(m.graph)
+    replacing.replace_sub_with_bn_and_add(m.graph)
     m = onnx.utils.polish_model(m)
 
     other.add_output_to_value_info(m.graph)
