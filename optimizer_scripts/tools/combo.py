@@ -131,6 +131,7 @@ def common_optimization(m):
     replacing.replace_Reshape_with_Flatten(g)
     replacing.replace_ReduceMean_with_GlobalAveragePool(g)
     replacing.replace_Sum_with_Adds(g)
+    replacing.replace_constant_input_concat_with_pad(g)
     other.topological_sort(g)
     return m
 
