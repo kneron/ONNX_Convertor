@@ -1060,3 +1060,111 @@ def replace_Sum_with_Adds(g):
 
     topological_sort(g)
 
+
+def replace_constant_input_concat_with_pad(g):
+    """If single input is concating with constant node of same number. Replace it with pad. Currently only support 2-3 inputs.
+    :param g: input graph.
+    :return:
+    """
+    node_to_del = []
+    for node in g.node:
+        # Check for Concat node
+        if node.op_type != 'Concat':
+            continue
+
+        # Check concat node input
+        mode = None
+        value = 0
+        real_input_name = None
+        if len(node.input) == 2:
+            input_1st_node = helper.find_node_by_output_name(g, node.input[0])
+            input_2nd_node = helper.find_node_by_output_name(g, node.input[1])
+            if input_1st_node is not None and input_1st_node.op_type == 'Constant':
+                mode = 'left'
+                constant_value = helper.constant_to_numpy(input_1st_node)
+                real_input_name = node.input[1]
+                value = constant_value.flatten()[0]
+                # Check if the values are all the same.
+                if np.any(constant_value - value):
+                    continue
+            elif input_2nd_node is not None and input_2nd_node.op_type == 'Constant':
+                mode = 'right'
+                constant_value = helper.constant_to_numpy(input_2nd_node)
+                real_input_name = node.input[0]
+                value = constant_value.flatten()[0]
+                # Check if the values are all the same.
+                if np.any(constant_value - value):
+                    continue
+            else:
+                # No constant input case
+                continue
+        elif len(node.input) == 3:
+            # For 3 inputs concat node, the 1st and the 3rd input should be constant with the same value.
+            input_1st_node = helper.find_node_by_output_name(g, node.input[0])
+            input_2nd_node = helper.find_node_by_output_name(g, node.input[1])
+            input_3rd_node = helper.find_node_by_output_name(g, node.input[2])
+            if input_1st_node is None or input_1st_node.op_type != 'Constant' or \
+                input_3rd_node is None or input_3rd_node.op_type != 'Constant':
+                continue
+            mode = 'both'
+            real_input_name = node.input[1]
+            input_1st_value = helper.constant_to_numpy(input_1st_node)
+            input_3rd_value = helper.constant_to_numpy(input_3rd_node)
+            value = input_1st_value.flatten()[0]
+            # Check if all the values are all the same
+            if np.any(input_1st_value - value):
+                continue
+            elif np.any(input_3rd_value - value):
+                continue
+        else:
+            # Too many inputs case.
+            continue
+        # Make weight nodes
+        input_value_info = helper.find_value_by_name(g, real_input_name)
+        input_shape = helper.get_shape_from_value_info(input_value_info)
+        pads = [0] * (len(input_shape) * 2)
+        axis = helper.get_var_attribute_by_name(node, 'axis', 'int')
+        if axis < 0:
+            axis = len(input_shape) - axis
+        if mode == 'left':
+            left_value_info = helper.find_value_by_name(g, node.input[0])
+            left_input_shape = helper.get_shape_from_value_info(left_value_info)
+            pads[axis] = left_input_shape[axis]
+        elif mode == 'right':
+            right_value_info = helper.find_value_by_name(g, node.input[1])
+            right_input_shape = helper.get_shape_from_value_info(right_value_info)
+            pads[axis + len(input_shape)] = right_input_shape[axis]
+        else:
+            # mode shoule be both
+            left_value_info = helper.find_value_by_name(g, node.input[0])
+            left_input_shape = helper.get_shape_from_value_info(left_value_info)
+            pads[axis] = left_input_shape[axis]
+            right_value_info = helper.find_value_by_name(g, node.input[2])
+            right_input_shape = helper.get_shape_from_value_info(right_value_info)
+            pads[axis + len(input_shape)] = right_input_shape[axis]
+        pads_node = helper.list_to_constant(
+            node.name + '_pads',
+            (len(pads), ),
+            pads
+        )
+        constant_value_node = helper.scaler_to_constant(
+            node.name + '_constant_value',
+            value
+        )
+        # Create new Pad node
+        new_pad_node = onnx.helper.make_node(
+            "Pad",
+            [real_input_name, pads_node.name, constant_value_node.name],
+            [node.output[0]],
+            name = node.name,
+            mode = "constant"
+        )
+        # Replace
+        node_to_del.append(node)
+        g.node.extend([pads_node, constant_value_node, new_pad_node])
+
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
+
+    topological_sort(g)
+
