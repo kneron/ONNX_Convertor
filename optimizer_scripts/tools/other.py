@@ -259,11 +259,13 @@ def topological_sort(g):
     for _ in range(length):
         node = g.node.pop()
         node_map[node.name] = node
-        if len(node.input) == 0:
+        if len([i for i in node.input if i != '']) == 0:
             to_add.append(node.name)
         else:
-            in_degree[node.name] = len(node.input)
+            in_degree[node.name] = len([i for i in node.input if i != ''])
             for input_name in node.input:
+                if input_name == '':
+                    continue
                 output_nodes[input_name].append(node.name)
     # sort
     # deal with input first
