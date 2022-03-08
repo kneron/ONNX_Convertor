@@ -608,9 +608,12 @@ def fuse_mul_and_add_into_bn(g):
         if scale_shape != bias_shape:
             continue
 
-        _ , previous_node_output_shape = helper.find_size_shape_from_value(helper.find_value_by_name(g, data_input_name))
+        data_input_value = helper.find_value_by_name(g, data_input_name)
+        if data_input_value is None:
+            data_input_value = helper.find_input_by_name(g, data_input_name)
+        _ , previous_node_output_shape = helper.find_size_shape_from_value(data_input_value)
         # only allow 4 dim data input due to the hardware limitation
-        if len(previous_node_output_shape) != 4:
+        if previous_node_output_shape is None or len(previous_node_output_shape) != 4:
             continue
 
         # check if mul's dim and input channel dimension are matched
