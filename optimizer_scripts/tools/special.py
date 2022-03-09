@@ -297,6 +297,10 @@ def split_MatMul_batch_then_concat(g, original_matmul_node):
         final_concat_inputs.append(f"{original_matmul_node.output[0]}_sliced_{i}")
     # Create Concat nodes
     output_value = helper.find_value_by_name(g, original_matmul_node.output[0])
+    if output_value is None:
+        output_value = helper.find_output_by_name(g, original_matmul_node.output[0])
+    if output_value is None:
+        helper.logger.error(f"Cannot find value_info for {original_matmul_node.output[0]}")
     output_shape = helper.get_shape_from_value_info(output_value)
     new_concat_node = onnx.helper.make_node(
         "Concat",
