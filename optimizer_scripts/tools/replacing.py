@@ -978,7 +978,7 @@ def replace_sub_with_bn_and_add(g):
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
         scale = [-1.0] * c_dim
-        bn_name = input_2nd_name + '_neg'
+        bn_name = input_2nd_name + '_neg_for_' + node.name
         mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
         variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
         scale_value_node = helper.list_to_constant(bn_name+'_mul', np.array(scale).shape, scale)
