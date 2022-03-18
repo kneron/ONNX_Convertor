@@ -209,7 +209,7 @@ def swap_MatMul_inputs(g, original_matmul_node):
         'Transpose',
         inputs = [input_a_value.name],
         outputs = [input_a_value.name + '_transposed'],
-        name = input_a_value.name + "_transposed_for_{original_matmul_node.name}",
+        name = f"{input_a_value.name}_transposed_for_{original_matmul_node.name}",
         perm = perm
     )
     input_b_value = helper.find_value_by_name(g, original_matmul_node.input[1])
@@ -222,13 +222,13 @@ def swap_MatMul_inputs(g, original_matmul_node):
         'Transpose',
         inputs = [input_b_value.name],
         outputs = [input_b_value.name + '_transposed'],
-        name = input_b_value.name + '_transposed_for_{original_matmul_node.name}',
+        name = f'{input_b_value.name}_transposed_for_{original_matmul_node.name}',
         perm = perm
     )
     # Create new MatMul node
     new_matmul_node = onnx.helper.make_node(
         'MatMul',
-        inputs = [new_input_a_node.name, new_input_b_node.name],
+        inputs = [new_input_a_node.output[0], new_input_b_node.output[0]],
         outputs = [original_matmul_node.output[0] + '_transposed'],
         name = original_matmul_node.name + '_transposed'
     )
@@ -270,7 +270,7 @@ def split_MatMul_batch_then_concat(g, original_matmul_node):
         axes_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_axes", (1, ), [len(input_a_shape) - 3])
         new_sliced_a_node = onnx.helper.make_node(
             'Slice',
-            inputs = [input_a_value.name, starts_node.name, ends_node.name, axes_node.name],
+            inputs = [input_a_value.name, starts_node.output[0], ends_node.output[0], axes_node.output[0]],
             outputs = [f"{input_a_value.name}_sliced_{i}"],
             name = f"{input_a_value.name}_sliced_{i}_for_{original_matmul_node.name}"
         )
@@ -281,7 +281,7 @@ def split_MatMul_batch_then_concat(g, original_matmul_node):
         axes_node = helper.list_to_constant(f"{input_b_value.name}_sliced_{i}_axes", (1, ), [len(input_b_shape) - 3])
         new_sliced_b_node = onnx.helper.make_node(
             'Slice',
-            inputs = [input_b_value.name, starts_node.name, ends_node.name, axes_node.name],
+            inputs = [input_b_value.name, starts_node.output[0], ends_node.output[0], axes_node.output[0]],
             outputs = [f"{input_b_value.name}_sliced_{i}"],
             name = f"{input_b_value.name}_sliced_{i}_for_{original_matmul_node.name}"
         )
@@ -289,12 +289,12 @@ def split_MatMul_batch_then_concat(g, original_matmul_node):
         # Create MatMul nodes
         new_matmul_node = onnx.helper.make_node(
             'MatMul',
-            inputs = [new_sliced_a_node.name, new_sliced_b_node.name],
+            inputs = [new_sliced_a_node.output[0], new_sliced_b_node.output[0]],
             outputs = [f"{original_matmul_node.output[0]}_sliced_{i}"],
             name = f"{original_matmul_node.name}_sliced_{i}"
         )
         new_nodes.append(new_matmul_node)
-        final_concat_inputs.append(f"{original_matmul_node.output[0]}_sliced_{i}")
+        final_concat_inputs.append(new_matmul_node.output[0])
     # Create Concat nodes
     output_value = helper.find_value_by_name(g, original_matmul_node.output[0])
     if output_value is None:
@@ -337,12 +337,12 @@ def split_MatMul_Constant_input_then_concat(g, original_matmul_node):
         # Create MatMul nodes
         new_matmul_node = onnx.helper.make_node(
             'MatMul',
-            inputs = [original_matmul_node.input[0], f"{input_b_node.name}_sliced_{i}"],
+            inputs = [original_matmul_node.input[0], new_weight.output[0]],
             outputs = [f"{original_matmul_node.output[0]}_sliced_{i}"],
             name = f"{original_matmul_node.name}_sliced_{i}"
         )
         new_nodes.append(new_matmul_node)
-        final_concat_inputs.append(f"{original_matmul_node.output[0]}_sliced_{i}")
+        final_concat_inputs.append(new_matmul_node.output[0])
     # Create Concat nodes
     output_value = helper.find_value_by_name(g, original_matmul_node.output[0])
     output_shape = helper.get_shape_from_value_info(output_value)
@@ -383,21 +383,21 @@ def special_MatMul_process(g):
             continue
         # Too many dimensions or too few dimensions. Not supported. Skip
         if len(input_a_shape) > 4 or len(input_b_shape) > 4:
-            logging.warning(f"Cannot optimize MatMul {node.name}: inputs have too many dimensions.")
+            helper.logger.warning(f"Cannot optimize MatMul {node.name}: inputs have too many dimensions.")
             continue
         if len(input_a_shape) < 2 or len(input_b_shape) < 2:
-            logging.warning(f"Cannot optimize MatMul {node.name}: inputs have two few dimensions.")
+            helper.logger.warning(f"Cannot optimize MatMul {node.name}: inputs have two few dimensions.")
             continue
         # For 4 dimension, check the first dimension (should be 1) and treated as 3 dimensions.
         if len(input_a_shape) == 4:
             if input_a_shape[0] != 1:
-                logging.warning(f"Cannot optimize MatMul {node.name}: input dimension batch size is not 1.")
+                helper.logger.warning(f"Cannot optimize MatMul {node.name}: input dimension batch size is not 1.")
                 continue
             else:
                 input_a_shape = input_a_shape[1:]
         if len(input_b_shape) == 4:
             if input_b_shape[0] != 1:
-                logging.warning(f"Cannot optimize MatMul {node.name}: input dimension batch size is not 1.")
+                helper.logger.warning(f"Cannot optimize MatMul {node.name}: input dimension batch size is not 1.")
                 continue
             else:
                 input_b_shape = input_b_shape[1:]
@@ -409,15 +409,18 @@ def special_MatMul_process(g):
         input_b_node = helper.find_node_by_output_name(g, input_b_name)
         if input_b_node is not None and input_b_node.op_type == 'Constant':
             # Constant input
+            helper.logger.debug(f"Optimizing MatMul node {node.name}: split constant input.")
             split_MatMul_Constant_input_then_concat(g, node)
         # If B is B x W x V and A is 1 x H x W, do the swap.
         elif len(input_a_shape) == 2 or input_a_shape[0] == 1:
+            helper.logger.debug(f"Optimizing MatMul node {node.name}: swap input.")
             swap_MatMul_inputs(g, node)
         # If B is B x W x V and A is B x H x W, do the split.
         elif input_b_shape[0] == input_a_shape[0]:
+            helper.logger.debug(f"Optimizing MatMul node {node.name}: split input batch.")
             split_MatMul_batch_then_concat(g, node)
         # Other cases are not supported: If B is B x W x V but A is X x H x W.
         else:
-            logging.warning(f"Cannot optimize MatMul {node.name}: unknown reason. Might be shape mismatch.")
+            helper.logger.warning(f"Cannot optimize MatMul {node.name}: unknown reason. Might be shape mismatch.")
             continue
     other.topological_sort(g)

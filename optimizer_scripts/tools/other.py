@@ -1174,12 +1174,13 @@ def duplicate_param_shared_constant(g):
             if param_data_node.name not in input_names:
                 input_names.add(input_node_name)
                 continue
-            
-            duplicated_node = copy.deepcopy(param_data_node)
+
             new_node_name = param_data_node.name + '_' + str(n)
-            
+            helper.logger.debug(f"Duplicating weight: {param_data_node.name} -> {new_node_name}")
+            duplicated_node = copy.deepcopy(param_data_node)
+
             duplicated_node.name = new_node_name
             duplicated_node.output[0] = new_node_name
-            
+
             node.input[n] = new_node_name
             g.node.extend([duplicated_node])

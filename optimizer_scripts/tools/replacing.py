@@ -25,9 +25,10 @@ def replace_initializer_with_Constant(g, duplicate_shared_weights=True):
             value_info = input_map[tensor.name]
             g.input.remove(value_info)
         following_nodes = helper.find_nodes_by_input_name(g, tensor.name)
-        if duplicate_shared_weights:
+        if duplicate_shared_weights and len(following_nodes) >= 2:
             for i, node in enumerate(following_nodes):
                 new_name = tensor.name + "_duplicated_No" + str(i) if i > 0 else tensor.name
+                helper.logger.debug(f"Duplicating weight: {tensor.name} -> {new_name}")
                 modhelper.replace_node_input(node, tensor.name, new_name)
                 new_node = onnx.helper.make_node(
                     "Constant",
