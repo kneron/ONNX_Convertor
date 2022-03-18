@@ -389,18 +389,15 @@ def special_MatMul_process(g):
             helper.logger.warning(f"Cannot optimize MatMul {node.name}: inputs have two few dimensions.")
             continue
         # For 4 dimension, check the first dimension (should be 1) and treated as 3 dimensions.
+        extra_dim = None
         if len(input_a_shape) == 4:
-            if input_a_shape[0] != 1:
-                helper.logger.warning(f"Cannot optimize MatMul {node.name}: input dimension batch size is not 1.")
-                continue
-            else:
-                input_a_shape = input_a_shape[1:]
+            extra_dim = input_a_shape[0]
+            input_a_shape = input_a_shape[1:]
         if len(input_b_shape) == 4:
-            if input_b_shape[0] != 1:
-                helper.logger.warning(f"Cannot optimize MatMul {node.name}: input dimension batch size is not 1.")
+            if input_b_shape[0] != extra_dim:
+                helper.logger.warning(f"Cannot optimize MatMul {node.name}: input dimension batch sizes does not match ({extra_dim} vs {input_b_shape[0]}).")
                 continue
-            else:
-                input_b_shape = input_b_shape[1:]
+            input_b_shape = input_b_shape[1:]
         # Check input B dimension
         # If B is 1 x W x V, it is the same as normal case.
         if input_b_shape[0] == 1:
@@ -412,7 +409,7 @@ def special_MatMul_process(g):
             helper.logger.debug(f"Optimizing MatMul node {node.name}: split constant input.")
             split_MatMul_Constant_input_then_concat(g, node)
         # If B is B x W x V and A is 1 x H x W, do the swap.
-        elif len(input_a_shape) == 2 or input_a_shape[0] == 1:
+        elif len(input_a_shape) == 2 or (input_a_shape[0] == 1 and (extra_dim is None or extra_dim == 1)):
             helper.logger.debug(f"Optimizing MatMul node {node.name}: swap input.")
             swap_MatMul_inputs(g, node)
         # If B is B x W x V and A is B x H x W, do the split.
