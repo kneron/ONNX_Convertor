@@ -553,14 +553,11 @@ def eliminate_nop_pads(g):
         # If this node is the output node, set its previous node as output nodes.
         if helper.find_output_by_name(g, node.output[0]) is not None:
             todel_output = helper.find_output_by_name(g, node.output[0])
-            the_input_value = helper.find_value_by_name(g, node.input[0])
             g.output.remove(todel_output)
-            g.output.extend([the_input_value])
-            node_to_remove.append(node)
-            # node_to_remove.append(pads_node)
-            # if constant_value_node is not None:
-            #     node_to_remove.append(constant_value_node)
-            continue
+            if helper.find_output_by_name(g, node.input[0]) is None:
+                the_input_value = helper.find_value_by_name(g, node.input[0])
+                if the_input_value is not None:
+                    g.output.extend([the_input_value])
         # Replace the parents in all the following nodes
         following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
         for following_node in following_nodes:
@@ -570,12 +567,9 @@ def eliminate_nop_pads(g):
         try:
             g.value_info.remove(value_between)
         except:
-            print("No value info to delete while eliminating identity layers.")
+            helper.logger.info("No value info to delete while eliminating identity layers.")
         # Node is waiting for elimination
         node_to_remove.append(node)
-        # node_to_remove.append(pads_node)
-        # if constant_value_node is not None:
-        #     node_to_remove.append(constant_value_node)
     for node in node_to_remove:
         g.node.remove(node)
 
@@ -628,5 +622,48 @@ def eliminate_trivial_elementwise_calculation(g):
             output_value_info = helper.find_value_by_name(g, weight_node.output[0])
             if output_value_info is not None:
                 g.value_info.remove(output_value_info)
+    for node in node_to_remove:
+        g.node.remove(node)
+
+def eliminate_nop_cast(g):
+    """Eliminate do nothing Cast nodes.
+    """
+    node_to_remove = []
+    for node in g.node:
+        if node.op_type != 'Cast':
+            continue
+        # Get input value_info
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None:
+            helper.logger.debug(f"Cannot find the input value_info for Cast node {node.name}. Skip elimination check.")
+            continue
+        # Get output value_info
+        output_value = helper.find_value_by_name(g, node.output[0])
+        if output_value is None:
+            output_value = helper.find_output_by_name(g, node.output[0])
+        if output_value is None:
+            helper.logger.debug(f"Cannot find the output value_info for Cast node {node.name}. Skip elimination check.")
+            continue
+        # Compare the type.
+        if input_value.type.tensor_type.elem_type != output_value.type.tensor_type.elem_type:
+            continue
+        # If this node is the output node, set its previous node as output nodes.
+        if helper.find_output_by_name(g, node.output[0]) is not None:
+            todel_output = helper.find_output_by_name(g, node.output[0])
+            g.output.remove(todel_output)
+            if helper.find_output_by_name(g, node.input[0]) is None:
+                the_input_value = helper.find_value_by_name(g, node.input[0])
+                if the_input_value is not None:
+                    g.output.extend([the_input_value])
+        # Replace the parents in all the following nodes
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+        # Delete value info
+        value_between = helper.find_value_by_name(g, node.output[0])
+        if value_between is not None:
+            g.value_info.remove(value_between)
+        # Node is waiting for elimination
+        node_to_remove.append(node)
     for node in node_to_remove:
         g.node.remove(node)

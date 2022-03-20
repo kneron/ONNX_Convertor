@@ -81,7 +81,10 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
     g = m.graph
+    eliminating.eliminate_consecutive_Cast(m.graph)
+    eliminating.eliminate_Cast_after_input(m.graph)
     eliminating.eliminate_nop_pads(g)
+    eliminating.eliminate_nop_cast(g)
     eliminating.eliminate_Identify_and_Dropout(g)
     eliminating.eliminate_trivial_maxpool(g)
     eliminating.eliminate_no_children_input(g)
@@ -172,8 +175,6 @@ def tensorflow_optimization(m):
 
     It includes:
 
-    - eliminate consecutive Cast
-    - eliminate cast after input
     - eliminate shape change after input
     - eliminate Reshape cast
     - eliminate Squeeze before Reshape
@@ -181,10 +182,8 @@ def tensorflow_optimization(m):
     - replace Shape with Constant
     """
 
-    eliminating.eliminate_consecutive_Cast(m.graph)
     fusing.fuse_Transpose_into_Constant(m.graph)
     fusing.fuse_MatMul_and_Add_into_Gemm(m.graph)
-    eliminating.eliminate_Cast_after_input(m.graph)
     other.topological_sort(m.graph)
 
     m = onnx.utils.polish_model(m)
