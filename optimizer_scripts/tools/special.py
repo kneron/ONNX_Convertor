@@ -415,7 +415,9 @@ def special_MatMul_process(g):
         # If B is B x W x V and A is B x H x W, do the split.
         elif input_b_shape[0] == input_a_shape[0]:
             helper.logger.debug(f"Optimizing MatMul node {node.name}: split input batch.")
-            split_MatMul_batch_then_concat(g, node)
+            helper.logger.debug("This function currently is moved into piano opt-graph.")
+            # split_MatMul_batch_then_concat(g, node)
+            continue
         # Other cases are not supported: If B is B x W x V but A is X x H x W.
         else:
             helper.logger.warning(f"Cannot optimize MatMul {node.name}: unknown reason. Might be shape mismatch.")
