@@ -1,10 +1,7 @@
-from audioop import reverse
-from posixpath import split
 import onnx
 import numpy as np
 from . import other
 from . import helper
-from . import modhelper
 
 
 def expand_lstm_like_nodes(m):
@@ -409,7 +406,11 @@ def expand_LSTM_node(g, node):
         for x in reversed(x_list):
             y_h_name = x + '_rout_y_h'
             y_c_name = x + '_rout_y_c'
-            generated_nodes = make_LSTM_block(x, reverse_w_name, reverse_r_name, reverse_b_name, h_pre, c_pre, reverse_p_name, y_h_name, y_c_name, hidden_size, batch_size)
+            x_id_name = x + '_identity'
+            identity_node = onnx.helper.make_node("Identity", [x], [x_id_name], name=x_id_name)
+            new_nodes.append(identity_node)
+            generated_nodes = make_LSTM_block(x_id_name, reverse_w_name, reverse_r_name, reverse_b_name, h_pre, c_pre, reverse_p_name, y_h_name, y_c_name,
+                hidden_size, batch_size)
             new_nodes.extend(generated_nodes)
             reversed_y_h_list.append(y_h_name)
             reversed_y_c_list.append(y_c_name)
@@ -919,7 +920,11 @@ def expand_GRU_node(g, node):
         h_pre = initial_h_list[1]
         for x in reversed(x_list):
             y_h_name = x + '_rout_y_h'
-            generated_nodes = make_GRU_block(x, reverse_w_name, reverse_r_name, reverse_b_names, h_pre, y_h_name, hidden_size, batch_size, linear_before_reset)
+            x_id_name = x + '_identity'
+            identity_node = onnx.helper.make_node("Identity", [x], [x_id_name], name=x_id_name)
+            new_nodes.append(identity_node)
+            generated_nodes = make_GRU_block(x_id_name, reverse_w_name, reverse_r_name, reverse_b_names, h_pre, y_h_name,
+                hidden_size, batch_size, linear_before_reset)
             new_nodes.extend(generated_nodes)
             reversed_y_h_list.append(y_h_name)
             h_pre = y_h_name
@@ -1230,16 +1235,16 @@ def make_GRU_block(x_t, w_zrh, r_zrh, b_names, h_pre, y_h_name, hidden_size, bat
     mean_node = helper.list_to_constant(y_h_bn_name + "_mean", [batch_size], zeros)
     var_node = helper.list_to_constant(y_h_bn_name + "_var", [batch_size], ones)
     y_h_bn_node = onnx.helper.make_node(
-        "BatchNormalization",
-        [y_h_unsqueeze_node,
+        op_type = "BatchNormalization",
+        inputs = [y_h_unsqueeze_name,
         scale_node.output[0],
         bias_node.output[0],
         mean_node.output[0],
         var_node.output[0]],
-        [y_h_bn_name],
+        outputs = [y_h_bn_name],
         name = y_h_bn_name
     )
-    new_nodes.extend(scale_node, bias_node, mean_node, var_node, y_h_bn_node)
+    new_nodes.extend([scale_node, bias_node, mean_node, var_node, y_h_bn_node])
     y_h_mul_0_name = x_t + '_y_h_mul_0'
     y_h_mul_0_node = onnx.helper.make_node(
         op_type = "Mul",

@@ -519,7 +519,7 @@ def inference_split_shape(g):
         output_vals = [helper.find_value_by_name(g, val_name) for val_name in output_val_names]
 
         output_shapes = [helper.find_size_shape_from_value(output_val)[1] for output_val in output_vals]
-        if not any([len(s) == 0 for s in output_shapes]):
+        if not any([s is None or len(s) == 0 for s in output_shapes]):
             continue
 
         for att in node.attribute:
