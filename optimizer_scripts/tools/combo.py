@@ -12,7 +12,7 @@ from . import eliminating
 from . import fusing
 from . import constant_folding
 from . import removing_transpose
-from . import modhelper
+from . import expand_lstm
 from .common_pattern import torch_pattern_match, tf_pattern_match
 from .helper import logger
 
@@ -80,6 +80,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
         replacing.replace_initializer_with_Constant(g, duplicate_shared_weights=False)
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
+    m = expand_lstm.expand_lstm_like_nodes(m)
     g = m.graph
     eliminating.eliminate_consecutive_Cast(m.graph)
     eliminating.eliminate_Cast_after_input(m.graph)
