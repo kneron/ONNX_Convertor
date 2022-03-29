@@ -681,7 +681,7 @@ def make_LSTM_block(x_t, w_iofc, r_iofc, b_iofc, h_pre, c_pre, p_iof, y_h, y_c, 
         outputs = [y_h],
         name = y_h
     )
-    new_nodes.append(y_h)
+    new_nodes.append(y_h_mul_node)
     return new_nodes
 
 
