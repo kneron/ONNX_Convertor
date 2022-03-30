@@ -11,6 +11,7 @@ from . import helper
 from .modhelper import replace_node_input
 import copy
 from .helper import logger
+from . import eliminating
 
 def format_value_info_shape(g):
     """
@@ -310,8 +311,8 @@ def remove_zero_value_info(g):
                 break
 
 def inference_shapes(m):
-    while len(m.graph.value_info) > 0:
-        m.graph.value_info.pop()
+    eliminating.eliminate_empty_value_infos(m.graph)
+    m = onnx.utils.polish_model(m)
     g = m.graph
     inferencing_shapes = True
     while inferencing_shapes:
@@ -330,6 +331,7 @@ def inference_shapes(m):
             g = m.graph
     remove_zero_value_info(g)
     m = onnx.utils.polish_model(m)
+    eliminating.eliminate_empty_value_infos(m.graph)
     return m
 
 def inference_resize_shape(g):
@@ -504,7 +506,7 @@ def inference_split_shape(g):
     for node in g.node:
         if node.op_type != 'Split':
             continue
-        
+
         input_val_info = helper.find_value_by_name(g, node.input[0])
         if not input_val_info:
             input_val_info = helper.find_input_by_name(g, node.input[0])
@@ -527,7 +529,7 @@ def inference_split_shape(g):
                 axis = att.i
             else:
                 split = list(att.ints)
-        
+
         new_output_vals = []
         for i in range(len(output_val_names)):
             new_shape = list(input_shape)
@@ -538,14 +540,14 @@ def inference_split_shape(g):
                 new_shape
             )
             new_output_vals.append(new_output_val)
-        
+
         for val in output_vals:
             if val is not None:
                 g.value_info.remove(val)
         g.value_info.extend(new_output_vals)
 
         processed = True
-    
+
     return processed
 
 
@@ -1006,7 +1008,6 @@ def add_bn_on_skip_branch(g):
             continue
         if len(n.input) != 2:
             continue
-        # TODO: Still need to consider more cases
         # Check if skip branch exist
         input_node_a = helper.find_node_by_output_name(g, n.input[0])
         output_of_input_node_a = helper.find_nodes_by_input_name(g, input_node_a.output[0])
@@ -1184,3 +1185,19 @@ def duplicate_param_shared_constant(g):
 
             node.input[n] = new_node_name
             g.node.extend([duplicated_node])
+
+def inference_shapes_until_complete_all(m):
+    all_outputs = set()
+    for node in m.graph.node:
+        all_outputs = all_outputs.union(set(node.output))
+    eliminating.eliminate_empty_value_infos(m.graph)
+    current_generated_size = len(m.graph.output) + len(m.graph.value_info)
+    while current_generated_size < len(all_outputs):
+        last_size = current_generated_size
+        m = inference_shapes(m)
+        current_generated_size = len(m.graph.output) + len(m.graph.value_info)
+        if current_generated_size == last_size:
+            helper.logger.error("Cannot inference all shapes.")
+            onnx.save(m, "debug.onnx")
+            exit(1)
+    return m

@@ -23,6 +23,7 @@ def expand_lstm_like_nodes(m):
         g.node.remove(node)
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
+    m = other.inference_shapes_until_complete_all(m)
     return m
 
 
