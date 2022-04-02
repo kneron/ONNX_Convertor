@@ -135,6 +135,8 @@ def common_optimization(m):
     replacing.replace_ReduceMean_with_GlobalAveragePool(g)
     replacing.replace_Sum_with_Adds(g)
     replacing.replace_constant_input_concat_with_pad(g)
+    replacing.replace_Gather_with_Reshape(g)
+    fusing.fuse_consecutive_transposes(g)
     other.topological_sort(g)
     return m
 
@@ -158,7 +160,7 @@ def pytorch_constant_folding(m):
         other.topological_sort(m.graph)
         while len(m.graph.value_info) != 0:
             m.graph.value_info.pop()
-        
+
         m = other.inference_shapes(m)
         replacing.replace_shape_with_constant(m.graph)
     other.topological_sort(m.graph)
