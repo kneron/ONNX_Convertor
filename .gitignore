@@ -4,3 +4,5 @@
 .idea/
 .clang-format
 __pycache__/
+
+debug.onnx
