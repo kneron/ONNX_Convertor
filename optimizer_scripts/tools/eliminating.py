@@ -17,19 +17,22 @@ def eliminate_Identify_and_Dropout(g):
     for node in g.node:
         if node.op_type != 'Identity' and node.op_type != 'Dropout':
             continue
-        # If this node is the last node, leave it to `eliminate_useless_last node`
-        if helper.find_output_by_name(g, node.output[0]) is not None:
-            continue
         # Replace the parents in all the following nodes
         following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
         for following_node in following_nodes:
             modhelper.replace_node_input(following_node, node.output[0], node.input[0])
         # Delete value info
         value_between = helper.find_value_by_name(g, node.output[0])
-        try:
+        if value_between is not None:
             g.value_info.remove(value_between)
-        except:
-            print("No value info to delete while eliminating identity layers.")
+        # If this node is the last node, add its previous output into the output.
+        output_value = helper.find_output_by_name(g, node.output[0])
+        if output_value is not None:
+            previous_output_value = helper.find_output_by_name(g, node.input[0])
+            if previous_output_value is None:
+                output_value.name = node.input[0]
+            else:
+                g.output.remove(output_value)
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:

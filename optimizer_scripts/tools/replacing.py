@@ -1169,3 +1169,94 @@ def replace_constant_input_concat_with_pad(g):
 
     topological_sort(g)
 
+
+def replace_Gather_with_Reshape(g):
+    """
+    Replace Gather nodes with Reshape node.
+
+    :param g: the input graph
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find Squeeze node
+        if node.op_type != 'Gather':
+            continue
+        # Get the shape and Construct the shape
+        output_value = helper.find_value_by_name(g, node.output[0])
+        if output_value is None:
+            output_value = helper.find_output_by_name(g, node.output[0])
+        if output_value is None:
+            helper.logger.error(f"Cannot get shape for Gather: {node.name}")
+            exit(1)
+        shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        # Get the axis attribute
+        axis = helper.get_var_attribute_by_name(node, 'axis', 'int')
+        if axis is None:
+            axis = 0
+        # Get the indice node.
+        indice_node = helper.find_node_by_output_name(g, node.input[1])
+        if indice_node is None or indice_node.op_type != 'Constant':
+            helper.logger.debug(f"Gather {node.name} indice input is not a constant node. Skip.")
+            continue
+        indice_np = helper.constant_to_numpy(indice_node)
+        # Check if the indices are in order. Then it is just a normal reshape.
+        prev = -1
+        is_consecutive = True
+        for i in indice_np.flatten():
+            if i != prev + 1:
+                is_consecutive = False
+                break
+            prev = i
+        if is_consecutive:
+            const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
+            new_node = onnx.helper.make_node(
+                "Reshape",
+                [node.input[0], node.name + "_shape"],
+                node.output,
+                name=node.name
+            )
+            g.node.extend([const_node, new_node])
+            node_to_remove.append(node)
+            continue
+        # Check input shape can be turned into a reshape and a transpose
+        is_tranposed = True
+        if len(indice_np.shape) != 2:
+            continue
+        prev = -1
+        for i in indice_np.transpose().flatten():
+            if i != prev + 1:
+                is_tranposed = False
+                break
+            prev = i
+        if is_tranposed:
+            # Create a reshape first.
+            reshape_name = node.name + '_reshape_before_transpose'
+            before_transpose_shape = copy.copy(shape)
+            before_transpose_shape[axis] = shape[axis + 1]
+            before_transpose_shape[axis + 1] = shape[axis]
+            reshape_shape_node = helper.list_to_constant(node.name + "_shape_before_transpose", [len(shape)], before_transpose_shape)
+            reshape_node = onnx.helper.make_node(
+                "Reshape",
+                [node.input[0], node.name + "_shape_before_transpose"],
+                [reshape_name],
+                name=reshape_name
+            )
+            # Create a transpose node.
+            perm = [i for i in range(len(shape))]
+            perm[axis] = axis + 1
+            perm[axis + 1] = axis
+            transpose_node = onnx.helper.make_node(
+                "Transpose",
+                [reshape_name],
+                node.output,
+                name=node.name,
+                perm=perm
+            )
+            g.node.extend([reshape_shape_node, reshape_node, transpose_node])
+            node_to_remove.append(node)
+            continue
+    # Remove old nodes
+    for node in node_to_remove:
+        g.node.remove(node)
+    # Topological sort
+    topological_sort(g)
