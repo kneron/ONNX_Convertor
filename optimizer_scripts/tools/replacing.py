@@ -382,7 +382,7 @@ def replace_shape_with_constant(g):
             continue
         # Repalce it
         input_shape = [
-            d.dim_value for d in input_value.type.tensor_type.shape.dim]
+            int(d.dim_value) for d in input_value.type.tensor_type.shape.dim]
         node_name = node.output[0]
         new_node = helper.list_to_constant(
             node_name, [len(input_shape)], input_shape)
@@ -973,6 +973,7 @@ def replace_sub_with_bn_and_add(g):
         _ , input_2nd_shape = helper.find_size_shape_from_value(input_2nd_value_info)
         if len(input_2nd_shape) < 2:
             helper.logger.debug(f"{sub_op_node.name} cannot be replaced due to the input shape.")
+            continue
         c_dim = input_2nd_shape[1]
 
         # Create * -1 bn node.
@@ -1178,7 +1179,7 @@ def replace_Gather_with_Reshape(g):
     """
     node_to_remove = []
     for node in g.node:
-        # Find Squeeze node
+        # Find Gather node
         if node.op_type != 'Gather':
             continue
         # Get the shape and Construct the shape
@@ -1199,6 +1200,18 @@ def replace_Gather_with_Reshape(g):
             helper.logger.debug(f"Gather {node.name} indice input is not a constant node. Skip.")
             continue
         indice_np = helper.constant_to_numpy(indice_node)
+        # Check if it is covering all the indices
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None:
+            input_value = helper.find_input_by_name(g, node.input[0])
+        if input_value is None:
+            helper.logger.warn(f"Cannot get shape for Gather: {node.name}")
+            continue
+        input_shape = helper.get_shape_from_value_info(input_value)
+        if axis >= len(input_shape):
+            continue
+        if indice_np.flatten().size != input_shape[axis]:
+            continue
         # Check if the indices are in order. Then it is just a normal reshape.
         prev = -1
         is_consecutive = True
