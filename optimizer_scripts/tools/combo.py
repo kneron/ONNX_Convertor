@@ -127,6 +127,7 @@ def common_optimization(m):
     replacing.replace_average_pool_with_GAP(g)
 
     m = onnx.utils.polish_model(m)
+    m = other.inference_shapes(m)
     g = m.graph
 
     replacing.replace_Squeeze_with_Reshape(g)
