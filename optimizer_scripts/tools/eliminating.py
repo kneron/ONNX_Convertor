@@ -542,6 +542,8 @@ def eliminate_nop_pads(g):
             continue
         # Check if the Pad is empty or not
         pads_node = helper.find_node_by_output_name(g, node.input[1])
+        if pads_node.op_type != 'Constant':
+            continue
         pads_np = helper.constant_to_numpy(pads_node)
         all_zero = True
         for value in pads_np:
