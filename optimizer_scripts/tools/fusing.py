@@ -534,7 +534,7 @@ def fuse_consecutive_transposes(g):
         if node.op_type != 'Transpose':
             continue
         pre_node = helper.find_node_by_output_name(g, node.input[0])
-        if pre_node.op_type != 'Transpose':
+        if pre_node is None or pre_node.op_type != 'Transpose':
             continue
 
         pre_permutation = list(pre_node.attribute[0].ints)
