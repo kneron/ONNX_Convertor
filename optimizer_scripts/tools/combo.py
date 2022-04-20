@@ -12,7 +12,7 @@ from . import eliminating
 from . import fusing
 from . import constant_folding
 from . import removing_transpose
-from . import modhelper
+from . import expand_lstm
 from .common_pattern import torch_pattern_match, tf_pattern_match
 from .helper import logger
 
@@ -80,6 +80,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
         replacing.replace_initializer_with_Constant(g, duplicate_shared_weights=False)
     other.topological_sort(g)
     m = onnx.utils.polish_model(m)
+    m = expand_lstm.expand_lstm_like_nodes(m)
     g = m.graph
     eliminating.eliminate_consecutive_Cast(m.graph)
     eliminating.eliminate_Cast_after_input(m.graph)
@@ -90,7 +91,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     eliminating.eliminate_no_children_input(g)
     other.format_value_info_shape(g)
     other.topological_sort(g)
-    m = other.inference_shapes(m)
+    m = other.inference_shapes_until_complete_all(m)
     g = m.graph
     replacing.replace_split_with_slices(g)
     other.topological_sort(g)
@@ -251,6 +252,7 @@ def postprocess(m):
     replacing.replace_sub_to_bn(m.graph)
     replacing.replace_sub_with_bn_and_add(m.graph)
     m = onnx.utils.polish_model(m)
+    m = other.inference_shapes_until_complete_all(m)
 
     other.add_output_to_value_info(m.graph)
     m = optimizer.optimize(m, ['eliminate_deadend'])

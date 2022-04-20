@@ -284,6 +284,8 @@ def fuse_Transpose_into_Gemm_weight(g):
     if prev_node is None or prev_node.op_type != 'Flatten':
       continue
     transpose_node = helper.find_node_by_output_name(g, prev_node.input[0])
+    if transpose_node is None:
+      continue
     if transpose_node.op_type != 'Transpose':
       continue
     # Check attribute

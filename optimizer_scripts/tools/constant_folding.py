@@ -428,6 +428,45 @@ def transpose_constant_folding(g, node):
 
     return folded
 
+def squeeze_constant_folding(g, node):
+    """Fold constant and unsqueeze nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node = helper.find_node_by_output_name(g, node.input[0])
+    pre_np = helper.constant_to_numpy(pre_node)
+
+    axes = list(node.attribute[0].ints)
+    axes.sort()
+
+    new_np = pre_np
+    for i in reversed(axes):
+        new_np = np.squeeze(new_np, axis=i)
+    new_node = helper.numpy_to_constant(node.output[0], new_np)
+    g.node.extend([new_node])
+    node_to_del.extend([node, pre_node])
+
+    pre_val_info = helper.find_value_by_name(g, node.input[0])
+    next_val_info = helper.find_value_by_name(g, node.output[0])
+    if pre_val_info is not None:
+        g.value_info.remove(pre_val_info)
+    else:
+        print(node.name)
+    if next_val_info is not None:
+        g.value_info.remove(next_val_info)
+
+    new_val_info = onnx.helper.make_tensor_value_info(
+        node.output[0],
+        pre_node.attribute[0].t.data_type,
+        new_np.shape
+    )
+    g.value_info.extend([new_val_info])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
 
 def unsqueeze_constant_folding(g, node):
     """Fold constant and unsqueeze nodes to a single constant node.
@@ -988,6 +1027,7 @@ constant_folding_nodes = {
     'Reshape': reshape_constant_input_folding,
     'Slice': slice_constant_folding,
     'Sqrt': sqrt_constant_folding,
+    'Squeeze': squeeze_constant_folding,
     'Transpose': transpose_constant_folding,
     'Unsqueeze': unsqueeze_constant_folding,
     'Sub': sub_constant_folding,

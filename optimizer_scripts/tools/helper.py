@@ -315,6 +315,11 @@ def get_list_attribute_by_name(node, attr_name: str, attr_type: str):
             return None
         else:
             return list(attr_proto.floats)
+    elif attr_type == 'string':
+        if len(attr_proto.strings) == 0:
+            return None
+        else:
+            return list(attr_proto.strings)
     else:
         print("Warning: undefined type for list attribute extraction")
         return None
