@@ -332,7 +332,6 @@ def inference_shapes(m):
             g = m.graph
     remove_zero_value_info(g)
     m = onnx.utils.polish_model(m)
-    eliminating.eliminate_empty_value_infos(m.graph)
     return m
 
 def inference_resize_shape(g):
