@@ -1664,11 +1664,20 @@ def make_RNN_block(x_t, w_i, r_i, b_name, h_pre, y_h_name, hidden_size, batch_si
         name = ht_add_name
     )
     new_nodes.append(ht_add_node)
+    ht_f_name = x_t + '_ht_f'
     ht_f_node = onnx.helper.make_node(
         op_type = "Tanh",
         inputs = [ht_add_name],
-        outputs = [y_h_name],
-        name = y_h_name
+        outputs = [ht_f_name],
+        name = ht_f_name
     )
     new_nodes.append(ht_f_node)
+    y_h_unsqueeze_node = onnx.helper.make_node(
+        op_type = 'Unsqueeze',
+        inputs = [ht_f_name],
+        outputs = [y_h_name],
+        name = y_h_name,
+        axes = [0]
+    )
+    new_nodes.append(y_h_unsqueeze_node)
     return new_nodes

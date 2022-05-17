@@ -208,6 +208,11 @@ def transpose_B_in_Gemm(g):
     for node in g.node:
         if node.op_type != 'Gemm':
             continue
+        w_node = helper.find_node_by_output_name(g, node.input[1])
+        if w_node is None or w_node.op_type != "Constant":
+            continue
+        if len(helper.find_following_nodes_by_input_value_name(g, node.input[1])) > 1:
+            continue
         do_it = False
         for attr in node.attribute:
             if attr.name == "transB":
@@ -218,7 +223,6 @@ def transpose_B_in_Gemm(g):
         if not do_it:
             continue
         # Transpose the weight and its output value
-        w_node = helper.find_node_by_output_name(g, node.input[1])
         w_output = helper.find_value_by_name(g, node.input[1])
         dim_0 = w_output.type.tensor_type.shape.dim[0].dim_value
         dim_1 = w_output.type.tensor_type.shape.dim[1].dim_value
