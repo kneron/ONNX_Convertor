@@ -304,6 +304,7 @@ def remove_zero_value_info(g):
     for vi in value_info_list:
         if not vi.type.tensor_type.shape.dim:
             g.value_info.remove(vi)
+            continue
 
         for dim in vi.type.tensor_type.shape.dim:
             if dim.dim_value == 0:

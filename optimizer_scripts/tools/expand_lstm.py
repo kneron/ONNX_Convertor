@@ -16,6 +16,9 @@ def expand_lstm_like_nodes(m):
         elif node.op_type == "GRU":
             expand_GRU_node(g, node)
             node_to_remove.append(node)
+        elif node.op_type == 'RNN':
+            expand_RNN_node(g, node)
+            node_to_remove.append(node)
         else:
             continue
     # After expansion, reinference the size. Later may introduce constant folding.
@@ -341,7 +344,7 @@ def expand_LSTM_node(g, node):
             new_nodes.append(identity_node)
         if len(node.output) > 2 and node.output[2] != '':
             identity_node = onnx.helper.make_node(
-                op_type = 'onnx',
+                op_type = 'Identity',
                 inputs = [y_c_list[-1]],
                 outputs = [node.output[2]],
                 name = node.name + '_Y_c_identity'
@@ -801,7 +804,7 @@ def expand_GRU_node(g, node):
     # Check attributes
     # TODO: support more attributes
     if activations is not None:
-        helper.logger.error(f"Cannot expand GRU node {node.name}: currently only support default activations. (Sigmoid, Tanh, Tanh)")
+        helper.logger.error(f"Cannot expand GRU node {node.name}: currently only support default activations. (Sigmoid, Tanh)")
     if clip is not None:
         helper.logger.error(f"Cannot expand GRU node {node.name}: currently do not support clip attribute.")
 
@@ -1269,4 +1272,403 @@ def make_GRU_block(x_t, w_zrh, r_zrh, b_names, h_pre, y_h_name, hidden_size, bat
         name = y_h_name
     )
     new_nodes.append(y_h_add_node)
+    return new_nodes
+
+def prepare_RNN_bias(b_i, hidden_size, bidirection=False):
+    """Prepare bias for RNN nodes
+
+    Args:
+        b_i (str): input bias name.
+        hidden_size (int): hidden size.
+        bidirection (bool, optional): whether bidirectional. Defaults to False.
+
+    Returns:
+        str: forward bias name
+        str: backward bias name
+        List[NodeProto]: generate nodes
+    """
+    new_nodes = []
+    if bidirection:
+        # Split direction
+        two_names, split_node = make_split(b_i, 0, [1, 1])
+        new_nodes.append(split_node)
+        squeeze_names = [name + '_squeezed' for name in two_names]
+        squeeze_node = onnx.helper.make_node(
+            op_type = 'Squeeze',
+            inputs = [two_names[0]],
+            outputs = [squeeze_names[0]],
+            name = squeeze_names[0],
+            axes = [0]
+        )
+        new_nodes.append(squeeze_node)
+        squeeze_node = onnx.helper.make_node(
+            op_type = 'Squeeze',
+            inputs = [two_names[1]],
+            outputs = [squeeze_names[1]],
+            name = squeeze_names[1],
+            axes = [0]
+        )
+        new_nodes.append(squeeze_node)
+        # Split Wb and Rb
+        wb_rb_names, split_node = make_split(squeeze_names[0], 0, [hidden_size, hidden_size])
+        new_nodes.append(split_node)
+        # Make add node
+        add_name = b_i + '_Wb_Rb_sum'
+        add_node = onnx.helper.make_node(
+            op_type = 'Add',
+            inputs = wb_rb_names,
+            outputs = [add_name],
+            name = add_name
+        )
+        new_nodes.append(add_node)
+        # Split WB and RB
+        wb_rb_names, split_node = make_split(squeeze_names[1], 0, [hidden_size, hidden_size])
+        new_nodes.append(split_node)
+        # Make add node
+        reverse_add_name = b_i + '_WB_RB_sum'
+        reverse_add_node = onnx.helper.make_node(
+            op_type = 'Add',
+            inputs = wb_rb_names,
+            outputs = [reverse_add_name],
+            name = reverse_add_name
+        )
+        new_nodes.append(reverse_add_node)
+        return add_name, reverse_add_name, new_nodes
+    else:
+        squeeze_name = b_i + '_squeezed'
+        squeeze_node = onnx.helper.make_node(
+            op_type = 'Squeeze',
+            inputs = [b_i],
+            outputs = [squeeze_name],
+            name = squeeze_name,
+            axes = [0]
+        )
+        new_nodes.append(squeeze_node)
+        # Split Wb and Rb
+        wb_rb_names, split_node = make_split(squeeze_name, 0, [hidden_size, hidden_size])
+        new_nodes.append(split_node)
+        # Make add node
+        add_name = b_i + '_Wb_Rb_sum'
+        add_node = onnx.helper.make_node(
+            op_type = 'Add',
+            inputs = wb_rb_names,
+            outputs = [add_name],
+            name = add_name
+        )
+        new_nodes.append(add_node)
+        return add_name, '', new_nodes
+
+
+def expand_RNN_node(g, node):
+    new_nodes = []
+    # Get inputs
+    input_x = node.input[0]
+    input_w = node.input[1]
+    input_r = node.input[2]
+    input_b = ''
+    input_sequence_lens = ''
+    input_initial_h = ''
+    if len(node.input) > 3:
+        input_b = node.input[3]
+    if len(node.input) > 4:
+        input_sequence_lens = node.input[4]
+    if len(node.input) > 5:
+        input_initial_h = node.input[5]
+    # Check inputs
+    # Get info from input_x
+    input_x_value_info = helper.find_value_by_name(g, input_x)
+    if input_x_value_info is None:
+        input_x_value_info = helper.find_input_by_name(g, input_x)
+    if input_x_value_info is None:
+        helper.logger.error(f"Cannot expand RNN node {node.name}: cannot find input value_info {input_x}.")
+        exit(1)
+    input_x_shape = helper.get_shape_from_value_info(input_x_value_info)
+    seq_length = input_x_shape[0]
+    batch_size = input_x_shape[1]
+    input_size = input_x_shape[2]
+    # Get info from input_sequence_lens. It should be a constant
+    if input_sequence_lens == '':
+        sequence_lens = [seq_length] * batch_size
+    else:
+        input_sequence_lens_node = helper.find_node_by_output_name(g, input_sequence_lens)
+        if input_sequence_lens_node is None:
+            helper.logger.error(f"Cannot expand RNN node {node.name}: input {input_sequence_lens} not found.")
+            exit(1)
+        if input_sequence_lens_node.op_type != "Constant":
+            helper.logger.error(f"Cannot expand RNN node {node.name}: input {input_sequence_lens} should be constant.")
+            exit(1)
+        sequence_lens_shape, sequence_lens = helper.constant_to_list(input_sequence_lens_node)
+        if sequence_lens_shape[0] != batch_size:
+            helper.logger.error(f"Cannot expand RNN node {node.name}: input {input_sequence_lens} shape is invalid.")
+            exit(1)
+        for sequence_len in sequence_lens:
+            if sequence_len != seq_length:
+                helper.logger.error(f"Cannot expand RNN node {node.name}: input {input_sequence_lens} currently is not supported. We only support same sequence lengths for now.")
+                exit(1)
+    # Get attributes
+    activation_alpha = helper.get_list_attribute_by_name(node, 'activation_alpha', 'float')
+    activation_beta = helper.get_list_attribute_by_name(node, 'activation_beta', 'float')
+    activations = helper.get_list_attribute_by_name(node, 'activations', 'string')
+    clip = helper.get_var_attribute_by_name(node, 'clip', 'float')
+    direction = helper.get_var_attribute_by_name(node, 'direction', 'string')
+    hidden_size = helper.get_var_attribute_by_name(node, 'hidden_size', 'int')
+    # Check attributes
+    # TODO: support more attributes
+    if activations is not None and activations != [b'Tanh'] and activations != [b'Tanh', b'Tanh']:
+        helper.logger.error(f"Cannot expand RNN node {node.name}: currently only support default activations. (Tanh) or (Tanh, Tanh)")
+    if clip is not None:
+        helper.logger.error(f"Cannot expand RNN node {node.name}: currently do not support clip attribute.")
+
+    # Expand node into hidden cells (Single direction)
+    if direction is None or direction == "forward" or direction == "reverse":
+        x_list = []
+        y_h_list = []
+        # Prepare inputs
+        if seq_length != 1:
+            # Split input.
+            x_list, split_node = make_split(input_x, 0, [1] * seq_length)
+            new_nodes.append(split_node)
+        else:
+            # No need for split the input
+            x_list.append(input_x)
+        if direction == "reverse":
+            x_list.reverse()
+        w_name, _, generated_nodes = prepare_weight(input_w)
+        new_nodes.extend(generated_nodes)
+        r_name, _, generated_nodes = prepare_weight(input_r)
+        new_nodes.extend(generated_nodes)
+        if input_b != '':
+            b_name, _, generated_nodes = prepare_RNN_bias(input_b, hidden_size)
+            new_nodes.extend(generated_nodes)
+        else:
+            b_name = ''
+        # Expand rnn block
+        h_pre = input_initial_h
+        for x in x_list:
+            y_h_name = x + '_out_y_h'
+            generated_nodes = make_RNN_block(x, w_name, r_name, b_name, h_pre, y_h_name, hidden_size, batch_size)
+            new_nodes.extend(generated_nodes)
+            y_h_list.append(y_h_name)
+            h_pre = y_h_name
+        # Prepare the output y
+        if seq_length != 1:
+            y_h_unsqueezed_output_list = []
+            # Concat the outputs
+            for y_h in y_h_list:
+                unsqueezed_name = y_h + "_unsqueeze"
+                unsqueeze_node = onnx.helper.make_node(
+                    op_type = 'Unsqueeze',
+                    inputs = [y_h],
+                    outputs = [unsqueezed_name],
+                    name = unsqueezed_name,
+                    axes = [0]
+                )
+                new_nodes.append(unsqueeze_node)
+                y_h_unsqueezed_output_list.append(unsqueezed_name)
+            if direction == "reverse":
+                y_h_unsqueezed_output_list.reverse()
+            concat_node = onnx.helper.make_node(
+                op_type = 'Concat',
+                inputs = y_h_unsqueezed_output_list,
+                outputs = [node.output[0]],
+                name = node.name + '_final_concat',
+                axis = 0
+            )
+            new_nodes.append(concat_node)
+        else:
+            # For single sequance, no need for concat.
+            unsqueeze_node = onnx.helper.make_node(
+                op_type = 'Unsqueeze',
+                inputs = [y_h_list[0]],
+                outputs = [node.output[0]],
+                name = node.name + "_final_unsqueeze",
+                axes = [0]
+            )
+            new_nodes.append(unsqueeze_node)
+        # Connect the final y_h if needed
+        if len(node.output) > 1 and node.output[1] != '':
+            identity_node = onnx.helper.make_node(
+                op_type = 'Identity',
+                inputs = [y_h_list[-1]],
+                outputs = [node.output[1]],
+                name = node.name + '_Y_h_identity'
+            )
+            new_nodes.append(identity_node)
+
+    # Expand node into hidden cells (Bidirection)
+    elif direction == "bidirectional":
+        x_list = []
+        y_h_list = []
+        reversed_y_h_list = []
+        # Prepare inputs
+        if seq_length != 1:
+            # Split input.
+            x_list, split_node = make_split(input_x, 0, [1] * seq_length)
+            new_nodes.append(split_node)
+        else:
+            # No need for split the input
+            x_list.append(input_x)
+        if input_initial_h == '':
+            initial_h_list = ['', '']
+        else:
+            initial_h_list, split_node = make_split(input_initial_h, 0, [1, 1])
+            new_nodes.append(split_node)
+        w_name, reverse_w_name, generated_nodes = prepare_weight(input_w, True)
+        new_nodes.extend(generated_nodes)
+        r_name, reverse_r_name, generated_nodes = prepare_weight(input_r, True)
+        new_nodes.extend(generated_nodes)
+        if input_b != '':
+            b_name, reverse_b_name, generated_nodes = prepare_RNN_bias(input_b, hidden_size, True)
+            new_nodes.extend(generated_nodes)
+        else:
+            b_name = ''
+            reverse_b_name = b_name
+        # Expand RNN block (forward)
+        h_pre = initial_h_list[0]
+        for x in x_list:
+            y_h_name = x + '_out_y_h'
+            generated_nodes = make_RNN_block(x, w_name, r_name, b_name, h_pre, y_h_name, hidden_size, batch_size)
+            new_nodes.extend(generated_nodes)
+            y_h_list.append(y_h_name)
+            h_pre = y_h_name
+        # Expand RNN block (reverse)
+        h_pre = initial_h_list[1]
+        for x in reversed(x_list):
+            y_h_name = x + '_rout_y_h'
+            x_id_name = x + '_identity'
+            identity_node = onnx.helper.make_node("Identity", [x], [x_id_name], name=x_id_name)
+            new_nodes.append(identity_node)
+            generated_nodes = make_RNN_block(x_id_name, reverse_w_name, reverse_r_name, reverse_b_name, h_pre, y_h_name,
+                hidden_size, batch_size)
+            new_nodes.extend(generated_nodes)
+            reversed_y_h_list.append(y_h_name)
+            h_pre = y_h_name
+        reversed_y_h_list.reverse()
+        # Prepare the output y
+        final_y_h_list = []
+        for i in range(seq_length):
+            final_y_h_name = x_list[i] + '_concat_y_h'
+            concat_node = onnx.helper.make_node(
+                op_type = 'Concat',
+                inputs = [y_h_list[i], reversed_y_h_list[i]],
+                outputs = [final_y_h_name],
+                name = final_y_h_name,
+                axis = 0
+            )
+            new_nodes.append(concat_node)
+            final_y_h_list.append(final_y_h_name)
+        if seq_length != 1:
+            y_h_unsqueezed_output_list = []
+            # Concat the outputs
+            for y_h in final_y_h_list:
+                unsqueezed_name = y_h + "_unsqueeze"
+                unsqueeze_node = onnx.helper.make_node(
+                    op_type = 'Unsqueeze',
+                    inputs = [y_h],
+                    outputs = [unsqueezed_name],
+                    name = unsqueezed_name,
+                    axes = [0]
+                )
+                new_nodes.append(unsqueeze_node)
+                y_h_unsqueezed_output_list.append(unsqueezed_name)
+            concat_node = onnx.helper.make_node(
+                op_type = 'Concat',
+                inputs = y_h_unsqueezed_output_list,
+                outputs = [node.output[0]],
+                name = node.name + '_final_concat',
+                axis = 0
+            )
+            new_nodes.append(concat_node)
+        else:
+            # For single sequance, no need for concat.
+            unsqueeze_node = onnx.helper.make_node(
+                op_type = 'Unsqueeze',
+                inputs = [final_y_h_list[0]],
+                outputs = [node.output[0]],
+                name = node.name + "_final_unsqueeze",
+                axes = [0]
+            )
+            new_nodes.append(unsqueeze_node)
+        # Connect the final y_h if needed
+        if len(node.output) > 1 and node.output[1] != '':
+            identity_node = onnx.helper.make_node(
+                op_type = 'Identity',
+                inputs = [final_y_h_list[-1]],
+                outputs = [node.output[1]],
+                name = node.name + '_Y_h_identity'
+            )
+            new_nodes.append(identity_node)
+    else:
+        helper.logger.error(f"Cannot expand RNN node {node.name}: invalid direction {direction}.")
+        exit(1)
+    g.node.extend(new_nodes)
+
+
+def make_RNN_block(x_t, w_i, r_i, b_name, h_pre, y_h_name, hidden_size, batch_size):
+    new_nodes = []
+    # Squeeze x. The output shape should be [batch, input]
+    x_t_squeezed = x_t + '_squeezed'
+    squeeze_node = onnx.helper.make_node(
+        op_type = "Squeeze",
+        inputs = [x_t],
+        outputs = [x_t_squeezed],
+        name = x_t_squeezed,
+        axes = [0]
+    )
+    new_nodes.append(squeeze_node)
+    # Make Gemm for Xt*(W^T) + Wb + Rb. [batch, hidden]
+    gemm_0_name = x_t + '_gemm_0'
+    inputs = [x_t_squeezed, w_i]
+    if b_name != '':
+        inputs.append(b_name)
+    gemm_0_node = onnx.helper.make_node(
+            op_type = 'Gemm',
+            inputs = inputs,
+            outputs = [gemm_0_name],
+            name = gemm_0_name,
+            transB = 1
+    )
+    new_nodes.append(gemm_0_node)
+    # Make Gemm for Ht-1*(R^T) [batch, hidden]
+    h_prev_squeezed = x_t + '_ht-1'
+    if h_pre == '':
+        # No previous H found, make 0 constant node.
+        h_prev_np = np.zeros((batch_size, hidden_size), dtype='float32')
+        constant_node = helper.numpy_to_constant(h_prev_squeezed, h_prev_np)
+        new_nodes.append(constant_node)
+    else:
+        # Squeeze h
+        squeeze_node = onnx.helper.make_node(
+            op_type = "Squeeze",
+            inputs = [h_pre],
+            outputs = [h_prev_squeezed],
+            name = h_prev_squeezed,
+            axes = [0]
+        )
+        new_nodes.append(squeeze_node)
+    gemm_1_name = x_t + '_gemm_1'
+    gemm_1_node = onnx.helper.make_node(
+        op_type = 'Gemm',
+        inputs = [h_prev_squeezed, r_i],
+        outputs = [gemm_1_name],
+        name = gemm_1_name,
+        transB = 1
+    )
+    new_nodes.append(gemm_1_node)
+    # Prepare ht(yh) [batch, hidden]
+    ht_add_name = x_t + '_ht_add'
+    ht_add_node = onnx.helper.make_node(
+        op_type = "Add",
+        inputs = [gemm_0_name, gemm_1_name],
+        outputs = [ht_add_name],
+        name = ht_add_name
+    )
+    new_nodes.append(ht_add_node)
+    ht_f_node = onnx.helper.make_node(
+        op_type = "Tanh",
+        inputs = [ht_add_name],
+        outputs = [y_h_name],
+        name = y_h_name
+    )
+    new_nodes.append(ht_f_node)
     return new_nodes

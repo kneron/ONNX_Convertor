@@ -117,6 +117,8 @@ def list_to_constant(name, shape, data, data_type=None):
             data_type = onnx.helper.TensorProto.FLOAT
         elif len(data) > 0 and isinstance(data[0], int):
             data_type = onnx.helper.TensorProto.INT64
+        elif len(data) > 0 and isinstance(data[0], np.int64):
+            data_type = onnx.helper.TensorProto.INT64
         else:
             data_type = onnx.helper.TensorProto.FLOAT
     tensor = onnx.helper.make_tensor(
