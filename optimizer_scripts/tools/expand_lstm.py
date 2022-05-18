@@ -742,7 +742,7 @@ def prepare_GRU_bias(b_zrh, hidden_size, bidirection=False):
         )
         new_nodes.append(squeeze_node)
         # Split Wb and Rb
-        wb_rb_names, split_node = make_split(squeeze_name, 0, [hidden_size * 3])
+        wb_rb_names, split_node = make_split(squeeze_name, 0, [hidden_size * 3, hidden_size * 3])
         new_nodes.append(split_node)
         return wb_rb_names, ['', ''], new_nodes
 
