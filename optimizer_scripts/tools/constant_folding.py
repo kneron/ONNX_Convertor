@@ -150,7 +150,6 @@ def slice_constant_folding_Opset_11(g, node):
         _, steps = helper.constant_to_list(steps_node)
 
 
-    data_list = list(map(int, data_list))
     starts = list(map(int, starts))
     ends = list(map(int, ends))
     axes = list(map(int, axes))
