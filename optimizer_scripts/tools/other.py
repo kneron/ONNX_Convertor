@@ -212,6 +212,7 @@ def transpose_B_in_Gemm(g):
         if w_node is None or w_node.op_type != "Constant":
             continue
         if len(helper.find_following_nodes_by_input_value_name(g, node.input[1])) > 1:
+            # Skip shared weight
             continue
         do_it = False
         for attr in node.attribute:
