@@ -532,6 +532,10 @@ def eliminate_empty_value_infos(g):
     for value_info in g.value_info:
         if len(value_info.type.tensor_type.shape.dim) == 0:
             to_remove.append(value_info)
+        for dim in value_info.type.tensor_type.shape.dim:
+            if dim.dim_value == 0:
+                to_remove.append(value_info)
+                break
     for value_info in to_remove:
         g.value_info.remove(value_info)
 

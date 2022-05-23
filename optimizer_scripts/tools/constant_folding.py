@@ -67,10 +67,12 @@ def duplicate_constant_node(g):
             continue
         output_val_info = helper.find_value_by_name(g, node.output[0])
         if output_val_info is None:
-            print("Cannot inference the shape of Const node output: " +
-                  node.output[0])
-            exit(1)
-        data_shape = helper.get_shape_from_value_info(output_val_info)
+            # This should be a scaler node.
+            # helper.logger.error("Cannot inference the shape of Const node output: " + node.output[0])
+            # exit(1)
+            data_shape = [1]
+        else:
+            data_shape = helper.get_shape_from_value_info(output_val_info)
         output_nodes = helper.find_nodes_by_input_name(g, node.output[0])
 
         # For constant that has only one following node, no need to duplicate
@@ -110,7 +112,8 @@ def duplicate_constant_node(g):
         # If all following nodes are foldable node, delete the original node.
         if len(foldable_output_nodes) == len(output_nodes):
             g.node.remove(node)
-            g.value_info.remove(output_val_info)
+            if output_val_info is not None:
+                g.value_info.remove(output_val_info)
 
     topological_sort(g)
 

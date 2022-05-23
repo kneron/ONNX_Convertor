@@ -304,18 +304,6 @@ def topological_sort(g):
     if node_map:
         raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
 
-def remove_zero_value_info(g):
-    value_info_list = list(g.value_info)
-    for vi in value_info_list:
-        if not vi.type.tensor_type.shape.dim:
-            g.value_info.remove(vi)
-            continue
-
-        for dim in vi.type.tensor_type.shape.dim:
-            if dim.dim_value == 0:
-                g.value_info.remove(vi)
-                break
-
 def inference_shapes(m):
     eliminating.eliminate_empty_value_infos(m.graph)
     m = onnx.utils.polish_model(m)
@@ -335,7 +323,7 @@ def inference_shapes(m):
             topological_sort(g)
             m = onnx.utils.polish_model(m)
             g = m.graph
-    remove_zero_value_info(g)
+    eliminating.eliminate_empty_value_infos(g)
     m = onnx.utils.polish_model(m)
     eliminating.eliminate_empty_value_infos(m.graph)
     return m
@@ -1203,7 +1191,6 @@ def inference_shapes_until_complete_all(m):
         m = inference_shapes(m)
         current_generated_size = len(m.graph.output) + len(m.graph.value_info)
         if current_generated_size == last_size:
-            helper.logger.error("Cannot inference all shapes.")
-            onnx.save(m, "debug.onnx")
-            exit(1)
+            helper.logger.warn("Cannot inference all shapes. If no other error raised, please ignore this message.")
+            break
     return m
