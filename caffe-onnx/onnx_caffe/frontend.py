@@ -212,6 +212,7 @@ class CaffeFrontend(object):
       )
     # Create the model (ModelProto)
     self.omodel = O.helper.make_model(graph_def, producer_name='Kneron')
+    self.omodel.opset_import[0].version = 11
     self.logger.debug("Unknown layer types: {}".format(helper.unknown_types))
     return self.omodel
 
