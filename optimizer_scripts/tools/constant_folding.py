@@ -687,6 +687,54 @@ def reciprocal_constant_folding(g, node):
 
     return True
 
+def matmul_constant_folding(g, node):
+    """ Fold constant and matmul nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
+    pre_node_2 = helper.find_node_by_output_name(g, node.input[1])
+
+    pre_value_info1 = helper.find_value_by_name(g, node.input[0])
+    pre_value_info2 = helper.find_value_by_name(g, node.input[1])
+    if pre_value_info1 is None or pre_value_info2 is None:
+        return False
+
+    np_data1 = helper.constant_to_numpy(pre_node_1)
+    np_data2 = helper.constant_to_numpy(pre_node_2)
+
+    try:
+        new_data = np.matmul(np_data1, np_data2)
+    except:
+        raise RuntimeError('can not broadcast and multiply two data sets')
+
+    # Special shape for single element.
+    new_shape = new_data.shape
+
+    new_tensor = onnx.helper.make_tensor(
+        name=node.output[0]+'_data',
+        data_type=pre_node_1.attribute[0].t.data_type,
+        dims=new_shape,
+        vals=new_data.flatten().tolist()
+    )
+    new_node = onnx.helper.make_node(
+        'Constant',
+        [],
+        [node.output[0]],
+        name=node.output[0],
+        value=new_tensor
+    )
+
+    node_to_del.extend([node, pre_node_1, pre_node_2])
+    g.node.extend([new_node])
+
+    g.value_info.remove(pre_value_info1)
+    g.value_info.remove(pre_value_info2)
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
 
 def mul_constant_folding(g, node):
     """ Fold constant and mul nodes to a single constant node.
@@ -1023,6 +1071,7 @@ constant_folding_nodes = {
     'Div': div_constant_folding,
     'Floor': floor_constant_folding,
     'Gather': gather_constant_folding,
+    'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
     'ReduceProd': reduceprod_constant_folding,
