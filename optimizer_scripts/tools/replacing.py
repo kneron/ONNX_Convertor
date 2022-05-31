@@ -467,7 +467,7 @@ def replace_split_with_slices(g):
         if not input_value:
             input_value = helper.find_input_by_name(g, node.input[0])
         _, shape = helper.find_size_shape_from_value(input_value)
-        if len(shape) == 0:
+        if shape is None or len(shape) == 0:
             continue
 
         output_val_names = list(node.output)
