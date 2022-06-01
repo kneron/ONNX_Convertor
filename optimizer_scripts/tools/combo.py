@@ -138,6 +138,7 @@ def common_optimization(m):
     replacing.replace_Sum_with_Adds(g)
     replacing.replace_constant_input_concat_with_pad(g)
     replacing.replace_Gather_with_Reshape(g)
+    replacing.replace_Expand_with_Reshape(g)
     fusing.fuse_consecutive_transposes(g)
     other.topological_sort(g)
     return m

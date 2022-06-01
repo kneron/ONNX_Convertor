@@ -1273,3 +1273,54 @@ def replace_Gather_with_Reshape(g):
         g.node.remove(node)
     # Topological sort
     topological_sort(g)
+
+def replace_Expand_with_Reshape(g):
+    """
+    Replace Expand nodes with Reshape node.
+
+    :param g: the input graph
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find Gather node
+        if node.op_type != 'Expand':
+            continue
+        # Get the output shape and Construct the shape
+        output_value = helper.find_value_by_name(g, node.output[0])
+        if output_value is None:
+            output_value = helper.find_output_by_name(g, node.output[0])
+        if output_value is None:
+            helper.logger.error(f"Cannot get output shape for Expand: {node.name}")
+            exit(1)
+        output_shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        # Get input shape
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None:
+            input_value = helper.find_input_by_name(g, node.input[0])
+        if input_value is None:
+            helper.logger.error(f"Cannot get input shape for Expand: {node.name}")
+            exit(1)
+        input_shape = [dim.dim_value for dim in input_value.type.tensor_type.shape.dim]
+        # Check if this is reshape.
+        output_total_count = 1
+        for i in output_shape:
+            output_total_count *= i
+        input_total_count = 1
+        for i in input_shape:
+            input_total_count *= i
+        if input_total_count != output_total_count:
+            continue
+        # Construct new reshape node.
+        new_node = onnx.helper.make_node(
+            "Reshape",
+            [node.input[0], node.input[1]],
+            node.output,
+            name=node.name
+        )
+        g.node.extend([new_node])
+        node_to_remove.append(node)
+    # Remove old nodes
+    for node in node_to_remove:
+        g.node.remove(node)
+    # Topological sort
+    topological_sort(g)
