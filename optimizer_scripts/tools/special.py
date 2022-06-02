@@ -326,7 +326,21 @@ def split_MatMul_Constant_input_then_concat(g, original_matmul_node):
         batch_count = input_b_np.shape[0]
     else:
         batch_count = input_b_np.shape[1]
+    # Get input A shape
+    input_a_value = helper.find_value_by_name(g, original_matmul_node.input[0])
+    input_a_shape = helper.get_shape_from_value_info(input_a_value)
     for i in range(batch_count):
+        # Create Split nodes for input A
+        starts_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_starts", (1, ), [i])
+        ends_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_ends", (1, ), [i+1])
+        axes_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_axes", (1, ), [len(input_a_shape) - 3])
+        new_sliced_a_node = onnx.helper.make_node(
+            'Slice',
+            inputs = [input_a_value.name, starts_node.output[0], ends_node.output[0], axes_node.output[0]],
+            outputs = [f"{input_a_value.name}_sliced_{i}"],
+            name = f"{input_a_value.name}_sliced_{i}_for_{original_matmul_node.name}"
+        )
+        new_nodes.extend([starts_node, ends_node, axes_node, new_sliced_a_node])
         # Create new constant node
         if len(input_b_np.shape) == 3:
             new_np = input_b_np[i:i+1, ...]
@@ -337,7 +351,7 @@ def split_MatMul_Constant_input_then_concat(g, original_matmul_node):
         # Create MatMul nodes
         new_matmul_node = onnx.helper.make_node(
             'MatMul',
-            inputs = [original_matmul_node.input[0], new_weight.output[0]],
+            inputs = [f"{input_a_value.name}_sliced_{i}", new_weight.output[0]],
             outputs = [f"{original_matmul_node.output[0]}_sliced_{i}"],
             name = f"{original_matmul_node.name}_sliced_{i}"
         )
