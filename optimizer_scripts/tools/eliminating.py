@@ -131,10 +131,10 @@ def eliminate_shape_changing_after_input(g):
             node_to_remove.append(node)
 
             shape_outputs = helper.find_nodes_by_input_name(g, shape_node.output[0])
-            if len(shape_outputs) == 1:
+            if len(shape_outputs) <= 1:
                 node_to_remove.append(shape_node)
                 g.value_info.remove(helper.find_value_by_name(g, shape_node.output[0]))
-            
+
             g.input.remove(old_input)
             g.input.extend([new_input])
             g.value_info.remove(output_val_info)
@@ -386,7 +386,8 @@ def eliminate_consecutive_reshape(g):
         g.node.extend([new_reshape_node])
         node_to_del.append(node)
         node_to_del.append(pre_data_node)
-        node_to_del.append(pre_pre_shape_node)
+        if len(helper.find_following_nodes_by_input_value_name(g, pre_pre_shape_node.output[0])) <= 1:
+            node_to_del.append(pre_pre_shape_node)
 
         val_info_to_del1 = helper.find_value_by_name(g, node.input[0])
         val_info_to_del2 = helper.find_value_by_name(g, pre_data_node.input[1])

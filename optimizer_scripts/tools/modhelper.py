@@ -19,13 +19,13 @@ def delete_nodes(g, node_list):
         else:
             node_to_delete.append(node)
     if len(node_list) != len(node_to_delete):
-        print("Some nodes do not exist in the graph. Skipping them.")
+        helper.logger.info("Some nodes do not exist in the graph. Skipping them.")
     for node in node_to_delete:
         # Check the node whether if it is valid to delete
         if len(node.input) == 0:
-            print("Deleting an Constant node. Please make sure you also delete all its following nodes")
+            helper.logger.warn("Deleting an Constant node. Please make sure you also delete all its following nodes")
         elif len(node.input) > 1:
-            print("Warning: Node {} has more than one input. This script cannot delete merge nodes.".format(node.name))
+            helper.logger.warn("Node {} has more than one input. This script cannot delete merge nodes.".format(node.name))
         # Connect the nodes around the target node.
         # Set the following node input as the previous node output.
         following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
@@ -60,7 +60,7 @@ def delete_input(g, target_list):
     for name in target_list:
         input_value = helper.find_input_by_name(g, name)
         if input_value is None:
-            print("Cannot find input {}".format(name))
+            helper.logger.warn("Cannot find input {}".format(name))
             continue
         g.input.remove(input_value)
 
@@ -68,7 +68,7 @@ def delete_output(g, target_list):
     for name in target_list:
         output_value = helper.find_output_by_name(g, name)
         if output_value is None:
-            print("Cannot find output {}".format(name))
+            helper.logger.warn("Cannot find output {}".format(name))
             continue
         g.output.remove(output_value)
 

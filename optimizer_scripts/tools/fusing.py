@@ -44,7 +44,8 @@ def fuse_Transpose_into_Constant(g):
 
         g.node.extend([new_node])
         node_to_remove.append(node)
-        node_to_remove.append(prev_node)
+        if len(helper.find_following_nodes_by_input_value_name(g, prev_node.output[0])) <= 1:
+            node_to_remove.append(prev_node)
 
         if new_node.output[0] not in [i.name for i in g.value_info]:
             new_value = onnx.helper.make_tensor_value_info(

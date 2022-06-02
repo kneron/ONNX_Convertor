@@ -205,24 +205,31 @@ def transpose_B_in_Gemm(g):
 
     :param g: the onnx graph
     """
+    def check_if_all_trans_Gemm(g, n):
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, n.output[0])
+        for following_node in following_nodes:
+            if following_node.op_type != 'Gemm':
+                return False
+            attr = helper.get_attribute_by_name(following_node, 'transB')
+            if attr is None:
+                return False
+            if attr.i != 1:
+                return False
+        return True
+    def modify_all_trans_Gemm(g, n):
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, n.output[0])
+        for following_node in following_nodes:
+            attr = helper.get_attribute_by_name(following_node, 'transB')
+            attr.i = 0
     for node in g.node:
         if node.op_type != 'Gemm':
             continue
         w_node = helper.find_node_by_output_name(g, node.input[1])
         if w_node is None or w_node.op_type != "Constant":
             continue
-        if len(helper.find_following_nodes_by_input_value_name(g, node.input[1])) > 1:
-            # Skip shared weight
+        if not check_if_all_trans_Gemm(g, w_node):
             continue
-        do_it = False
-        for attr in node.attribute:
-            if attr.name == "transB":
-                if attr.i == 1:
-                    attr.i = 0
-                    do_it = True
-                    break
-        if not do_it:
-            continue
+        modify_all_trans_Gemm(g, w_node)
         # Transpose the weight and its output value
         w_output = helper.find_value_by_name(g, node.input[1])
         dim_0 = w_output.type.tensor_type.shape.dim[0].dim_value

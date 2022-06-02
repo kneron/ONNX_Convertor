@@ -93,7 +93,8 @@ def replace_Reshape_with_Flatten(g):
             node.attribute.pop()
         shape_value = helper.find_value_by_name(g, shape_node.output[0])
         node.input.pop()
-        node_to_remove.append(shape_node)
+        if len(helper.find_following_nodes_by_input_value_name(g, shape_node.output[0])) <= 1:
+            node_to_remove.append(shape_node)
         # If found shape value_info, remove it
         if shape_value != None:
             g.value_info.remove(shape_value)
@@ -673,7 +674,8 @@ def replace_mul_to_bn(g):
         g.node.extend([new_mul_value_node])
 
         node_to_del.extend([mul_op_node])
-        node_to_del.extend([mul_value_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, mul_value_node.output[0])) <= 1:
+            node_to_del.extend([mul_value_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -753,7 +755,8 @@ def replace_div_to_bn(g):
         g.node.extend([new_mul_value_node])
 
         node_to_del.extend([div_op_node])
-        node_to_del.extend([div_value_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, div_value_node.output[0])) <= 1:
+            node_to_del.extend([div_value_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -833,7 +836,8 @@ def replace_add_to_bn(g):
         g.node.extend([new_add_value_node])
 
         node_to_del.extend([add_op_node])
-        node_to_del.extend([add_value_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, add_value_node.output[0])) <= 1:
+            node_to_del.extend([add_value_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -930,7 +934,8 @@ def replace_sub_to_bn(g):
         g.node.extend([new_add_value_node])
 
         node_to_del.extend([sub_op_node])
-        node_to_del.extend([constant_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, constant_node.output[0])) <= 1:
+            node_to_del.extend([constant_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())

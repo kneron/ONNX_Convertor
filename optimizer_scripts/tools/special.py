@@ -376,7 +376,8 @@ def split_MatMul_Constant_input_then_concat(g, original_matmul_node):
         g.value_info.remove(input_b_value)
     # Delete original nodes
     g.node.remove(original_matmul_node)
-    g.node.remove(input_b_node)
+    if len(helper.find_following_nodes_by_input_value_name(g, input_b_node.output[0])) <= 1:
+        g.node.remove(input_b_node)
 
 
 def special_MatMul_process(g):

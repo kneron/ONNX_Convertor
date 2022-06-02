@@ -21,6 +21,14 @@ def are_all_inputs_Constant_with_one_child(g, node):
     return True
 
 
+def are_all_inputs_Constant(g, node):
+    for input_name in node.input:
+        input_node = helper.find_node_by_output_name(g, input_name)
+        if input_node is None or input_node.op_type != 'Constant':
+            return False
+    return True
+
+
 def constant_folding(g):
     """ Do constant folding until nothing more can be done.
 
@@ -31,9 +39,9 @@ def constant_folding(g):
     folded = False      # Return value
     try:
         # Before constant folding, duplicate the constant nodes.
-        duplicate_constant_node(g)
         while keep_folding:
             keep_folding = False
+            duplicate_constant_node(g)
             for node in g.node:
                 # Check if the node is foldable
                 if node.op_type not in constant_folding_nodes.keys():
@@ -65,6 +73,23 @@ def duplicate_constant_node(g):
         # Find a valid constant node
         if node.op_type != 'Constant':
             continue
+        output_nodes = helper.find_nodes_by_input_name(g, node.output[0])
+
+        # For constant that has only one following node, no need to duplicate
+        if len(output_nodes) < 2:
+            continue
+
+        # Check if its following nodes are foldable
+        foldable_output_nodes = []
+        for following_node in output_nodes:
+            if following_node.op_type not in constant_folding_nodes.keys():
+                continue
+            if not are_all_inputs_Constant(g, following_node):
+                continue
+            foldable_output_nodes.append(following_node)
+        if len(foldable_output_nodes) == 0:
+            continue
+
         output_val_info = helper.find_value_by_name(g, node.output[0])
         if output_val_info is None:
             # This should be a scaler node.
@@ -73,17 +98,6 @@ def duplicate_constant_node(g):
             data_shape = [1]
         else:
             data_shape = helper.get_shape_from_value_info(output_val_info)
-        output_nodes = helper.find_nodes_by_input_name(g, node.output[0])
-
-        # For constant that has only one following node, no need to duplicate
-        if len(output_nodes) < 2:
-            continue
-
-        # Check if its following nodes are foldable
-        foldable_output_nodes = list(filter(lambda n: n.op_type in
-                                            constant_folding_nodes.keys(), output_nodes))
-        if not foldable_output_nodes:
-            continue
 
         # Duplicate the node needed by foldable nodes
         for i in range(len(foldable_output_nodes)):
@@ -338,15 +352,6 @@ def concat_constant_folding(g, node):
     """
     node_to_del = []
     valid_inputs = True
-    for input_name in node.input:
-        input_node = helper.find_node_by_output_name(g, input_name)
-        input_node_output = helper.find_nodes_by_input_name(g, input_name)
-        if len(input_node_output) > 1:
-            valid_inputs = False
-            break
-        if input_node.op_type != 'Constant':
-            valid_inputs = False
-            break
 
     if not valid_inputs:
         return False
