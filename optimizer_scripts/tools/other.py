@@ -1100,6 +1100,7 @@ def inference_shapes_until_complete_all(m):
         if current_generated_size == last_size:
             helper.logger.warn("Cannot inference all shapes. If no other error raised, please ignore this message.")
             break
+    m = onnx.utils.polish_model(m)
     return m
 
 def convert_opset12_constants(g):
