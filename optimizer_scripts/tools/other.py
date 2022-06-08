@@ -1120,7 +1120,7 @@ def inference_shapes_until_complete_all(m):
         m = inference_shapes(m)
         current_generated_size = len(m.graph.output) + len(m.graph.value_info)
         if current_generated_size == last_size:
-            helper.logger.warn("Cannot inference all shapes. If no other error raised, please ignore this message.")
+            helper.logger.warn("Cannot inference all shapes. If no other error is raised, please ignore this message.")
             break
     m = onnx.utils.polish_model(m)
     return m

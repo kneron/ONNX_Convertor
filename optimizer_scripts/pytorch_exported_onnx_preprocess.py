@@ -25,8 +25,9 @@ def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.
     Returns:
         ModelProto: the optimized onnx model
     """
-    m = combo.preprocess(m, disable_fuse_bn)
+    m = combo.preprocess(m, disable_fuse_bn, duplicate_shared_weights=False)
     m = combo.pytorch_constant_folding(m)
+    onnx.save(m, "debug.onnx")
     m = combo.common_optimization(m)
     m = combo.postprocess(m)
 

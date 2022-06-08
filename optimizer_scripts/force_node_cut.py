@@ -60,7 +60,7 @@ m = onnx.load(args.in_file)
 # Format input/output
 other.format_input_output(m.graph)
 eliminating.eliminate_empty_value_infos(m.graph)
-replacing.replace_initializer_with_Constant(m.graph)
+replacing.replace_initializer_with_Constant(m.graph, False)
 # Prepare shapes
 eliminating.clear_value_infos(m.graph)
 m = onnx.shape_inference.infer_shapes(m)
