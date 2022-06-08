@@ -1,4 +1,5 @@
 import collections
+import logging
 import struct
 import onnx
 import numpy as np
@@ -92,6 +93,7 @@ def eliminate_shape_changing_after_input(g):
     node_to_remove = []
     REMOVE_LIST = ["Reshape", "Transpose", "Flatten", "Dropout", "Squeeze", "Unsqueeze"]
     for node in g.node:
+        # Here we iterate over nodes to eliminate multiple nodes after input.
         # Find an input and the shape node
         if node.op_type not in REMOVE_LIST:
             continue
@@ -99,13 +101,10 @@ def eliminate_shape_changing_after_input(g):
         if old_input is None:
             continue
         # If the input is used by multiple nodes, skip.
-        counter = 0
-        for tnode in g.node:
-            if old_input.name in tnode.input:
-                counter += 1
-        if counter > 1:
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, old_input.name)
+        if len(following_nodes) > 1:
             continue
-        # Remove Weight if any.
+        # Find node output value_info
         output_val_info = helper.find_value_by_name(g, node.output[0])
 
         if node.op_type == 'Reshape':
@@ -113,28 +112,22 @@ def eliminate_shape_changing_after_input(g):
             if shape_node.op_type != 'Constant':
                 continue
 
-            # manuelly set the input shape
-            shape_info = helper.find_value_by_name(g, shape_node.output[0])
-            old_size, old_shape = helper.find_size_shape_from_value(shape_info)
+            # Use the output value info as the new input
+            if output_val_info is None:
+                logging.warn("Cannot eliminate " + node.name + " in the beginning of graph.")
+                continue
+            new_input = output_val_info
 
-            _, new_shape = helper.constant_to_list(shape_node)
-            for i in range(len(new_shape)):
-                if new_shape[i] == -1:
-                    dim = int(old_size//np.prod(new_shape)*(-1))
-                    new_shape[i] = dim
-            new_input = onnx.helper.make_tensor_value_info(
-                output_val_info.name,
-                output_val_info.type.tensor_type.elem_type,
-                new_shape
-            )
-
+            # Delete node
             node_to_remove.append(node)
 
+            # Delete weight
             shape_outputs = helper.find_nodes_by_input_name(g, shape_node.output[0])
             if len(shape_outputs) <= 1:
                 node_to_remove.append(shape_node)
                 g.value_info.remove(helper.find_value_by_name(g, shape_node.output[0]))
 
+            # Delete value info
             g.input.remove(old_input)
             g.input.extend([new_input])
             g.value_info.remove(output_val_info)
@@ -181,7 +174,7 @@ def eliminate_shape_changing_after_input(g):
             g.input.remove(old_input)
             g.input.extend([output_val_info])
             g.value_info.remove(output_val_info)
-            
+
             node_to_remove.append(node)
         elif node.op_type == 'Squeeze':
             axis = list(node.attribute[0].ints)
@@ -359,44 +352,43 @@ def eliminate_no_children_input(g):
 def eliminate_consecutive_reshape(g):
     """Replace consecutive reshape nodes by a single node.
     """
-    node_to_del = []
+    RESHAPE_TYPE = set(["Reshape", "Flatten", "Dropout", "Squeeze", "Unsqueeze"])
+
     for node in g.node:
-        if node.op_type != 'Reshape':
+        # Check if this is a reshape
+        if node.op_type not in RESHAPE_TYPE:
             continue
         pre_data_node = helper.find_node_by_output_name(g, node.input[0])
-        pre_shape_node = helper.find_node_by_output_name(g, node.input[1])
-        if not pre_data_node or not pre_shape_node:
+        if not pre_data_node:
             continue
-        if pre_shape_node.op_type != 'Constant':
+        # Check if the shape is a constant
+        if len(node.input) > 1:
+            pre_shape_node = helper.find_node_by_output_name(g, node.input[1])
+            if not pre_shape_node:
+                continue
+            if pre_shape_node.op_type != 'Constant':
+                continue
+        # Check if the previous node is reshape
+        if pre_data_node.op_type not in RESHAPE_TYPE:
             continue
-        if pre_data_node.op_type != 'Reshape':
-            continue
-        
-        pre_pre_shape_node = helper.find_node_by_output_name(g, pre_data_node.input[1])
-        if pre_pre_shape_node.op_type != 'Constant':
+        # Check if the weight of the previous node is a constant
+        if len(pre_shape_node.input) > 1:
+            pre_pre_shape_node = helper.find_node_by_output_name(g, pre_data_node.input[1])
+            if pre_pre_shape_node.op_type != 'Constant':
+                continue
+        # Check if the previous node has only one output connected
+        post_pre_nodes = helper.find_nodes_by_input_name(g, node.input[0])
+        if len(post_pre_nodes) != 1:
             continue
 
-        new_reshape_node = onnx.helper.make_node(
-            'Reshape',
-            [pre_data_node.input[0], node.input[1]],
-            [node.output[0]],
-            name = node.output[0]
-        )
+        #Reconnect the graph
+        modhelper.replace_node_input(node, node.input[0], pre_data_node.input[0])
 
-        g.node.extend([new_reshape_node])
-        node_to_del.append(node)
-        node_to_del.append(pre_data_node)
-        if len(helper.find_following_nodes_by_input_value_name(g, pre_pre_shape_node.output[0])) <= 1:
-            node_to_del.append(pre_pre_shape_node)
+        g.node.remove(pre_data_node)
 
         val_info_to_del1 = helper.find_value_by_name(g, node.input[0])
-        val_info_to_del2 = helper.find_value_by_name(g, pre_data_node.input[1])
-        g.value_info.remove(val_info_to_del1)
-        g.value_info.remove(val_info_to_del2)
-
-    while node_to_del:
-        node = node_to_del.pop()
-        g.node.remove(node)
+        if val_info_to_del1 is not None:
+            g.value_info.remove(val_info_to_del1)
 
 def eliminate_single_input_Concat(g):
     """
@@ -677,3 +669,218 @@ def eliminate_nop_cast(g):
         node_to_remove.append(node)
     for node in node_to_remove:
         g.node.remove(node)
+
+
+def eliminate_nop_reshape(g):
+    for node in g.node:
+        # Check if this is a reshape
+        if node.op_type != 'Reshape':
+            continue
+        pre_shape_node = helper.find_node_by_output_name(g, node.input[1])
+        # Check if the shape is a constant
+        if pre_shape_node.op_type != 'Constant':
+            continue
+        # Check if the input shape equals the output shape
+        input_value_info = helper.find_value_by_name(g, node.input[0])
+        output_value_info = helper.find_value_by_name(g, node.output[0])
+        if input_value_info is None or output_value_info is None or \
+            helper.get_shape_from_value_info(input_value_info) != helper.get_shape_from_value_info(output_value_info):
+            continue
+        # Connect previous node and the next node
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+        # delete the node
+        g.node.remove(node)
+        g.value_info.remove(output_value_info)
+
+def eliminate_nop_flatten(g):
+    for node in g.node:
+        # Check if this is a reshape
+        if node.op_type != 'Flatten':
+            continue
+        # Check if the input shape equals the output shape
+        input_value_info = helper.find_value_by_name(g, node.input[0])
+        output_value_info = helper.find_value_by_name(g, node.output[0])
+        if input_value_info is None or output_value_info is None or \
+            helper.get_shape_from_value_info(input_value_info) != helper.get_shape_from_value_info(output_value_info):
+            continue
+        # Connect previous node and the next node
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+        # delete the node
+        g.node.remove(node)
+        g.value_info.remove(output_value_info)
+
+def get_set_of_connected_node_names(g):
+    # Input to output approach
+    connected_node_names = set()
+    top_names = set([v.name for v in g.input])
+    to_visit = collections.deque()
+    # Initilize visit queue
+    for input_name in top_names:
+        input_following_nodes = helper.find_following_nodes_by_input_value_name(g, input_name)
+        for input_following_node in input_following_nodes:
+            if input_following_node.name in connected_node_names:
+                continue
+            to_visit.append(input_following_node)
+            connected_node_names.add(input_following_node.name)
+    # Visit all the nodes in BFS pattern
+    while len(to_visit) > 0:
+        n = to_visit.popleft()
+        for output_name in n.output:
+            following_nodes = helper.find_following_nodes_by_input_value_name(g, output_name)
+            for following_node in following_nodes:
+                if following_node.name in connected_node_names:
+                    continue
+                to_visit.append(following_node)
+                connected_node_names.add(following_node.name)
+
+    # Output to input approach
+    to_visit = collections.deque([n for n in g.node if n.name in connected_node_names])
+
+
+    # Visit all the nodes in BFS pattern
+    while len(to_visit) > 0:
+        n = to_visit.popleft()
+        for input_name in n.input:
+            previous_node = helper.find_node_by_output_name(g, input_name)
+            if previous_node is None:
+                # Constant node or input does not have previous node.
+                continue
+            if previous_node.name in connected_node_names:
+                continue
+            to_visit.append(previous_node)
+            connected_node_names.add(previous_node.name)
+
+    return connected_node_names
+
+
+def eliminate_not_connected_nodes(g):
+    # Find not connected nodes
+    connected_nodes = get_set_of_connected_node_names(g)
+    not_connected_node_list = []
+    for n in g.node:
+        if n.name not in connected_nodes:
+            not_connected_node_list.append(n)
+
+    # Remove not connected nodes
+    for n in not_connected_node_list:
+        logging.debug("Removing not connected: " + n.name)
+        g.node.remove(n)
+
+def eliminate_not_connected_outputs(g):
+    value_to_remove = []
+    for value in g.output:
+        node = helper.find_node_by_output_name(g, value.name)
+        if node is None:
+            value_to_remove.append(value)
+    while len(value_to_remove) > 0:
+        g.output.remove(value_to_remove.pop())
+
+def clear_value_infos(g):
+    while len(g.value_info) != 0:
+        g.value_info.pop()
+
+def remove_reshape_of_batch_change(g):
+    for n in g.node:
+        # Check the operator type
+        if n.op_type != 'Reshape':
+            continue
+        # Get the input and output shape
+        input_value = helper.find_value_by_name(g, n.input[0])
+        input_shape = helper.get_shape_from_value_info(input_value)
+        output_value = helper.find_value_by_name(g, n.output[0])
+        output_shape = helper.get_shape_from_value_info(output_value)
+        # Check the shape change
+        if len(input_shape) == len(output_shape) - 1:
+            # 25 x a x b -> 1 x 25 x a x b
+            if output_shape[0] != 1:
+                continue
+            not_matched = False
+            for i in range(len(input_shape)):
+                if input_shape[i] != output_shape[i + 1]:
+                    not_matched = True
+                    break
+            if not_matched:
+                continue
+        elif len(input_shape) == len(output_shape) + 1:
+            # 1 x 25 x a x b -> 25 x a x b
+            if input_shape[0] != 1:
+                continue
+            not_matched = False
+            for i in range(len(output_shape)):
+                if input_shape[i + 1] != output_shape[i]:
+                    not_matched = True
+                    break
+            if not_matched:
+                continue
+        else:
+            continue
+        # Reconnect the graph
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, n.output[0])
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, n.output[0], n.input[0])
+        # Delete the value_info
+        g.value_info.remove(output_value)
+        # Delete the node
+        g.node.remove(n)
+
+def eliminate_Transpose_surround_Concat(g):
+    # Find concat
+    for concat_node in g.node:
+        if concat_node.op_type != 'Concat':
+            continue
+        # Find all the Transpose before and after
+        input_nodes = [helper.find_node_by_output_name(g, input_name) for input_name in concat_node.input]
+        failed = False
+        for input_node in input_nodes:
+            if input_node.op_type != "Transpose":
+                failed = True
+                break
+        if failed:
+            continue
+        output_nodes = helper.find_following_nodes_by_input_value_name(g, concat_node.output[0])
+        for output_node in output_nodes:
+            if output_node.op_type != "Transpose":
+                failed = True
+                break
+        if failed:
+            continue
+        # Change the Concat axis
+        axis_attr = helper.get_attribute_by_name(concat_node, 'axis')
+        axis_attr.i = 1
+        # Reconnect the graph
+        while len(concat_node.input) > 0:
+            concat_node.input.pop()
+        for input_node in input_nodes:
+            concat_node.input.append(input_node.input[0])
+        for output_node in output_nodes:
+            for following_node in helper.find_following_nodes_by_input_value_name(g, output_node.output[0]):
+                modhelper.replace_node_input(following_node, output_node.output[0], concat_node.output[0])
+        # Delete the tranpose nodes
+        for n in input_nodes:
+            g.node.remove(n)
+        for n in output_nodes:
+            g.node.remove(n)
+
+# Reshape Transpose Reshape Transpose pattern elimination
+def eliminate_reshape_transpose_pattern(g):
+    for transpose_node in g.node:
+        # Find Reshape Transpose pattern
+        if transpose_node.op_type != 'Transpose':
+            continue
+        reshape_node = helper.find_node_by_output_name(g, transpose_node.input[0])
+        if reshape_node is None:
+            continue
+        if reshape_node.op_type != 'Reshape':
+            continue
+        if len(helper.find_following_nodes_by_input_value_name(g, transpose_node.input[0])) > 1:
+            continue
+        # Reconnect
+        for child_node in helper.find_following_nodes_by_input_value_name(g, transpose_node.output[0]):
+            modhelper.replace_node_input(child_node, transpose_node.output[0], reshape_node.input[0])
+        # Delete both nodes
+        g.node.remove(reshape_node)
+        g.node.remove(transpose_node)

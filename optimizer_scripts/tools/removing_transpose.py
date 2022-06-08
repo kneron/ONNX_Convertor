@@ -26,7 +26,7 @@ def eliminate_transposes(m):
 
 def swap_transpose_with_single_next_node(g):
   swapped = False
-  passable_nodes = set(['Relu', 'Neg', 'LeakyRelu', 'Sqrt', 'Reciprocal', 'Add', 'Mul', 'Tanh'])
+  passable_nodes = set(['Relu', 'Neg', 'LeakyRelu', 'Sqrt', 'Reciprocal', 'Add', 'Mul', 'Tanh', 'Selu'])
   for node in g.node:
     trans_node = node
     # Check for transpose node
@@ -300,6 +300,7 @@ def fuse_Transpose_into_Gemm_weight(g):
     origin_np = helper.constant_to_numpy(origin_weight)
     # Calculate a new weight
     shape = helper.get_shape_from_value_info(helper.find_value_by_name(g, prev_node.input[0]))
+    shape[0] = 1
     shape.append(-1)
     new_np = np.reshape(origin_np, shape)
     new_np = np.transpose(new_np, [0, 3, 1, 2, 4])

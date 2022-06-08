@@ -6,13 +6,27 @@ import sys
 import onnx
 import onnx.utils
 from tensorflow.python.platform import gfile
-from tools import combo, eliminating, replacing
+from tools import combo, eliminating, replacing, fusing
 
-def tf2onnx_flow(pb_path: str, test_mode =False) -> onnx.ModelProto:
-    """Convert frozen graph pb file into onnx
+def tf2onnx_onnx_flow(onnx_model: onnx.ModelProto, test_mode = False) -> onnx.ModelProto:
+    m = onnx_model
+    m = combo.preprocess(m)
+    m = combo.common_optimization(m)
+    m = combo.tensorflow_optimization(m)
+    m = combo.postprocess(m)
+
+    if not test_mode:
+        fusing.fuse_branched_Transpose(m.graph)
+        eliminating.eliminate_shape_changing_after_input(m.graph)
+
+    m = onnx.utils.polish_model(m)
+    return m
+
+def tf2onnx_flow(file_path: str, test_mode =False) -> onnx.ModelProto:
+    """Convert frozen graph pb file into onnx. Or onnx to onnx.
 
     Args:
-        pb_path (str): input pb file path
+        file_path (str): input file path
         test_mode (bool, optional): test mode. Defaults to False.
 
     Raises:
@@ -21,19 +35,30 @@ def tf2onnx_flow(pb_path: str, test_mode =False) -> onnx.ModelProto:
     Returns:
         onnx.ModelProto: converted onnx
     """
+    if file_path[-4:] == "onnx":
+        logging.info("Taking onnx file. Skip conversion.")
+        m = onnx.load(file_path)
+        return tf2onnx_onnx_flow(m, test_mode)
+    elif file_path[-2:] == "pb":
+        logging.info("Taking pb file. Conversion first.")
+        pb_path = file_path
+    else:
+        logging.error("Input format not supported.")
+        return None
+
     TF2ONNX_VERSION = int(tf2onnx.version.version.replace('.', ''))
 
     if 160 <= TF2ONNX_VERSION:
         from tf2onnx import tf_loader
     else:
         from tf2onnx import loader as tf_loader
- 
+
     if pb_path[-3:] == '.pb':
         model_name = pb_path.split('/')[-1][:-3]
 
-        # always reset tensorflow session at begin 
+        # always reset tensorflow session at begin
         tf.reset_default_graph()
-        
+
         with tf.Session() as sess:
             with gfile.FastGFile(pb_path, 'rb') as f:
                 graph_def = tf.GraphDef()
@@ -117,21 +142,7 @@ def tf2onnx_flow(pb_path: str, test_mode =False) -> onnx.ModelProto:
     else:
         raise Exception('expect .pb file as input, but got "' + str(pb_path) + '"')
 
-    # rename
-    m = model_proto
-
-    m = combo.preprocess(m)
-    m = combo.common_optimization(m)
-    m = combo.tensorflow_optimization(m)
-    m = combo.postprocess(m)
-
-    if not test_mode:
-        g = m.graph
-        eliminating.eliminate_shape_changing_after_input(g)
-
-    m = onnx.utils.polish_model(m)
-    return m
-
+    return tf2onnx_onnx_flow(model_proto, test_mode)
 
 
 if __name__ == '__main__':

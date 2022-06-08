@@ -78,7 +78,7 @@ def replace_Reshape_with_Flatten(g):
             if len(i.input) == 0 or i.input[0] != node.output[0]:
                 continue
             if i.op_type == 'Gemm':
-                found = True
+                found_Gemm = True
                 break
         # Check weight
         shape_node = helper.find_node_by_output_name(g, node.input[1])
@@ -86,6 +86,15 @@ def replace_Reshape_with_Flatten(g):
             continue
         shape_value = helper.constant_to_numpy(shape_node)
         if (shape_value.size != 2 or shape_value[0] != 1) and not found_Gemm:
+            continue
+        # The first dimension must be the same
+        input_value = helper.find_value_by_name(g, node.input[0])
+        output_value = helper.find_value_by_name(g, node.output[0])
+        if input_value is None or len(input_value.type.tensor_type.shape.dim) < 2:
+            continue
+        if output_value is None or len(output_value.type.tensor_type.shape.dim) != 2:
+            continue
+        if input_value.type.tensor_type.shape.dim[0].dim_value != output_value.type.tensor_type.shape.dim[0].dim_value:
             continue
         # Replace it
         node.op_type = "Flatten"
@@ -120,6 +129,9 @@ def replace_Squeeze_with_Reshape(g):
         if output_value is None:
             raise RuntimeError("Cannot get shape for Squeeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        if len(shape) == 0:
+            g.value_info.remove(output_value)
+            continue
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.
         new_node = onnx.helper.make_node(
@@ -155,6 +167,9 @@ def replace_Unsqueeze_with_Reshape(g):
         if output_value is None:
             raise RuntimeError("Cannot get shape for Unsqueeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        if len(shape) == 0:
+            g.value_info.remove(output_value)
+            continue
 
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.
