@@ -5,10 +5,10 @@ import struct
 import collections
 import numpy as np
 import onnx.helper
+import onnx.utils
 import math
 import logging
-from . import helper
-from .modhelper import replace_node_input
+from . import helper, modhelper
 import copy
 from .helper import logger
 from . import eliminating
@@ -53,10 +53,11 @@ def rename_all_node_name(g):
 
     :param g: the onnx graph
     """
-
     for node in g.node:
         if not node.name.isdigit():
             # Skip not number names
+            continue
+        if len(node.name) > 3 and node.name[-3:] == '_kn':
             continue
         new_node_name = node.name + "_kn"
         new_node_output0_name = node.output[0] + "_kn"
@@ -69,7 +70,7 @@ def rename_all_node_name(g):
         # rename  the input of all the following nodes
         following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
         for following_node in following_nodes:
-            replace_node_input(following_node, node.output[0], new_node_output0_name )
+            modhelper.replace_node_input(following_node, node.output[0], new_node_output0_name )
 
         # rename value info
         value_info = helper.find_value_by_name(g, node.output[0])
@@ -114,6 +115,8 @@ def remove_nodes(g, cut_nodes=[], cut_types=[]):
     new_output = set()
     for node in node_to_delete:
         original_output = find_first_sequential_output(g, node)
+        if original_output is None:
+            continue
         if original_output.name not in output_mapping:
             output_mapping[original_output.name] = []
         for input_name in node.input:
@@ -205,24 +208,31 @@ def transpose_B_in_Gemm(g):
 
     :param g: the onnx graph
     """
+    def check_if_all_trans_Gemm(g, n):
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, n.output[0])
+        for following_node in following_nodes:
+            if following_node.op_type != 'Gemm':
+                return False
+            attr = helper.get_attribute_by_name(following_node, 'transB')
+            if attr is None:
+                return False
+            if attr.i != 1:
+                return False
+        return True
+    def modify_all_trans_Gemm(g, n):
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, n.output[0])
+        for following_node in following_nodes:
+            attr = helper.get_attribute_by_name(following_node, 'transB')
+            attr.i = 0
     for node in g.node:
         if node.op_type != 'Gemm':
             continue
         w_node = helper.find_node_by_output_name(g, node.input[1])
         if w_node is None or w_node.op_type != "Constant":
             continue
-        if len(helper.find_following_nodes_by_input_value_name(g, node.input[1])) > 1:
-            # Skip shared weight
+        if not check_if_all_trans_Gemm(g, w_node):
             continue
-        do_it = False
-        for attr in node.attribute:
-            if attr.name == "transB":
-                if attr.i == 1:
-                    attr.i = 0
-                    do_it = True
-                    break
-        if not do_it:
-            continue
+        modify_all_trans_Gemm(g, w_node)
         # Transpose the weight and its output value
         w_output = helper.find_value_by_name(g, node.input[1])
         dim_0 = w_output.type.tensor_type.shape.dim[0].dim_value
@@ -300,9 +310,19 @@ def topological_sort(g):
                 del in_degree[next_node_name]
     g.node.extend(sorted_nodes)
     if in_degree:
-        raise RuntimeError("Unreachable nodes exist: {}".format(in_degree.keys()))
+        bad_nodes = "["
+        for k in in_degree.keys():
+            bad_nodes += k + ',\n'
+        bad_nodes = bad_nodes[:-2] + ']'
+        logging.warn("Unreachable nodes exist: {} nodes".format(len(bad_nodes)))
+        # raise RuntimeError("Unreachable nodes exist: {}".format(in_degree.keys()))
     if node_map:
-        raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
+        bad_nodes = ""
+        for k in node_map.keys():
+            bad_nodes += k + ',\n'
+        bad_nodes = bad_nodes[:-2] + ']'
+        logging.warn("Unused nodes exist: {} nodes".format(len(bad_nodes)))
+        # raise RuntimeError("Unused nodes exist: {}".format(node_map.keys()))
 
 def inference_shapes(m):
     eliminating.eliminate_empty_value_infos(m.graph)
@@ -586,9 +606,11 @@ def change_output_shape(g, target_list):
             if output_value is None:
                 print("Cannot find output {}".format(name))
                 continue
-            if len(shape) != len(output_value.type.tensor_type.shape.dim):
+            if len(shape) > len(output_value.type.tensor_type.shape.dim):
                 print("The dimension doesn't match for output {}".format(name))
                 continue
+            while len(shape) < len(output_value.type.tensor_type.shape.dim):
+                output_value.type.tensor_type.shape.dim.pop()
             for i in range(len(shape)):
                 output_value.type.tensor_type.shape.dim[i].dim_value = shape[i]
         except TypeError:
@@ -641,7 +663,7 @@ def add_nop_conv_after(g, value_names):
         following_nodes = helper.find_following_nodes_by_input_value_name(g, value_name)
         if len(following_nodes) > 0:
             for following_node in following_nodes:
-                replace_node_input(following_node, value_name, node_name)
+                modhelper.replace_node_input(following_node, value_name, node_name)
         else:
             # If the node is the output, replace the output with the previous input.
             new_value = onnx.helper.make_tensor_value_info(
@@ -706,7 +728,7 @@ def add_nop_bn_after(g, value_names):
         following_nodes = helper.find_following_nodes_by_input_value_name(g, value_name)
         if len(following_nodes) > 0:
             for following_node in following_nodes:
-                replace_node_input(following_node, value_name, node_name)
+                modhelper.replace_node_input(following_node, value_name, node_name)
         else:
             # If the node is the output, replace the output with the previous input.
             new_value = onnx.helper.make_tensor_value_info(
@@ -770,7 +792,7 @@ def add_bias_scale_bn_after(g, value_name, channel_bias, channel_scale):
     following_nodes = helper.find_following_nodes_by_input_value_name(g, value_name)
     if len(following_nodes) > 0:
         for following_node in following_nodes:
-            replace_node_input(following_node, value_name, node_name)
+            modhelper.replace_node_input(following_node, value_name, node_name)
     else:
         # If the node is the output, replace the output with the previous input.
         new_value = onnx.helper.make_tensor_value_info(
@@ -823,7 +845,7 @@ def duplicate_shared_Flatten(g):
                 axis=1
             )
             # Connect new graph
-            replace_node_input(gemm_nodes[i], node.output[0], new_flatten_name)
+            modhelper.replace_node_input(gemm_nodes[i], node.output[0], new_flatten_name)
             g.node.extend([new_flatten_node])
     topological_sort(g)
 
@@ -947,7 +969,7 @@ def add_bn_on_skip_branch(g):
             name = node_name
         )
         # Reconnect the graph
-        replace_node_input(n, value_name, node_name)
+        modhelper.replace_node_input(n, value_name, node_name)
         # Add node to the graph
         g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
     topological_sort(g)
@@ -994,7 +1016,7 @@ def add_bn_before_add(g):
                 epsilon=0.00000001
             )
             # Reconnect the graph
-            replace_node_input(n, value_name, node_name)
+            modhelper.replace_node_input(n, value_name, node_name)
             # Add node to the graph
             g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
         if not input_node_a.op_type == 'BatchNormalization' or len(helper.find_following_nodes_by_input_value_name(g, input_node_a.output[0])) > 1:
@@ -1041,7 +1063,7 @@ def add_bn_before_activation(g):
                 epsilon=0.00000001
             )
             # Reconnect the graph
-            replace_node_input(n, value_name, node_name)
+            modhelper.replace_node_input(n, value_name, node_name)
             # Add node to the graph
             g.node.extend([bn_node, scale_node, bias_node, mean_node, var_node])
         add_bn_after(input_node)
@@ -1064,7 +1086,7 @@ def rename_output_name(g, original_name, new_name):
     # Node input
     nodes = helper.find_nodes_by_input_name(g, original_name)
     for node in nodes:
-        replace_node_input(node, original_name, new_name)
+        modhelper.replace_node_input(node, original_name, new_name)
 
 def duplicate_param_shared_constant(g):
     for node in g.node:
@@ -1098,7 +1120,7 @@ def inference_shapes_until_complete_all(m):
         m = inference_shapes(m)
         current_generated_size = len(m.graph.output) + len(m.graph.value_info)
         if current_generated_size == last_size:
-            helper.logger.warn("Cannot inference all shapes. If no other error raised, please ignore this message.")
+            helper.logger.warn("Cannot inference all shapes. If no other error is raised, please ignore this message.")
             break
     m = onnx.utils.polish_model(m)
     return m
@@ -1159,3 +1181,84 @@ def convert_opset12_constants(g):
     # Delete nodes
     for node in node_to_del:
         g.node.remove(node)
+
+def format_input_output(g):
+    for value in g.input:
+        for dim in value.type.tensor_type.shape.dim:
+            if dim.dim_param:
+                logging.info(f"Replacing dimension {dim.dim_param} with 1.")
+                dim.dim_param = ''
+                dim.dim_value = 1
+            elif type(dim.dim_value) != type(0):
+                logging.info(f"Replacing dimension {dim.dim_value} with 1.")
+                dim.dim_value = 1
+    for value in g.output:
+        for dim in value.type.tensor_type.shape.dim:
+            if dim.dim_param:
+                logging.info(f"Replacing dimension {dim.dim_param} with 1.")
+                dim.dim_param = ''
+                dim.dim_value = 1
+            elif type(dim.dim_value) != type(0):
+                logging.info(f"Replacing dimension {dim.dim_value} with 1.")
+                dim.dim_value = 1
+
+# Reshape going down
+def swap_Reshape_and_LeakyRelu(g):
+    for leaky_node in g.node:
+        # Find leaky relu reshape pattern
+        if leaky_node.op_type != "LeakyRelu":
+            continue
+        reshape_node = helper.find_node_by_output_name(g, leaky_node.input[0])
+        if reshape_node is None:
+            continue
+        if reshape_node.op_type != 'Reshape':
+            continue
+        if len(helper.find_following_nodes_by_input_value_name(g, leaky_node.input[0])) > 1:
+            continue
+        #Swap their position
+        for following_node in helper.find_following_nodes_by_input_value_name(g, leaky_node.output[0]):
+            modhelper.replace_node_input(following_node, leaky_node.output[0], reshape_node.output[0])
+        old_input_of_reshape = reshape_node.input[0]
+        reshape_node.input[0] = leaky_node.output[0]
+        leaky_node.input[0] = old_input_of_reshape
+
+# Reorder Conv-Reshape-Add and fuse Conv Add
+def reorder_Conv_Reshape_Add(g):
+    for add_node in g.node:
+        # Find an Add
+        if add_node.op_type != 'Add':
+            continue
+        # Check for Reshape
+        reshape_node = helper.find_node_by_output_name(g, add_node.input[0])
+        if reshape_node is None:
+            continue
+        if reshape_node.op_type != 'Reshape':
+            continue
+        if len(helper.find_following_nodes_by_input_value_name(g, add_node.input[0])) > 1:
+            continue
+        # Check for Conv
+        conv_node = helper.find_node_by_output_name(g, reshape_node.input[0])
+        if conv_node is None:
+            continue
+        if conv_node.op_type != 'Conv':
+            continue
+        if len(helper.find_following_nodes_by_input_value_name(g, reshape_node.input[0])) > 1:
+            continue
+        if len(conv_node.input) != 2:
+            continue
+        # Generate bias
+        add_weight_node = helper.find_node_by_output_name(g, add_node.input[1])
+        if add_weight_node is None:
+            continue
+        if add_weight_node.op_type != 'Constant':
+            continue
+        _, add_weight_list = helper.constant_to_list(add_weight_node)
+        new_weight_node = helper.list_to_constant(conv_node.name + '_bias', (len(add_weight_list), ), add_weight_list)
+        # Add bias to Conv
+        conv_node.input.append(new_weight_node.output[0])
+        g.node.append(new_weight_node)
+        # Reconnect Tranpose to Add's children
+        for child_node in helper.find_following_nodes_by_input_value_name(g, add_node.output[0]):
+            modhelper.replace_node_input(child_node, add_node.output[0], reshape_node.output[0])
+        # Remove Add
+        g.node.remove(add_node)

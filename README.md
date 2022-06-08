@@ -4,9 +4,19 @@
 
 This project include converters and optimizers in Python3 that are used to generate and optimize ONNX models for Kneron Toolchain.
 
-The current using onnx version is 1.6.0 which is under operator set version 11.
+The current using onnx version is 1.7.0.
 
 Note that the generated onnx is **especially optimized for Kneron Toolchain**, which may not be the best solution for general purpose ONNX usage, though in most cases, math optimal solutions are good for the toolchain. For example, the ONNX to ONNX optimizer has an option on add a do-nothing BatchNormalization node on the skip branch. This seems not optimal from the math perspective. However, for the Kneron Toolchain, adding such a layer can improve its quantization process.
+
+## Dependencies
+
+* onnx == 1.7.0
+* onnxruntime >= 1.10.0 (if using onnx)
+* numpy >= 1.18.5
+* keras == 2.2.4 (if using keras-onnx)
+* tensorflow == 1.15.3 (if using tflite-onnx)
+* tf2onnx == 1.8.4 (if using tflite-onnx)
+* caffe == 1.0.0 (if using caffe-onnx. Recommend installing through `conda install -c intel caffe=1.0.0`)
 
 ## Keras to ONNX
 
