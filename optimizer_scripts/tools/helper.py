@@ -13,8 +13,8 @@ logger = logging.getLogger("optimizer_scripts")
 def setup_current_opset_version(m):
     global __ONNX_VERSION__
     __ONNX_VERSION__ = m.opset_import[0].version
-    if __ONNX_VERSION__ not in [11]:
-        raise RuntimeError('Only support opset 11, but got ' + str(__ONNX_VERSION__))
+    if __ONNX_VERSION__ not in [11, 12]:
+        raise RuntimeError('Only support opset 11 and 12, but got ' + str(__ONNX_VERSION__))
 
 def get_current_opset_version():
     if __ONNX_VERSION__ == -1:
@@ -311,7 +311,7 @@ def get_list_attribute_by_name(node, attr_name: str, attr_type: str):
         else:
             return list(attr_proto.ints)
     elif attr_type == "float":
-        if len(attr_proto.ints) == 0:
+        if len(attr_proto.floats) == 0:
             return None
         else:
             return list(attr_proto.floats)

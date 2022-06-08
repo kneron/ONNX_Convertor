@@ -908,99 +908,6 @@ def deconv_to_conv_info_extraction(input_size, node_proto):
         attr["conv_pads"] = [pad1_h + head_h, pad1_w + head_w, pad1_h + tail_h, pad1_w + tail_w]
     return attr
 
-def split_ConvTranspose(model):
-    """To feed our compiler, split ConvTranspose into Upsample and Conv.
-
-    :param model: the model
-    """
-    node_to_delete = []
-    # Change model properties for upsample.
-    if model.ir_version < 3:
-        print("Warning: Current model IR version is not fully supported.")
-    model.ir_version = 4
-    model.opset_import[0].version = 9
-    g = model.graph
-    # Get a Convtranspose layer
-    for node in g.node:
-        # Find a Flatten node
-        if node.op_type != 'ConvTranspose':
-            continue
-        # Check auto_pad
-        auto_pad_proto = helper.get_attribute_by_name(node, "auto_pad")
-        if auto_pad_proto is not None:
-            print("Currently not split auto_pad ConvTranspose")
-            continue
-        # Check output_shape
-        output_shape_proto = helper.get_attribute_by_name(node, "output_shape")
-        if output_shape_proto is not None:
-            print("Currently not split output_shape ConvTranspose")
-            continue
-        # Get input shape
-        input_value = helper.find_value_by_name(g, node.input[0])
-        if input_value is None:
-            input_value = helper.find_input_by_name(g, node.input[0])
-        if input_value is None:
-            print("Cannot get value info named {}.".format(node.input[0]))
-            exit(1)
-        input_shape = helper.get_shape_from_value_info(input_value)
-        # Get attrbutes
-        attr = deconv_to_conv_info_extraction(input_shape, node)
-        # Generate Upsample scales
-        upsample_output_shape = list(input_shape)
-        upsample_output_shape[2] = (input_shape[2] - 1) * attr["strides"][0] + 1
-        upsample_output_shape[3] = (input_shape[3] - 1) * attr["strides"][1] + 1
-        upsample_node_name = node.name + "_inner_upsample"
-        upsample_scale_name = upsample_node_name + "_scales"
-        scales_np = np.ones([4]).astype('float32')
-        scales_np[2] = float(upsample_output_shape[2]) / input_shape[2]
-        scales_np[3] = float(upsample_output_shape[3]) / input_shape[3]
-        scales_node = helper.numpy_to_constant(upsample_scale_name, scales_np)
-        # Generate a Upsample layer and an internal value info
-        upsample_node = onnx.helper.make_node(
-            "Upsample",
-            [node.input[0], upsample_scale_name],
-            [upsample_node_name],
-            name=upsample_node_name,
-            mode="zeros"
-        )
-        upsample_value_info = onnx.helper.make_tensor_value_info(
-            upsample_node_name,
-            input_value.type.tensor_type.elem_type,
-            upsample_output_shape
-        )
-        # Check the weight layer, it may need a transpose
-        if attr["group"] != input_shape[1]:
-            weight_node = helper.find_node_by_output_name(g, node.input[1])
-            weight_np = helper.constant_to_numpy(weight_node)
-            new_weight_np = np.transpose(weight_np, [1, 0, 2, 3])
-            new_weight_node = helper.numpy_to_constant(node.input[1], new_weight_np)
-            node_to_delete.append(weight_node)
-            g.node.extend([new_weight_node])
-            value = helper.find_value_by_name(g, node.input[1])
-            g.value_info.remove(value)
-        # Generate a Conv layer
-        conv_node_name = node.name + "_inner_conv"
-        conv_node_input = [upsample_node_name]
-        conv_node_input.extend(node.input[1:])
-        conv_node = onnx.helper.make_node(
-            "Conv",
-            conv_node_input,
-            [node.output[0]],
-            name=conv_node_name,
-            pads=[int(i) for i in attr["conv_pads"]],
-            dilations=[int(i) for i in attr["dilations"]],
-            group=int(attr["group"]),
-            kernel_shape=[int(i) for i in attr["kernel_shape"]],
-            strides=[int(1), int(1)]
-        )
-        # Reconnect the graph
-        g.node.extend([scales_node, upsample_node, conv_node])
-        g.value_info.extend([upsample_value_info])
-        node_to_delete.append(node)
-    # Delete useless nodes
-    for node in node_to_delete:
-        g.node.remove(node)
-    topological_sort(g)
 
 def add_bn_on_skip_branch(g):
     for n in g.node:
@@ -1200,4 +1107,62 @@ def inference_shapes_until_complete_all(m):
         if current_generated_size == last_size:
             helper.logger.warn("Cannot inference all shapes. If no other error raised, please ignore this message.")
             break
+    m = onnx.utils.polish_model(m)
     return m
+
+def convert_opset12_constants(g):
+    # Convert all non traditional constant nodes into value_info.
+    # They would be converted back to constant node later by replace_initializer_with_constant
+    node_to_del = []
+    for node in g.node:
+        if node.op_type != 'Constant':
+            continue
+        if node.attribute[0].name == 'value':
+            continue
+
+        # For non-classic constant
+        if node.attribute[0].name == 'sparse_value' or \
+            node.attribute[0].name == 'value_string' or \
+            node.attribute[0].name == 'value_strings':
+            helper.logger.error(f"Constant node {node.name} with {node.attribute[0].name} currently is not supported.")
+            exit(1)
+        elif node.attribute[0].name == "value_float":
+            tensor = onnx.helper.make_tensor(
+                node.output[0],
+                onnx.helper.TensorProto.FLOAT,
+                None,
+                [node.atrribute[0].f]
+            )
+            g.initializer.extend(tensor)
+        elif node.attribute[0].name == "value_int":
+            tensor = onnx.helper.make_tensor(
+                node.output[0],
+                onnx.helper.TensorProto.INT64,
+                None,
+                [node.atrribute[0].i]
+            )
+            g.initializer.extend(tensor)
+        elif node.attribute[0].name == "value_floats":
+            tensor = onnx.helper.make_tensor(
+                node.output[0],
+                onnx.helper.TensorProto.FLOAT,
+                [len(node.attribute[0].floats)],
+                list(node.attribute[0].floats)
+            )
+            g.initializer.extend(tensor)
+        elif node.attribute[0].name == "value_ints":
+            tensor = onnx.helper.make_tensor(
+                node.output[0],
+                onnx.helper.TensorProto.FLOAT,
+                [len(node.attribute[0].ints)],
+                list(node.attribute[0].ints)
+            )
+            g.initializer.extend(tensor)
+        else:
+            helper.logger.error(f"Constant node {node.name} has unknown attribute {node.attribute[0].name}.")
+            exit(1)
+
+        node_to_del.append(node)
+    # Delete nodes
+    for node in node_to_del:
+        g.node.remove(node)
