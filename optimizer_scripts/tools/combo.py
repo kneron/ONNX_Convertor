@@ -6,6 +6,7 @@ import onnx.utils
 from onnx import optimizer
 
 from . import helper
+from . import defusing
 from . import other
 from . import replacing
 from . import eliminating
@@ -60,6 +61,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     other.add_name_to_node(model_proto.graph)
     other.rename_all_node_name(model_proto.graph)
     other.convert_opset12_constants(model_proto.graph)
+    defusing.defuse_Einsum(model_proto.graph)
     replacing.replace_initializer_with_Constant(model_proto.graph)
     other.topological_sort(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
