@@ -6,6 +6,7 @@ import onnx.utils
 from onnx import optimizer
 
 from . import helper
+from . import defusing
 from . import other
 from . import replacing
 from . import eliminating
@@ -60,6 +61,8 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     other.add_name_to_node(model_proto.graph)
     other.rename_all_node_name(model_proto.graph)
     other.convert_opset12_constants(model_proto.graph)
+    defusing.defuse_Einsum(model_proto.graph)
+    defusing.defuse_ReduceSum(model_proto.graph)
     replacing.replace_initializer_with_Constant(model_proto.graph)
     other.topological_sort(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
@@ -134,7 +137,6 @@ def common_optimization(m):
 
     replacing.replace_Squeeze_with_Reshape(g)
     replacing.replace_Unsqueeze_with_Reshape(g)
-    replacing.replace_Reshape_with_Flatten(g)
     replacing.replace_ReduceMean_with_GlobalAveragePool(g)
     replacing.replace_Sum_with_Adds(g)
     replacing.replace_constant_input_concat_with_pad(g)
@@ -211,12 +213,6 @@ def tensorflow_optimization(m):
     m = tf_pattern_match(m)
     m = optimizer.optimize(m, ['eliminate_deadend'])
 
-    eliminating.eliminate_consecutive_reshape(m.graph)
-    eliminating.eliminate_nop_reshape(m.graph)
-    eliminating.eliminate_nop_flatten(m.graph)
-    eliminating.eliminate_Squeeze_before_Reshape(m.graph)
-    replacing.replace_Reshape_with_Flatten(m.graph)
-    other.topological_sort(m.graph)
     while len(m.graph.value_info) != 0:
         m.graph.value_info.pop()
     m = other.inference_shapes(m)
@@ -247,6 +243,13 @@ def postprocess(m):
     m = onnx.utils.polish_model(m)
     removing_transpose.remove_trivial_transpose(m.graph)
     removing_transpose.fuse_Transpose_into_Gemm_weight(m.graph)
+
+    # removing reshapes
+    eliminating.eliminate_consecutive_reshape_like_nodes(m.graph)
+    eliminating.eliminate_nop_reshape(m.graph)
+    eliminating.eliminate_nop_flatten(m.graph)
+    replacing.replace_Reshape_with_Flatten(m.graph)
+    other.topological_sort(m.graph)
 
     # fuse some nodes
     fusing.fuse_mul_and_add_into_bn(m.graph)
