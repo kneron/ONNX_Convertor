@@ -5,14 +5,14 @@ from .other import topological_sort
 from .modhelper import delete_value_with_name_if_exists, replace_node_input
 
 def defuse_Einsum(g):
-    # Check for Einsum
     """
-    Replace Reshape node into Flatten node if applicable.
+    Defuse Einsum node into Mul and ReduceSum.
 
     :param g: the onnx graph
     """
     node_to_remove = []
     for node in g.node:
+        # Check for Einsum
         if node.op_type != 'Einsum':
             continue
         if len(node.input) > 3:
@@ -146,3 +146,30 @@ def defuse_Einsum_2_inputs(input_a_str, input_b_str, output_str, input_a_name, i
     return new_nodes
 
 
+def defuse_ReduceSum(g):
+    """
+    Defuse ReduceSum node into ReduceSum and Squeeze.
+
+    :param g: the onnx graph
+    """
+    for node in g.node:
+        # Check for ReduceSum
+        if node.op_type != 'ReduceSum':
+            continue
+        keepdims = helper.get_var_attribute_by_name(node, 'keepdims', "int")
+        if keepdims is None or keepdims == 1:
+            continue
+        # Create new nodes
+        internal_output_name = node.name + '_unsqueezed_internal'
+        attribute = helper.get_attribute_by_name(node, 'keepdims')
+        attribute.i = 1
+        origin_output = node.output.pop()
+        node.output.append(internal_output_name)
+        squeeze_node = onnx.helper.make_node(
+                op_type = 'Squeeze',
+                inputs = [internal_output_name],
+                outputs = [origin_output],
+                name = node.name + '_squeezed_internal',
+                axes = helper.get_list_attribute_by_name(node, 'axes', 'int')
+        )
+        g.node.append(squeeze_node)

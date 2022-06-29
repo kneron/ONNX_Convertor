@@ -311,30 +311,6 @@ def eliminate_consecutive_Cast(g):
     for node in node_to_remove:
         g.node.remove(node)
 
-def eliminate_Squeeze_before_Reshape(g):
-    """If Squeeze and Reshape is next to each other, remove the first node
-
-    :param g: the onnx graph
-    """
-    node_to_remove = []
-    for node in g.node:
-        if node.op_type != 'Reshape':
-            continue
-        first_node = helper.find_node_by_output_name(g, node.input[0])
-        if not first_node:
-            continue
-        if first_node.op_type != 'Squeeze':
-            continue
-        # Here we have two consecutive Cast Node
-        # Reset the input of the later node
-        node.input[0] = first_node.input[0]
-        # Remove the first node and its output value info
-        node_to_remove.append(first_node)
-        first_output = helper.find_value_by_name(g, first_node.output[0])
-        g.value_info.remove(first_output)
-    for node in node_to_remove:
-        g.node.remove(node)
-
 def eliminate_no_children_input(g):
     """Eliminate inputs with no children at all.
     """
@@ -349,46 +325,36 @@ def eliminate_no_children_input(g):
         info = helper.find_input_by_name(g, i)
         g.input.remove(info)
 
-def eliminate_consecutive_reshape(g):
+def eliminate_consecutive_reshape_like_nodes(g):
     """Replace consecutive reshape nodes by a single node.
     """
     RESHAPE_TYPE = set(["Reshape", "Flatten", "Dropout", "Squeeze", "Unsqueeze"])
 
+    node_to_del = []
     for node in g.node:
-        # Check if this is a reshape
+        # Find consecutive dimension changing nodes
         if node.op_type not in RESHAPE_TYPE:
             continue
-        pre_data_node = helper.find_node_by_output_name(g, node.input[0])
-        if not pre_data_node:
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
+        if len(following_nodes) != 1:
             continue
-        # Check if the shape is a constant
-        if len(node.input) > 1:
-            pre_shape_node = helper.find_node_by_output_name(g, node.input[1])
-            if not pre_shape_node:
-                continue
-            if pre_shape_node.op_type != 'Constant':
-                continue
-        # Check if the previous node is reshape
-        if pre_data_node.op_type not in RESHAPE_TYPE:
+        following_node = following_nodes[0]
+        if following_node.op_type not in RESHAPE_TYPE:
             continue
-        # Check if the weight of the previous node is a constant
-        if len(pre_shape_node.input) > 1:
-            pre_pre_shape_node = helper.find_node_by_output_name(g, pre_data_node.input[1])
-            if pre_pre_shape_node.op_type != 'Constant':
-                continue
-        # Check if the previous node has only one output connected
-        post_pre_nodes = helper.find_nodes_by_input_name(g, node.input[0])
-        if len(post_pre_nodes) != 1:
-            continue
+        # Replace second node input
+        modhelper.replace_node_input(following_node, node.output[0], node.input[0])
+        # Clean up
+        node_to_del.extend([node])
+        mid_val_info = helper.find_value_by_name(g, node.output[0])
+        if mid_val_info:
+            g.value_info.remove(mid_val_info)
 
-        #Reconnect the graph
-        modhelper.replace_node_input(node, node.input[0], pre_data_node.input[0])
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
 
-        g.node.remove(pre_data_node)
+    other.topological_sort(g)
 
-        val_info_to_del1 = helper.find_value_by_name(g, node.input[0])
-        if val_info_to_del1 is not None:
-            g.value_info.remove(val_info_to_del1)
 
 def eliminate_single_input_Concat(g):
     """
