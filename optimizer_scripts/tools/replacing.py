@@ -915,7 +915,7 @@ def replace_sub_to_bn(g):
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        # If reversed provide special scaler
+        # If reversed provide special scalar
         if reverse:
             scale = [-1.0] * c_dim
         else:
@@ -1169,7 +1169,7 @@ def replace_constant_input_concat_with_pad(g):
             (len(pads), ),
             pads
         )
-        constant_value_node = helper.scaler_to_constant(
+        constant_value_node = helper.scalar_to_constant(
             node.name + '_constant_value',
             value
         )

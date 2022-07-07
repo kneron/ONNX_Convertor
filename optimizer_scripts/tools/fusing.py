@@ -1106,7 +1106,7 @@ def fuse_relu_min_into_clip(g):
             continue
 
         # Create Clip node
-        relu_min_const_node = helper.list_to_constant(relu_node.name+'_min_value', [], [0.0])
+        relu_min_const_node = helper.scalar_to_constant(relu_node.name+'_min_value', 0.0)
         clip_node = onnx.helper.make_node(
             "Clip",
             [relu_node.input[0], relu_min_const_node.output[0], min_const.output[0]],

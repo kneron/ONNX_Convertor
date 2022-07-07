@@ -121,20 +121,12 @@ def list_to_constant(name, shape, data, data_type=None):
             data_type = onnx.helper.TensorProto.INT64
         else:
             data_type = onnx.helper.TensorProto.FLOAT
-    if len(shape) == 1 and shape[0] == 1:
-        tensor = onnx.helper.make_tensor(
-            name,
-            data_type,
-            (),
-            data
-        )
-    else:
-        tensor = onnx.helper.make_tensor(
+    tensor = onnx.helper.make_tensor(
             name,
             data_type,
             shape,
             data
-        )
+    )
     new_w_node = onnx.helper.make_node(
         "Constant",
         [],
@@ -145,7 +137,7 @@ def list_to_constant(name, shape, data, data_type=None):
     return new_w_node
 
 
-def scaler_to_constant(name, data, data_type=None):
+def scalar_to_constant(name, data, data_type=None):
     """Generate a constant node using the given infomation.
 
     :name: the node name and the output value name\\
@@ -159,7 +151,7 @@ def scaler_to_constant(name, data, data_type=None):
         elif isinstance(data, float):
             data_type = onnx.helper.TensorProto.FLOAT
         else:
-            logger.error("Cannot create scaler constant with a list.")
+            logger.error("Cannot create scalar constant with a list.")
             exit(1)
     tensor = onnx.helper.make_tensor(
         name,
