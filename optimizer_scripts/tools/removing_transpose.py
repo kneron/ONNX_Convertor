@@ -81,7 +81,7 @@ def swap_transpose_with_single_next_node(g):
         # if the input is a constant node
         old_tensor = input_node.attribute[0].t
         old_shape, data = helper.constant_to_list(input_node)
-        # If the constant node is a scaler, no action is needed
+        # If the constant node is a scalar, no action is needed
         if type(old_shape) == int:
             old_shape = [old_shape]
         permutation = list(trans_node.attribute[0].ints)

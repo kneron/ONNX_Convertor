@@ -25,9 +25,9 @@ def replace_all_attribute_to_const_node_in_pad_node(g):
             if att.name == 'mode':
                 pad_mode = helper.get_var_attribute_by_name(node, 'mode', 'string')
             if att.name == 'pads':
-                pad_loc_node = helper.list_to_constant(node.name+'_pad_loc',  [len(att.ints)], att.ints)  
+                pad_loc_node = helper.list_to_constant(node.name+'_pad_loc',  [len(att.ints)], att.ints)
             if att.name == 'value':
-                pad_value_node = helper.list_to_constant(node.name+'_pad_value',  [], [att.f])     
+                pad_value_node = helper.scalar_to_constant(node.name+'_pad_value', att.f)
 
         new_node = onnx.helper.make_node(
             "Pad",
@@ -40,7 +40,7 @@ def replace_all_attribute_to_const_node_in_pad_node(g):
         node_to_extend.append(new_node)
         node_to_extend.append(pad_loc_node)
         node_to_extend.append(pad_value_node)
-    
+
     for node in  node_to_remove:
         g.node.remove(node)
     for node in  node_to_extend:
@@ -57,7 +57,7 @@ def upsampling_to_resize(g):
         if scale_value_node.op_type != "Constant":
             raise TypeError('seems there is a dynamic "scales" param in Upsampling node: ' + node.name + ' , you might need to do constant folding first')
 
-        roi_node = helper.list_to_constant(node.name+'_roi_value',  [0], [])  
+        roi_node = helper.list_to_constant(node.name+'_roi_value',  [0], [])
 
         new_node = onnx.helper.make_node(
             "Resize",
@@ -84,36 +84,36 @@ def replace_all_attribute_to_const_node_in_slice_node(g):
         steps_const_node = None
         for att in node.attribute:
             if att.name == 'axes':
-                axes_const_node = helper.list_to_constant(node.name+'_axes_value',  [len(att.ints)], att.ints)     
-    
+                axes_const_node = helper.list_to_constant(node.name+'_axes_value',  [len(att.ints)], att.ints)
+
             if att.name == 'ends':
-                ends_const_node = helper.list_to_constant(node.name+'_ends_value', [len(att.ints)], att.ints)  
+                ends_const_node = helper.list_to_constant(node.name+'_ends_value', [len(att.ints)], att.ints)
 
             if att.name == 'starts':
-                starts_const_node = helper.list_to_constant(node.name+'_starts_value', [len(att.ints)], att.ints)  
+                starts_const_node = helper.list_to_constant(node.name+'_starts_value', [len(att.ints)], att.ints)
 
             if att.name == 'steps':
                 steps_const_node = helper.list_to_constant(node.name+'_steps_value',[ len(att.ints)], att.ints)
 
-        ## pop out from back 
+        ## pop out from back
         attr_len = len(node.attribute)
         for i in range(attr_len):
-            node.attribute.remove(node.attribute[ attr_len -1 - i ]) 
+            node.attribute.remove(node.attribute[ attr_len -1 - i ])
 
         ## according the spec, we need to add node in specific order
-        if starts_const_node != None: 
+        if starts_const_node != None:
             g.node.extend([starts_const_node])
             node.input.extend([starts_const_node.name])
-        if ends_const_node != None: 
+        if ends_const_node != None:
             g.node.extend([ends_const_node])
-            node.input.extend([ends_const_node.name])        
-        if axes_const_node != None: 
+            node.input.extend([ends_const_node.name])
+        if axes_const_node != None:
             g.node.extend([axes_const_node])
             node.input.extend([axes_const_node.name])
-        if steps_const_node != None: 
+        if steps_const_node != None:
             g.node.extend([steps_const_node])
             node.input.extend([steps_const_node.name])
-        
+
 
 def replace_min_max_attribute_to_const_node_in_clip_node(g):
     for node in g.node:
@@ -124,15 +124,15 @@ def replace_min_max_attribute_to_const_node_in_clip_node(g):
         min_const_node = None
         for att in node.attribute:
             if att.name == 'max':
-                max_const_node = helper.list_to_constant(node.name+'_max_value',  [], [att.f])     
-    
-            if att.name == 'min':
-                min_const_node = helper.list_to_constant(node.name+'_min_value', [], [att.f])  
+                max_const_node = helper.scalar_to_constant(node.name+'_max_value',  att.f)
 
-        ## pop out from back 
-        node.attribute.remove(node.attribute[1]) 
-        node.attribute.remove(node.attribute[0])     
-        
+            if att.name == 'min':
+                min_const_node = helper.scalar_to_constant(node.name+'_min_value', att.f)
+
+        ## pop out from back
+        node.attribute.remove(node.attribute[1])
+        node.attribute.remove(node.attribute[0])
+
         ## according the spec, we need to add node in specific order
         g.node.extend([min_const_node])
         g.node.extend([max_const_node])
