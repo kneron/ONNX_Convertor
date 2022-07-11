@@ -438,3 +438,95 @@ def special_MatMul_process(g):
             helper.logger.warning(f"Cannot optimize MatMul {node.name}: unknown reason. Might be shape mismatch.")
             continue
     other.topological_sort(g)
+
+def special_Gemm_process(g):
+    """Help 720 support Gemm which batch size is not 1.
+
+    Args:
+        g (onnx.GraphProto): the input graph
+    """
+    node_to_del = []
+    for node in g.node:
+        # Check op_type
+        if node.op_type != 'Gemm':
+            continue
+        b_node = helper.find_node_by_output_name(g, node.input[1])
+        if b_node.op_type != 'Constant':
+            continue
+        constant_inputs = [node.input[1]]
+        if len(node.input) > 2:
+            c_node = helper.find_node_by_output_name(g, node.input[2])
+            if c_node.op_type != 'Constant':
+                continue
+            constant_inputs.append(node.input[2])
+        # Check shape
+        input_a_name = node.input[0]
+        input_a_value = helper.find_value_by_name(g, input_a_name)
+        if input_a_value is None:
+            input_a_value = helper.find_input_by_name(g, input_a_name)
+        if input_a_value is None:
+            continue
+        input_a_shape = helper.get_shape_from_value_info(input_a_value)
+        if input_a_shape is None or len(input_a_shape) != 2 or input_a_shape[0] == 1:
+            continue
+        # Check attribute
+        transA = helper.get_var_attribute_by_name(node, 'transA', 'int')
+        if transA == 1:
+            continue
+        else:
+            transA = 0
+        transB = helper.get_var_attribute_by_name(node, 'transB', 'int')
+        if transB is None:
+            transB = 0
+        alpha = helper.get_var_attribute_by_name(node, 'alpha', 'float')
+        if alpha is None:
+            alpha = 1.0
+        beta = helper.get_var_attribute_by_name(node, 'beta', 'float')
+        if beta is None:
+            beta = 1.0
+        # Create Slice
+        new_nodes = []
+        concat_inputs = []
+        batch_count = input_a_shape[0]
+        for i in range(batch_count):
+            # Create Split nodes for input A
+            starts_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_starts", (1, ), [i])
+            ends_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_ends", (1, ), [i+1])
+            axes_node = helper.list_to_constant(f"{input_a_value.name}_sliced_{i}_axes", (1, ), [0])
+            new_sliced_a_node = onnx.helper.make_node(
+                'Slice',
+                inputs = [input_a_value.name, starts_node.output[0], ends_node.output[0], axes_node.output[0]],
+                outputs = [f"{input_a_value.name}_sliced_{i}"],
+                name = f"{input_a_value.name}_sliced_{i}"
+            )
+            new_nodes.extend([starts_node, ends_node, axes_node, new_sliced_a_node])
+            # Create Gemm
+            node_input = [f"{input_a_value.name}_sliced_{i}"]
+            node_input.extend(constant_inputs)
+            new_gemm_node = onnx.helper.make_node(
+                'Gemm',
+                inputs = node_input,
+                outputs = [f"{input_a_value.name}_sliced_{i}_gemm"],
+                name = f"{input_a_value.name}_sliced_{i}_gemm",
+                transA = transA,
+                transB = transB,
+                alpha = alpha,
+                beta = beta
+            )
+            new_nodes.append(new_gemm_node)
+            concat_inputs.append(f"{input_a_value.name}_sliced_{i}_gemm")
+        # Create Concat
+        new_concat_node = onnx.helper.make_node(
+            'Concat',
+            inputs = concat_inputs,
+            outputs = node.output,
+            name = f"{node.name}_final_concat",
+            axis = 0
+        )
+        new_nodes.append(new_concat_node)
+        g.node.extend(new_nodes)
+        node_to_del.append(node)
+    # Remove
+    for node in node_to_del:
+        g.node.remove(node)
+    other.topological_sort(g)

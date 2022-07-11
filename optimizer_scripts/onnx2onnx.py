@@ -72,6 +72,7 @@ def onnx2onnx_flow(m: onnx.ModelProto,
     # Put matmul after postprocess to avoid transpose moving downwards
     if opt_matmul:
         special.special_MatMul_process(m.graph)
+        special.special_Gemm_process(m.graph)
         m = onnx.utils.polish_model(m)
 
     return m
@@ -96,7 +97,7 @@ if __name__ == "__main__":
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
     parser.add_argument('--opt-matmul', dest='opt_matmul', action='store_true', default=False,
                         help="set if you want to optimize the MatMul operations for the kneron hardware.")
-    parser.add_argument('--no-duplicate-shared-weights', dest='no_duplicate_shared_weights', action='store_true', default=False,
+    parser.add_argument('-s', '--no-duplicate-shared-weights', dest='no_duplicate_shared_weights', action='store_true', default=False,
                         help='do not duplicate shared weights. Defaults to False.')
     args = parser.parse_args()
 
