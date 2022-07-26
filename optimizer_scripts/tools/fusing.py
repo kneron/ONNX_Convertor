@@ -1,3 +1,4 @@
+import copy
 import onnx.helper
 import numpy as np
 from . import helper
@@ -1124,4 +1125,157 @@ def fuse_relu_min_into_clip(g):
     while node_to_del:
         g.node.remove(node_to_del.pop())
 
+    topological_sort(g)
+
+
+def fuse_Mul_ReduceSum_into_MatMul(g):
+    node_to_del = []
+    for node in g.node:
+        # Check ReduceSum node
+        if node.op_type != 'ReduceSum':
+            continue
+        reduce_sum_node = node
+        mul_node = helper.find_node_by_output_name(g, reduce_sum_node.input[0])
+        if mul_node is None or mul_node.op_type != 'Mul':
+            continue
+        if len(helper.find_following_nodes_by_input_value_name(g, mul_node.output[0])) != 1:
+            continue
+        # Get ReduceSum attributes
+        axes = helper.get_list_attribute_by_name(reduce_sum_node, 'axes', 'int')
+        if axes is None or len(axes) != 1:
+            continue
+        rs_axis = axes[0]
+        keepdims = helper.get_var_attribute_by_name(reduce_sum_node, 'keepdims', 'int')
+        if keepdims is None:
+            keepdims = 1
+        # Check Mul input dimensions
+        input_a_shape = helper.get_shape_from_value_name(g, mul_node.input[0])
+        input_b_shape = helper.get_shape_from_value_name(g, mul_node.input[1])
+        if input_a_shape is None or input_b_shape is None:
+            continue
+        if len(input_a_shape) < 3 or len(input_a_shape) != len(input_b_shape):
+            continue
+        if input_a_shape[rs_axis] != input_b_shape[rs_axis]:
+            continue
+        different_axes = []
+        for i in range(len(input_a_shape)):
+            if input_a_shape[i] != input_b_shape[i]:
+                if input_a_shape[i] != 1 and input_b_shape[i] != 1:
+                    different_axes.clear()
+                    break
+                else:
+                    different_axes.append(i)
+        if len(different_axes) == 0 or len(different_axes) > 2:
+            continue
+        # Construct pre-transpose perms
+        perm_a = [-1] * len(input_a_shape)
+        perm_b = [-1] * len(input_a_shape)
+        perm_a[-1] = rs_axis
+        perm_b[-2] = rs_axis
+        if len(different_axes) == 1:
+            # Transpose into [a, x] * [x, b] (a = 1 or b = 1)
+            perm_a[-2] = different_axes[0]
+            perm_b[-1] = different_axes[0]
+            j = 0
+            for i in range(len(perm_a)):
+                if perm_a[i] != -1:
+                    continue
+                while j in perm_a:
+                    j += 1
+                perm_a[i] = j
+                perm_b[i] = j
+        else:
+            # Transpose into [1, a, x] * [1, x, b]
+            if input_a_shape[different_axes[0]] != 1:
+                perm_a[-2] = different_axes[0]
+                perm_b[-1] = different_axes[1]
+                perm_a[-3] = different_axes[1]
+                perm_b[-3] = different_axes[0]
+            else:
+                perm_a[-2] = different_axes[1]
+                perm_b[-1] = different_axes[0]
+                perm_a[-3] = different_axes[0]
+                perm_b[-3] = different_axes[1]
+            ja = 0
+            jb = 0
+            for i in range(len(perm_a)):
+                if perm_a[i] != -1:
+                    continue
+                while ja in perm_a:
+                    ja += 1
+                while jb in perm_b:
+                    jb += 1
+                perm_a[i] = ja
+                perm_b[i] = jb
+        # Construct pre Transpose nodes
+        new_nodes = []
+        transpose_a_name = mul_node.input[0] + '_pretranspose'
+        transpose_b_name = mul_node.input[1] + '_pretranspose'
+        transpose_a = onnx.helper.make_node(
+            'Transpose',
+            inputs = [mul_node.input[0]],
+            outputs = [transpose_a_name],
+            name = transpose_a_name,
+            perm = perm_a
+        )
+        transpose_b = onnx.helper.make_node(
+            'Transpose',
+            inputs = [mul_node.input[1]],
+            outputs = [transpose_b_name],
+            name = transpose_b_name,
+            perm = perm_b
+        )
+        new_nodes.append(transpose_a)
+        new_nodes.append(transpose_b)
+        # Construct MatMul
+        matmul_name = reduce_sum_node.name + '_fused'
+        matmul_node = onnx.helper.make_node(
+            'MatMul',
+            inputs = [transpose_a_name, transpose_b_name],
+            outputs = [matmul_name],
+            name = matmul_name
+        )
+        new_nodes.append(matmul_node)
+        # Create post-tranpose perm
+        perm_c_cur = copy.copy(perm_a)
+        if len(different_axes) != 1:
+            perm_c_cur[-2] = perm_a[-2]
+            perm_c_cur[-1] = perm_b[-1]
+            perm_c_cur[-3] = rs_axis
+        perm_c = []
+        for i in range(len(input_a_shape)):
+            perm_c.append(perm_c_cur.index(i))
+        # Construct post-transpose
+        if keepdims == 0:
+            transpose_c_name = reduce_sum_node.output[0] + '_posttranpose'
+        else:
+            transpose_c_name = reduce_sum_node.output[0]
+        transpose_c = onnx.helper.make_node(
+            'Transpose',
+            inputs = [matmul_name],
+            outputs = [transpose_c_name],
+            name = transpose_c_name,
+            perm = perm_c
+        )
+        new_nodes.append(transpose_c)
+        # Construct Squeeze node
+        if keepdims == 0:
+            squeeze_node = onnx.helper.make_node(
+                'Squeeze',
+                inputs = [transpose_c_name],
+                outputs = [reduce_sum_node.output[0]],
+                name = reduce_sum_node.output[0],
+                axes = [rs_axis]
+            )
+            new_nodes.append(squeeze_node)
+        # Clean
+        g.node.extend(new_nodes)
+        mul_value_info = helper.find_value_by_name(g, mul_node.output[0])
+        if mul_value_info is not None:
+            g.value_info.remove(mul_value_info)
+        node_to_del.append(mul_node)
+        node_to_del.append(reduce_sum_node)
+
+    while node_to_del:
+        g.node.remove(node_to_del.pop())
     topological_sort(g)

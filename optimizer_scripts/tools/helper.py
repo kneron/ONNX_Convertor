@@ -310,6 +310,22 @@ def get_shape_from_value_info(value):
     """
     return [d.dim_value for d in value.type.tensor_type.shape.dim]
 
+
+def get_shape_from_value_name(g, name):
+    """Get shape from a value info name
+
+    Args:
+        g (GraphProto): onnx graph
+        name (str): graph name
+    """
+    value = find_value_by_name(g, name)
+    if value is None:
+        value = find_input_by_name(g, name)
+    if value is None:
+        return None
+    return get_shape_from_value_info(value)
+
+
 def find_size_shape_from_value(value):
     '''
     Find the size of data within the value_info object.

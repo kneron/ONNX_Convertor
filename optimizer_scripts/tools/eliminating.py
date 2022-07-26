@@ -489,8 +489,12 @@ def eliminate_trivial_maxpool(g):
 def eliminate_empty_value_infos(g):
     to_remove = []
     constant_outputs = set([node.output[0] for node in g.node if node.op_type == 'Constant'])
+    for initializer in g.initializer:
+        constant_outputs.add(initializer)
     for value_info in g.value_info:
-        if len(value_info.type.tensor_type.shape.dim) == 0 and value_info.name not in constant_outputs:
+        if value_info.name in constant_outputs:
+            continue
+        if len(value_info.type.tensor_type.shape.dim) == 0:
             to_remove.append(value_info)
         for dim in value_info.type.tensor_type.shape.dim:
             if dim.dim_value == 0:

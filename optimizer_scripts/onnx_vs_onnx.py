@@ -54,30 +54,14 @@ def onnx_model_results(path_a, path_b, total_times=10):
 
     # suppose there's only one real single input tensor for each model
     # find the real single inputs for model_a and model_b
-    real_single_input_a = None
-    real_single_input_b = None
     size_a, size_b = 0, 0
     shape_a, shape_b = [], []
-    for item_a in real_inputs_a:
-        size, shape = helper.find_size_shape_from_value(item_a)
-        if size:
-            assert real_single_input_a is None, 'Multiple inputs of first model, single input expected.'
-            real_single_input_a = item_a
-            size_a, shape_a = size, shape
-    for item_b in real_inputs_b:
-        size, shape = helper.find_size_shape_from_value(item_b)
-        if size:
-            assert real_single_input_b is None, 'Multiple inputs of second model, single input expected.'
-            real_single_input_b = item_b
-            size_b, shape_b = size, shape
-    assert size_a == size_b, 'Sizes of two models do not match.'
+    assert len(real_inputs_a) == len(real_inputs_b), "Input numbers mismatch"
+    for i in range(len(real_inputs_a)):
+        size_a, shape_a = helper.find_size_shape_from_value(real_inputs_a[i])
+        size_b, shape_b = helper.find_size_shape_from_value(real_inputs_b[i])
+        assert size_a == size_b, 'Sizes of two models do not match.'
 
-
-    # construct inputs tensors
-    input_data_type_a = real_single_input_a.type.tensor_type.elem_type
-    input_data_type_b = real_single_input_b.type.tensor_type.elem_type
-    input_data_type_a = onnx2np_dtype[input_data_type_a]
-    input_data_type_b = onnx2np_dtype[input_data_type_b]
 
     # run inference
     times = 0
@@ -85,20 +69,20 @@ def onnx_model_results(path_a, path_b, total_times=10):
     results_b = [[] for i in range(len(outputs_b))]
     while times < total_times:
         # initialize inputs by random data, default to be uniform 
-        data = np.random.random(size_a)
-        input_a = np.reshape(data, shape_a).astype(input_data_type_a)
-        input_b = np.reshape(data, shape_b).astype(input_data_type_b)
-
         input_dict_a = {}
         input_dict_b = {}
-        for item_a in real_inputs_a:
-            item_type_a = onnx2np_dtype[item_a.type.tensor_type.elem_type]
-            input_dict_a[item_a.name] = np.array([]).astype(item_type_a) \
-                if item_a.name != real_single_input_a.name else input_a
-        for item_b in real_inputs_b:
-            item_type_b = onnx2np_dtype[item_b.type.tensor_type.elem_type]
-            input_dict_b[item_b.name] = np.array([]).astype(item_type_b) \
-                if item_b.name != real_single_input_b.name else input_b
+        for i in range(len(real_inputs_a)):
+            item_a = real_inputs_a[i]
+            size_a, shape_a = helper.find_size_shape_from_value(item_a)
+            data = np.random.random(size_a)
+            input_data_type_a = onnx2np_dtype[item_a.type.tensor_type.elem_type]
+            input_a = np.reshape(data, shape_a).astype(input_data_type_a)
+            input_dict_a[item_a.name] = input_a
+            item_b = real_inputs_b[i]
+            size_b, shape_b = helper.find_size_shape_from_value(item_b)
+            input_data_type_b = onnx2np_dtype[item_b.type.tensor_type.elem_type]
+            input_b = np.reshape(data, shape_b).astype(input_data_type_b)
+            input_dict_b[item_b.name] = input_b
 
         ra = session_a.run([], input_dict_a)
         rb = session_b.run([], input_dict_b)
