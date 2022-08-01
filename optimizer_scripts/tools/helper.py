@@ -13,8 +13,8 @@ logger = logging.getLogger("optimizer_scripts")
 def setup_current_opset_version(m):
     global __ONNX_VERSION__
     __ONNX_VERSION__ = m.opset_import[0].version
-    if __ONNX_VERSION__ not in [11]:
-        raise RuntimeError('Only support opset 11, but got ' + str(__ONNX_VERSION__))
+    if __ONNX_VERSION__ not in [11, 12]:
+        raise RuntimeError('Only support opset 11 and 12, but got ' + str(__ONNX_VERSION__))
 
 def get_current_opset_version():
     if __ONNX_VERSION__ == -1:
@@ -122,10 +122,10 @@ def list_to_constant(name, shape, data, data_type=None):
         else:
             data_type = onnx.helper.TensorProto.FLOAT
     tensor = onnx.helper.make_tensor(
-        name,
-        data_type,
-        shape,
-        data
+            name,
+            data_type,
+            shape,
+            data
     )
     new_w_node = onnx.helper.make_node(
         "Constant",
@@ -137,7 +137,7 @@ def list_to_constant(name, shape, data, data_type=None):
     return new_w_node
 
 
-def scaler_to_constant(name, data, data_type=None):
+def scalar_to_constant(name, data, data_type=None):
     """Generate a constant node using the given infomation.
 
     :name: the node name and the output value name\\
@@ -151,7 +151,7 @@ def scaler_to_constant(name, data, data_type=None):
         elif isinstance(data, float):
             data_type = onnx.helper.TensorProto.FLOAT
         else:
-            logger.error("Cannot create scaler constant with a list.")
+            logger.error("Cannot create scalar constant with a list.")
             exit(1)
     tensor = onnx.helper.make_tensor(
         name,
@@ -171,6 +171,44 @@ def scaler_to_constant(name, data, data_type=None):
 
 def numpy_to_constant(name, np_array):
     return list_to_constant(name, np_array.shape, np_array.flatten().tolist())
+
+def initializer_to_numpy(tensor):
+    """Generate a list from the constant node
+
+    :node: the Constant node\\
+    :returns: the shape of the constant node, the data of the constant node
+    """
+    # 1. check data type
+    # 2. get data from raw or data
+    # 3. get shape from dim
+    if tensor.data_type == onnx.helper.TensorProto.INT32:
+        if len(tensor.int32_data) != 0:
+            data = list(tensor.int32_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('i', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.INT64:
+        if len(tensor.int64_data) != 0:
+            data = list(tensor.int64_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('q', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.FLOAT:
+        if len(tensor.float_data) != 0:
+            data = list(tensor.float_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('f', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.DOUBLE:
+        if len(tensor.double_data) != 0:
+            data = list(tensor.double_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
+    else:
+        print("Not supported data type {}".format(tensor.data_type))
+        raise RuntimeError
+    if len(tensor.dims) == 0:
+        shape = len(data)
+    else:
+        shape = list(tensor.dims)
+    return np.array(data).reshape(shape)
 
 def constant_to_list(node):
     """Generate a list from the constant node
@@ -225,6 +263,15 @@ def constant_to_numpy(node):
     shape, data = constant_to_list(node)
     return np.array(data).reshape(shape)
 
+def weight_to_numpy(g, wname):
+    init = find_initializer_by_name(g, wname)
+    if init is not None:
+        return initializer_to_numpy(init)
+    cons = find_node_by_output_name(g, wname)
+    if cons is not None and cons.op_type == 'Constant':
+        return constant_to_numpy(cons)
+    return None
+
 def all_constant_input(node):
     """Find the inputs of the given node. If the inputs of this node are all\\
     constant nodes, return True. Otherwise, return False.
@@ -262,6 +309,22 @@ def get_shape_from_value_info(value):
     :return: list of the shape
     """
     return [d.dim_value for d in value.type.tensor_type.shape.dim]
+
+
+def get_shape_from_value_name(g, name):
+    """Get shape from a value info name
+
+    Args:
+        g (GraphProto): onnx graph
+        name (str): graph name
+    """
+    value = find_value_by_name(g, name)
+    if value is None:
+        value = find_input_by_name(g, name)
+    if value is None:
+        return None
+    return get_shape_from_value_info(value)
+
 
 def find_size_shape_from_value(value):
     '''
@@ -311,7 +374,7 @@ def get_list_attribute_by_name(node, attr_name: str, attr_type: str):
         else:
             return list(attr_proto.ints)
     elif attr_type == "float":
-        if len(attr_proto.ints) == 0:
+        if len(attr_proto.floats) == 0:
             return None
         else:
             return list(attr_proto.floats)
@@ -625,4 +688,15 @@ def subtract(data_set_1, data_set_2):
 
     return new_data
 
-    
+def find_initializer_by_name(g, name):
+    """
+    Find an initializer in the graph by name
+
+    :param g: the onnx graph\\
+    :param name: the target value_info name\\
+    :returns: the value_info find by name
+    """
+    for i in g.initializer:
+        if i.name == name:
+            return i
+    return None

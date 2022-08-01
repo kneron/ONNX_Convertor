@@ -21,6 +21,14 @@ def are_all_inputs_Constant_with_one_child(g, node):
     return True
 
 
+def are_all_inputs_Constant(g, node):
+    for input_name in node.input:
+        input_node = helper.find_node_by_output_name(g, input_name)
+        if input_node is None or input_node.op_type != 'Constant':
+            return False
+    return True
+
+
 def constant_folding(g):
     """ Do constant folding until nothing more can be done.
 
@@ -31,9 +39,9 @@ def constant_folding(g):
     folded = False      # Return value
     try:
         # Before constant folding, duplicate the constant nodes.
-        duplicate_constant_node(g)
         while keep_folding:
             keep_folding = False
+            duplicate_constant_node(g)
             for node in g.node:
                 # Check if the node is foldable
                 if node.op_type not in constant_folding_nodes.keys():
@@ -65,12 +73,6 @@ def duplicate_constant_node(g):
         # Find a valid constant node
         if node.op_type != 'Constant':
             continue
-        output_val_info = helper.find_value_by_name(g, node.output[0])
-        if output_val_info is None:
-            print("Cannot inference the shape of Const node output: " +
-                  node.output[0])
-            exit(1)
-        data_shape = helper.get_shape_from_value_info(output_val_info)
         output_nodes = helper.find_nodes_by_input_name(g, node.output[0])
 
         # For constant that has only one following node, no need to duplicate
@@ -78,10 +80,21 @@ def duplicate_constant_node(g):
             continue
 
         # Check if its following nodes are foldable
-        foldable_output_nodes = list(filter(lambda n: n.op_type in
-                                            constant_folding_nodes.keys(), output_nodes))
-        if not foldable_output_nodes:
+        foldable_output_nodes = []
+        for following_node in output_nodes:
+            if following_node.op_type not in constant_folding_nodes.keys():
+                continue
+            if not are_all_inputs_Constant(g, following_node):
+                continue
+            foldable_output_nodes.append(following_node)
+        if len(foldable_output_nodes) == 0:
             continue
+
+        output_val_info = helper.find_value_by_name(g, node.output[0])
+        if output_val_info is None:
+            data_shape = [1]
+        else:
+            data_shape = helper.get_shape_from_value_info(output_val_info)
 
         # Duplicate the node needed by foldable nodes
         for i in range(len(foldable_output_nodes)):
@@ -110,7 +123,8 @@ def duplicate_constant_node(g):
         # If all following nodes are foldable node, delete the original node.
         if len(foldable_output_nodes) == len(output_nodes):
             g.node.remove(node)
-            g.value_info.remove(output_val_info)
+            if output_val_info is not None:
+                g.value_info.remove(output_val_info)
 
     topological_sort(g)
 
@@ -150,7 +164,6 @@ def slice_constant_folding_Opset_11(g, node):
         _, steps = helper.constant_to_list(steps_node)
 
 
-    data_list = list(map(int, data_list))
     starts = list(map(int, starts))
     ends = list(map(int, ends))
     axes = list(map(int, axes))
@@ -336,15 +349,6 @@ def concat_constant_folding(g, node):
     """
     node_to_del = []
     valid_inputs = True
-    for input_name in node.input:
-        input_node = helper.find_node_by_output_name(g, input_name)
-        input_node_output = helper.find_nodes_by_input_name(g, input_name)
-        if len(input_node_output) > 1:
-            valid_inputs = False
-            break
-        if input_node.op_type != 'Constant':
-            valid_inputs = False
-            break
 
     if not valid_inputs:
         return False
@@ -685,6 +689,54 @@ def reciprocal_constant_folding(g, node):
 
     return True
 
+def matmul_constant_folding(g, node):
+    """ Fold constant and matmul nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
+    pre_node_2 = helper.find_node_by_output_name(g, node.input[1])
+
+    pre_value_info1 = helper.find_value_by_name(g, node.input[0])
+    pre_value_info2 = helper.find_value_by_name(g, node.input[1])
+    if pre_value_info1 is None or pre_value_info2 is None:
+        return False
+
+    np_data1 = helper.constant_to_numpy(pre_node_1)
+    np_data2 = helper.constant_to_numpy(pre_node_2)
+
+    try:
+        new_data = np.matmul(np_data1, np_data2)
+    except:
+        raise RuntimeError('can not broadcast and multiply two data sets')
+
+    # Special shape for single element.
+    new_shape = new_data.shape
+
+    new_tensor = onnx.helper.make_tensor(
+        name=node.output[0]+'_data',
+        data_type=pre_node_1.attribute[0].t.data_type,
+        dims=new_shape,
+        vals=new_data.flatten().tolist()
+    )
+    new_node = onnx.helper.make_node(
+        'Constant',
+        [],
+        [node.output[0]],
+        name=node.output[0],
+        value=new_tensor
+    )
+
+    node_to_del.extend([node, pre_node_1, pre_node_2])
+    g.node.extend([new_node])
+
+    g.value_info.remove(pre_value_info1)
+    g.value_info.remove(pre_value_info2)
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
 
 def mul_constant_folding(g, node):
     """ Fold constant and mul nodes to a single constant node.
@@ -1021,6 +1073,7 @@ constant_folding_nodes = {
     'Div': div_constant_folding,
     'Floor': floor_constant_folding,
     'Gather': gather_constant_folding,
+    'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
     'ReduceProd': reduceprod_constant_folding,

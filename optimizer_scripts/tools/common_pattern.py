@@ -43,6 +43,12 @@ def tf_pattern_match(m):
     return m
 
 def pattern_matmul_mul_add(g, matmul_node):
+    """Fuse MatMul Mul Add into Gemm
+
+    Args:
+        g (GraphProto): the graph
+        matmul_node (NodeProto): the node to be optimized
+    """
     # Check node match - Mul node
     next_nodes = helper.find_nodes_by_input_name(g, matmul_node.output[0])
     if len(next_nodes) != 1:
@@ -61,6 +67,7 @@ def pattern_matmul_mul_add(g, matmul_node):
     mul_weight_node = helper.find_node_by_output_name(g, mul_node.input[1])
     if mul_weight_node.op_type != 'Constant':
         return
+    
     weight_size, mul_weight = helper.constant_to_list(mul_weight_node)
     for i in mul_weight:
         if i != 1:
@@ -83,7 +90,9 @@ def pattern_matmul_mul_add(g, matmul_node):
     if value is not None:
         g.value_info.remove(value)
     # Remove Mul node
-    g.node.remove(mul_weight_node)
+    if len(helper.find_following_nodes_by_input_value_name(g, mul_weight_node.output[0])) <= 1:
+        # Only remove the weight when it is not shared.
+        g.node.remove(mul_weight_node)
     value = helper.find_value_by_name(g, mul_weight_node.output[0])
     if value is not None:
         g.value_info.remove(value)

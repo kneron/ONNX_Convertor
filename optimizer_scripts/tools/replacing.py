@@ -78,7 +78,7 @@ def replace_Reshape_with_Flatten(g):
             if len(i.input) == 0 or i.input[0] != node.output[0]:
                 continue
             if i.op_type == 'Gemm':
-                found = True
+                found_Gemm = True
                 break
         # Check weight
         shape_node = helper.find_node_by_output_name(g, node.input[1])
@@ -87,13 +87,23 @@ def replace_Reshape_with_Flatten(g):
         shape_value = helper.constant_to_numpy(shape_node)
         if (shape_value.size != 2 or shape_value[0] != 1) and not found_Gemm:
             continue
+        # The first dimension must be the same
+        input_value = helper.find_value_by_name(g, node.input[0])
+        output_value = helper.find_value_by_name(g, node.output[0])
+        if input_value is None or len(input_value.type.tensor_type.shape.dim) < 2:
+            continue
+        if output_value is None or len(output_value.type.tensor_type.shape.dim) != 2:
+            continue
+        if input_value.type.tensor_type.shape.dim[0].dim_value != output_value.type.tensor_type.shape.dim[0].dim_value:
+            continue
         # Replace it
         node.op_type = "Flatten"
         for _ in range(len(node.attribute)):
             node.attribute.pop()
         shape_value = helper.find_value_by_name(g, shape_node.output[0])
         node.input.pop()
-        node_to_remove.append(shape_node)
+        if len(helper.find_following_nodes_by_input_value_name(g, shape_node.output[0])) <= 1:
+            node_to_remove.append(shape_node)
         # If found shape value_info, remove it
         if shape_value != None:
             g.value_info.remove(shape_value)
@@ -119,6 +129,9 @@ def replace_Squeeze_with_Reshape(g):
         if output_value is None:
             raise RuntimeError("Cannot get shape for Squeeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        if len(shape) == 0:
+            g.value_info.remove(output_value)
+            continue
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.
         new_node = onnx.helper.make_node(
@@ -154,6 +167,9 @@ def replace_Unsqueeze_with_Reshape(g):
         if output_value is None:
             raise RuntimeError("Cannot get shape for Unsqueeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        if len(shape) == 0:
+            g.value_info.remove(output_value)
+            continue
 
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.
@@ -467,7 +483,7 @@ def replace_split_with_slices(g):
         if not input_value:
             input_value = helper.find_input_by_name(g, node.input[0])
         _, shape = helper.find_size_shape_from_value(input_value)
-        if len(shape) == 0:
+        if shape is None or len(shape) == 0:
             continue
 
         output_val_names = list(node.output)
@@ -673,7 +689,8 @@ def replace_mul_to_bn(g):
         g.node.extend([new_mul_value_node])
 
         node_to_del.extend([mul_op_node])
-        node_to_del.extend([mul_value_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, mul_value_node.output[0])) <= 1:
+            node_to_del.extend([mul_value_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -753,7 +770,8 @@ def replace_div_to_bn(g):
         g.node.extend([new_mul_value_node])
 
         node_to_del.extend([div_op_node])
-        node_to_del.extend([div_value_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, div_value_node.output[0])) <= 1:
+            node_to_del.extend([div_value_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -833,7 +851,8 @@ def replace_add_to_bn(g):
         g.node.extend([new_add_value_node])
 
         node_to_del.extend([add_op_node])
-        node_to_del.extend([add_value_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, add_value_node.output[0])) <= 1:
+            node_to_del.extend([add_value_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -896,7 +915,7 @@ def replace_sub_to_bn(g):
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        # If reversed provide special scaler
+        # If reversed provide special scalar
         if reverse:
             scale = [-1.0] * c_dim
         else:
@@ -930,7 +949,8 @@ def replace_sub_to_bn(g):
         g.node.extend([new_add_value_node])
 
         node_to_del.extend([sub_op_node])
-        node_to_del.extend([constant_node])
+        if len(helper.find_following_nodes_by_input_value_name(g, constant_node.output[0])) <= 1:
+            node_to_del.extend([constant_node])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -1149,7 +1169,7 @@ def replace_constant_input_concat_with_pad(g):
             (len(pads), ),
             pads
         )
-        constant_value_node = helper.scaler_to_constant(
+        constant_value_node = helper.scalar_to_constant(
             node.name + '_constant_value',
             value
         )
@@ -1268,6 +1288,57 @@ def replace_Gather_with_Reshape(g):
             g.node.extend([reshape_shape_node, reshape_node, transpose_node])
             node_to_remove.append(node)
             continue
+    # Remove old nodes
+    for node in node_to_remove:
+        g.node.remove(node)
+    # Topological sort
+    topological_sort(g)
+
+def replace_Expand_with_Reshape(g):
+    """
+    Replace Expand nodes with Reshape node.
+
+    :param g: the input graph
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find Gather node
+        if node.op_type != 'Expand':
+            continue
+        # Get the output shape and Construct the shape
+        output_value = helper.find_value_by_name(g, node.output[0])
+        if output_value is None:
+            output_value = helper.find_output_by_name(g, node.output[0])
+        if output_value is None:
+            helper.logger.error(f"Cannot get output shape for Expand: {node.name}")
+            exit(1)
+        output_shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        # Get input shape
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if input_value is None:
+            input_value = helper.find_input_by_name(g, node.input[0])
+        if input_value is None:
+            helper.logger.error(f"Cannot get input shape for Expand: {node.name}")
+            exit(1)
+        input_shape = [dim.dim_value for dim in input_value.type.tensor_type.shape.dim]
+        # Check if this is reshape.
+        output_total_count = 1
+        for i in output_shape:
+            output_total_count *= i
+        input_total_count = 1
+        for i in input_shape:
+            input_total_count *= i
+        if input_total_count != output_total_count:
+            continue
+        # Construct new reshape node.
+        new_node = onnx.helper.make_node(
+            "Reshape",
+            [node.input[0], node.input[1]],
+            node.output,
+            name=node.name
+        )
+        g.node.extend([new_node])
+        node_to_remove.append(node)
     # Remove old nodes
     for node in node_to_remove:
         g.node.remove(node)
