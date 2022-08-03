@@ -490,7 +490,7 @@ def eliminate_empty_value_infos(g):
     to_remove = []
     constant_outputs = set([node.output[0] for node in g.node if node.op_type == 'Constant'])
     for initializer in g.initializer:
-        constant_outputs.add(initializer)
+        constant_outputs.add(initializer.name)
     for value_info in g.value_info:
         if value_info.name in constant_outputs:
             continue

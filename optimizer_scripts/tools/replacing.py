@@ -1294,6 +1294,44 @@ def replace_Gather_with_Reshape(g):
     # Topological sort
     topological_sort(g)
 
+
+def replace_Gather_with_Slice(g):
+    """
+    Replace Gather nodes with slice node.
+    (Special process function for model_se)
+
+    :param g: the input graph
+    """
+    node_to_remove = []
+    axes_node = helper.list_to_constant('gather_nodes_axes', [1], [0])
+    g.node.append(axes_node)
+    for node in g.node:
+        # Find Gather node
+        if node.op_type != 'Gather':
+            continue
+        # Get the shape and Construct the shape
+        constant_input = helper.find_node_by_output_name(g, node.input[1])
+        if constant_input.op_type != 'Constant':
+            exit(1)
+        _, constant_value = helper.constant_to_list(constant_input)
+        constant_value = constant_value[0]
+        starts_node = helper.list_to_constant(node.name + "_starts", [1], [constant_value])
+        ends_node = helper.list_to_constant(node.name + "_ends", [1], [constant_value + 1])
+        new_node = onnx.helper.make_node(
+            "Slice",
+            [node.input[0], starts_node.output[0], ends_node.output[0], axes_node.output[0]],
+            [node.output[0]],
+            name=node.name
+        )
+        g.node.extend([starts_node, ends_node, new_node])
+        node_to_remove.append(node)
+    # Remove old nodes
+    for node in node_to_remove:
+        g.node.remove(node)
+    # Topological sort
+    topological_sort(g)
+
+
 def replace_Expand_with_Reshape(g):
     """
     Replace Expand nodes with Reshape node.

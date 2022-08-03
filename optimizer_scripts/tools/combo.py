@@ -174,6 +174,10 @@ def pytorch_constant_folding(m):
         replacing.replace_shape_with_constant(m.graph)
     other.topological_sort(m.graph)
     m = torch_pattern_match(m)
+    replacing.replace_Gather_with_Slice(m.graph)
+    while len(m.graph.value_info) != 0:
+        m.graph.value_info.pop()
+    m = other.inference_shapes(m)
     m = optimizer.optimize(m, ['eliminate_deadend'])
     return m
 

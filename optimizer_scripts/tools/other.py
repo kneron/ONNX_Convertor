@@ -292,6 +292,14 @@ def topological_sort(g):
             if in_degree[node_name] == 0:
                 to_add.append(node_name)
                 del in_degree[node_name]
+    # Also deal with initializers
+    for value_info in g.initializer:
+        input_name = value_info.name
+        for node_name in output_nodes[input_name]:
+            in_degree[node_name] -= 1
+            if in_degree[node_name] == 0:
+                to_add.append(node_name)
+                del in_degree[node_name]
     # main sort loop
     sorted_nodes = []
     while to_add:
