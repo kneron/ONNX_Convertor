@@ -5,7 +5,9 @@ import logging
 import onnx.utils
 from onnx import optimizer
 
+from . import checker
 from . import helper
+from . import modhelper
 from . import defusing
 from . import other
 from . import replacing
@@ -56,7 +58,8 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
 
     """
     logger.info("Preprocessing the model...")
-    helper.setup_current_opset_version(model_proto)
+    checker.check_operator_type(model_proto.graph)
+    modhelper.setup_current_opset_version(model_proto)
     eliminating.eliminate_empty_value_infos(model_proto.graph)
     other.add_name_to_node(model_proto.graph)
     other.rename_all_node_name(model_proto.graph)
