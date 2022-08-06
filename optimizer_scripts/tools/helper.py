@@ -10,11 +10,6 @@ __ONNX_VERSION__ =  -1
 
 logger = logging.getLogger("optimizer_scripts")
 
-def setup_current_opset_version(m):
-    global __ONNX_VERSION__
-    __ONNX_VERSION__ = m.opset_import[0].version
-    if __ONNX_VERSION__ not in [11, 12]:
-        raise RuntimeError('Only support opset 11 and 12, but got ' + str(__ONNX_VERSION__))
 
 def get_current_opset_version():
     if __ONNX_VERSION__ == -1:
