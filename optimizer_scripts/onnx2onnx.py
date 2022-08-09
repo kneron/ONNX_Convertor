@@ -78,6 +78,7 @@ def onnx2onnx_flow(m: onnx.ModelProto,
     if opt_720:
         special.special_Gemm_process(m.graph)
         special.concat_batch_transpose(m.graph)
+        special.unsqueeze_softmax(m.graph)
         special.unsqueeze_output(m.graph)
         while(len(m.graph.value_info) > 0):
             m.graph.value_info.pop()

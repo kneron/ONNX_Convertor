@@ -322,6 +322,8 @@ def get_shape_from_value_name(g, name):
     if value is None:
         value = find_input_by_name(g, name)
     if value is None:
+        value = find_output_by_name(g, name)
+    if value is None:
         return None
     return get_shape_from_value_info(value)
 

@@ -619,3 +619,44 @@ def unsqueeze_output(g):
         )
         new_outputs.append(new_output)
     g.output.extend(new_outputs[::-1])
+
+
+def unsqueeze_softmax(g):
+    """Help 720 support softmax which batch size is not 1.
+
+    Args:
+        g (onnx.GraphProto): the input graph
+    """
+    new_nodes = []
+    for node in g.node:
+        if node.op_type != 'Softmax':
+            continue
+        # Check attribute
+        output_shape = helper.get_shape_from_value_name(g, node.output[0])
+        if output_shape is None or output_shape[0] == 1:
+            print(output_shape)
+            continue
+        # Create Unsqueeze for all the inputs\
+        unsqueeze_node = onnx.helper.make_node(
+            "Unsqueeze",
+            [node.input[0]],
+            [node.input[0] + '_squeeze'],
+            node.input[0] + '_squeeze',
+            axes = [0]
+        )
+        new_nodes.append(unsqueeze_node)
+        # Replace softmax input
+        modhelper.replace_node_input(node, node.input[0], node.input[0] + '_squeeze')
+        original_output_name = node.output.pop()
+        node.output.append(original_output_name + '_internal_0')
+        # Create post squeeze
+        squeeze_node = onnx.helper.make_node(
+            "Squeeze",
+            [original_output_name + '_internal_0'],
+            [original_output_name],
+            original_output_name + '_internal_1',
+            axes = [0]
+        )
+        new_nodes.append(squeeze_node)
+    g.node.extend(new_nodes)
+    other.topological_sort(g)
