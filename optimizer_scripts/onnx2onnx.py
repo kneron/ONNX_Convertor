@@ -24,7 +24,7 @@ def onnx2onnx_flow(m: onnx.ModelProto,
                     eliminate_tail=False,
                     opt_matmul=False,
                     opt_720=False,
-                    duplicate_shared_weights=True) -> onnx.ModelProto:
+                    duplicate_shared_weights=False) -> onnx.ModelProto:
     """Optimize the onnx.
 
     Args:
@@ -108,8 +108,8 @@ if __name__ == "__main__":
                         help="set if you want to optimize the MatMul operations for the kneron hardware.")
     parser.add_argument('--opt-720', dest='opt_720', action='store_true', default=False,
                         help="set if you want to optimize the model for the kneron hardware kdp720.")
-    parser.add_argument('-s', '--no-duplicate-shared-weights', dest='no_duplicate_shared_weights', action='store_true', default=False,
-                        help='do not duplicate shared weights. Defaults to False.')
+    parser.add_argument('-d', '--duplicate-shared-weights', dest='duplicate_shared_weights', action='store_true', default=False,
+                        help='duplicate shared weights. Defaults to False.')
     args = parser.parse_args()
 
     if args.out_file is None:
@@ -150,6 +150,6 @@ if __name__ == "__main__":
         eliminate_tail=args.eliminate_tail,
         opt_matmul=args.opt_matmul,
         opt_720=args.opt_720,
-        duplicate_shared_weights=not args.no_duplicate_shared_weights)
+        duplicate_shared_weights=args.duplicate_shared_weights)
 
     onnx.save(m, outfile)
