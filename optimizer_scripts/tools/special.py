@@ -530,3 +530,133 @@ def special_Gemm_process(g):
     for node in node_to_del:
         g.node.remove(node)
     other.topological_sort(g)
+
+
+def concat_batch_transpose(g):
+    """Help 720 support concat which batch size is not 1.
+
+    Args:
+        g (onnx.GraphProto): the input graph
+    """
+    new_nodes = []
+    for node in g.node:
+        if node.op_type != 'Concat':
+            continue
+        # Check attribute
+        axis = helper.get_var_attribute_by_name(node, 'axis', 'int')
+        output_shape = helper.get_shape_from_value_name(g, node.output[0])
+        if axis != 0:
+            continue
+        if output_shape is None or output_shape[0] != len(node.input):
+            continue
+        # Create Unsqueeze for all the inputs\
+        new_inputs = []
+        for input_name in node.input:
+            unsqueeze_node = onnx.helper.make_node(
+                "Unsqueeze",
+                [input_name],
+                [input_name + '_unsqueeze'],
+                input_name + '_unsqueeze',
+                axes = [len(output_shape)]
+            )
+            new_nodes.append(unsqueeze_node)
+            new_inputs.append(input_name + '_unsqueeze')
+        # Replace concat input
+        while len(node.input) > 0:
+            node.input.pop()
+        node.input.extend(new_inputs)
+        original_output_name = node.output.pop()
+        node.output.append(original_output_name + '_internal_0')
+        attr = helper.get_attribute_by_name(node, 'axis')
+        attr.i = len(output_shape)
+        # Create post squeeze
+        squeeze_node = onnx.helper.make_node(
+            "Squeeze",
+            [original_output_name + '_internal_0'],
+            [original_output_name + '_internal_1'],
+            original_output_name + '_internal_1',
+            axes = [0]
+        )
+        new_nodes.append(squeeze_node)
+        # Create post transpose
+        transpose_node = onnx.helper.make_node(
+            "Transpose",
+            [original_output_name + '_internal_1'],
+            [original_output_name],
+            original_output_name + '_internal_2',
+            perm = [len(output_shape) - 1] + [i for i in range(len(output_shape) - 1)]
+        )
+        new_nodes.append(transpose_node)
+    g.node.extend(new_nodes)
+    other.topological_sort(g)
+
+
+def unsqueeze_output(g):
+    """Help 720 support model where original model output batch is not 1.
+
+    Args:
+        g (onnx.GraphProto): the input graph
+    """
+    new_outputs = []
+    while len(g.output) > 0:
+        output = g.output.pop()
+        output_shape = helper.get_shape_from_value_info(output)
+        if len(output_shape) == 1 or output_shape[0] == 1:
+            new_outputs.append(output)
+            continue
+        unsqueeze_node = onnx.helper.make_node(
+            "Unsqueeze",
+            [output.name],
+            [output.name + '_unsqueeze'],
+            output.name + '_unsqueeze',
+            axes = [0]
+        )
+        g.node.append(unsqueeze_node)
+        new_output = onnx.helper.make_tensor_value_info(
+            output.name + '_unsqueeze',
+            output.type.tensor_type.elem_type,
+            [1] + output_shape
+        )
+        new_outputs.append(new_output)
+    g.output.extend(new_outputs[::-1])
+
+
+def unsqueeze_softmax(g):
+    """Help 720 support softmax which batch size is not 1.
+
+    Args:
+        g (onnx.GraphProto): the input graph
+    """
+    new_nodes = []
+    for node in g.node:
+        if node.op_type != 'Softmax':
+            continue
+        # Check attribute
+        output_shape = helper.get_shape_from_value_name(g, node.output[0])
+        if output_shape is None or output_shape[0] == 1:
+            print(output_shape)
+            continue
+        # Create Unsqueeze for all the inputs\
+        unsqueeze_node = onnx.helper.make_node(
+            "Unsqueeze",
+            [node.input[0]],
+            [node.input[0] + '_squeeze'],
+            node.input[0] + '_squeeze',
+            axes = [0]
+        )
+        new_nodes.append(unsqueeze_node)
+        # Replace softmax input
+        modhelper.replace_node_input(node, node.input[0], node.input[0] + '_squeeze')
+        original_output_name = node.output.pop()
+        node.output.append(original_output_name + '_internal_0')
+        # Create post squeeze
+        squeeze_node = onnx.helper.make_node(
+            "Squeeze",
+            [original_output_name + '_internal_0'],
+            [original_output_name],
+            original_output_name + '_internal_1',
+            axes = [0]
+        )
+        new_nodes.append(squeeze_node)
+    g.node.extend(new_nodes)
+    other.topological_sort(g)
