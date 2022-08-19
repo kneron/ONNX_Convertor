@@ -6,10 +6,9 @@ from . import helper
 
 
 def setup_current_opset_version(m):
-    global __ONNX_VERSION__
-    __ONNX_VERSION__ = m.opset_import[0].version
-    if __ONNX_VERSION__ not in [11, 12]:
-        raise RuntimeError('Only support opset 11 and 12, but got ' + str(__ONNX_VERSION__))
+    helper.__ONNX_VERSION__ = m.opset_import[0].version
+    if helper.__ONNX_VERSION__ not in [11, 12]:
+        raise RuntimeError('Only support opset 11 and 12, but got ' + str(helper.__ONNX_VERSION__))
 
 def replace_node_input(node, old_input, new_input):
     for i, input_name in enumerate(node.input):
