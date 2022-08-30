@@ -132,13 +132,12 @@ def duplicate_constant_node(g):
 
 def slice_constant_folding(g, node):
     op_version = helper.get_current_opset_version()
-    # only support opset 9 & 11
-    if op_version == 11:
-        return slice_constant_folding_Opset_11(g, node)
-    elif op_version == 9:
-        return slice_constant_folding_Opset_9(g, node)
+    if op_version >= 10:
+        return slice_constant_folding_Opset_10(g, node)
+    else:
+        return slice_constant_folding_Opset_1(g, node)
 
-def slice_constant_folding_Opset_11(g, node):
+def slice_constant_folding_Opset_10(g, node):
     """ Fold constant and slice nodes to a single constant node.
     """
     pre_node = helper.find_node_by_output_name(g, node.input[0])
@@ -186,7 +185,7 @@ def slice_constant_folding_Opset_11(g, node):
 
     return True
 
-def slice_constant_folding_Opset_9(g, node):
+def slice_constant_folding_Opset_1(g, node):
     """ Fold constant and slice nodes to a single constant node.
     """
     pre_node = helper.find_node_by_output_name(g, node.input[0])

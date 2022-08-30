@@ -23,7 +23,8 @@ def onnx2onnx_flow(m: onnx.ModelProto,
                     rgba2yynn=False,
                     eliminate_tail=False,
                     opt_matmul=False,
-                    duplicate_shared_weights=True) -> onnx.ModelProto:
+                    opt_720=False,
+                    duplicate_shared_weights=False) -> onnx.ModelProto:
     """Optimize the onnx.
 
     Args:
@@ -72,7 +73,15 @@ def onnx2onnx_flow(m: onnx.ModelProto,
     # Put matmul after postprocess to avoid transpose moving downwards
     if opt_matmul:
         special.special_MatMul_process(m.graph)
+        m = onnx.utils.polish_model(m)
+
+    if opt_720:
         special.special_Gemm_process(m.graph)
+        special.concat_batch_transpose(m.graph)
+        special.unsqueeze_softmax(m.graph)
+        special.unsqueeze_output(m.graph)
+        while(len(m.graph.value_info) > 0):
+            m.graph.value_info.pop()
         m = onnx.utils.polish_model(m)
 
     return m
@@ -97,8 +106,10 @@ if __name__ == "__main__":
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
     parser.add_argument('--opt-matmul', dest='opt_matmul', action='store_true', default=False,
                         help="set if you want to optimize the MatMul operations for the kneron hardware.")
-    parser.add_argument('-s', '--no-duplicate-shared-weights', dest='no_duplicate_shared_weights', action='store_true', default=False,
-                        help='do not duplicate shared weights. Defaults to False.')
+    parser.add_argument('--opt-720', dest='opt_720', action='store_true', default=False,
+                        help="set if you want to optimize the model for the kneron hardware kdp720.")
+    parser.add_argument('-d', '--duplicate-shared-weights', dest='duplicate_shared_weights', action='store_true', default=False,
+                        help='duplicate shared weights. Defaults to False.')
     args = parser.parse_args()
 
     if args.out_file is None:
@@ -129,6 +140,16 @@ if __name__ == "__main__":
     # Basic model organize
     m = onnx.load(args.in_file)
 
-    m = onnx2onnx_flow(m, args.disable_fuse_bn, args.bn_on_skip, args.bn_before_add, args.bgr, args.norm, args.rgba2yynn, args.eliminate_tail, args.opt_matmul, not args.no_duplicate_shared_weights)
+    m = onnx2onnx_flow(m,
+        disable_fuse_bn=args.disable_fuse_bn,
+        bn_on_skip=args.bn_on_skip,
+        bn_before_add=args.bn_before_add,
+        bgr=args.bgr,
+        norm=args.norm,
+        rgba2yynn=args.rgba2yynn,
+        eliminate_tail=args.eliminate_tail,
+        opt_matmul=args.opt_matmul,
+        opt_720=args.opt_720,
+        duplicate_shared_weights=args.duplicate_shared_weights)
 
     onnx.save(m, outfile)

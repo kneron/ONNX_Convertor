@@ -143,24 +143,24 @@ def polish_RESIZE_input_param_node(g, resize_node_name):
 
     shape_data_node = helper.find_node_by_output_name(g, resize_node.input[3])
     shape_data = helper.constant_to_numpy(shape_data_node).astype(int)
-    
-    # handle 0 batch size which is invalid 
-    if shape_data[0] == 0:
+
+    # handle 0 batch size which is invalid
+    if shape_data[0] <= 0:
         shape_data[0] = 1
 
-    pre_node_output_value_info = helper.find_value_by_name(g, resize_node.input[0])
-    ori_shape = np.array([pre_node_output_value_info.type.tensor_type.shape.dim[0].dim_value,
-                    pre_node_output_value_info.type.tensor_type.shape.dim[1].dim_value,
-                    pre_node_output_value_info.type.tensor_type.shape.dim[2].dim_value,
-                    pre_node_output_value_info.type.tensor_type.shape.dim[3].dim_value])
-    
+    pre_node_output_shape = helper.get_shape_from_value_name(g, resize_node.input[0])
+    if pre_node_output_shape is None:
+        helper.logger.error(f"Cannot find node {resize_node_name} input {resize_node.input[0]}.")
+        raise RuntimeError
+    ori_shape = np.array(pre_node_output_shape)
+
     resize_node.input.remove(resize_node.input[3])
-    
+
 
     resize_scales = np.array(shape_data/ori_shape).astype(float)
     resize_scale_node = helper.list_to_constant('resize_scales_node_' + resize_node.name, resize_scales.shape, resize_scales, data_type=onnx.helper.TensorProto.FLOAT)
 
     resize_node.input[2] = resize_scale_node.name
     g.node.extend([resize_scale_node])
-    
+
     other.topological_sort(g)

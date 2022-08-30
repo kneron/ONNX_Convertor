@@ -31,6 +31,7 @@ parser.add_argument('--replace-reshape-with-flatten', dest='replace_reshape', ty
 args = parser.parse_args()
 
 m = onnx.load(args.in_file)
+replacing.replace_initializer_with_Constant(m.graph)
 m = onnx.utils.polish_model(m)
 g = m.graph
 other.topological_sort(g)

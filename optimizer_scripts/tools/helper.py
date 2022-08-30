@@ -10,11 +10,6 @@ __ONNX_VERSION__ =  -1
 
 logger = logging.getLogger("optimizer_scripts")
 
-def setup_current_opset_version(m):
-    global __ONNX_VERSION__
-    __ONNX_VERSION__ = m.opset_import[0].version
-    if __ONNX_VERSION__ not in [11, 12]:
-        raise RuntimeError('Only support opset 11 and 12, but got ' + str(__ONNX_VERSION__))
 
 def get_current_opset_version():
     if __ONNX_VERSION__ == -1:
@@ -173,9 +168,9 @@ def numpy_to_constant(name, np_array):
     return list_to_constant(name, np_array.shape, np_array.flatten().tolist())
 
 def initializer_to_numpy(tensor):
-    """Generate a list from the constant node
+    """Generate a list from the initializer
 
-    :node: the Constant node\\
+    :tensor: the tensor\\
     :returns: the shape of the constant node, the data of the constant node
     """
     # 1. check data type
@@ -202,7 +197,7 @@ def initializer_to_numpy(tensor):
         else:
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
-        print("Not supported data type {}".format(tensor.data_type))
+        print("Not supported data type {} from initializer {}".format(tensor.data_type, tensor.name))
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)
@@ -246,7 +241,7 @@ def constant_to_list(node):
         else:
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
-        print("Not supported data type {}".format(tensor.data_type))
+        print("Not supported data type {} from node {}".format(tensor.data_type, node.name))
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)
@@ -321,6 +316,8 @@ def get_shape_from_value_name(g, name):
     value = find_value_by_name(g, name)
     if value is None:
         value = find_input_by_name(g, name)
+    if value is None:
+        value = find_output_by_name(g, name)
     if value is None:
         return None
     return get_shape_from_value_info(value)

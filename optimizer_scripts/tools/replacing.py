@@ -404,6 +404,7 @@ def replace_shape_with_constant(g):
             node_name, [len(input_shape)], input_shape)
         g.node.extend([new_node])
         node_to_remove.append(node)
+        helper.logger.debug(f"Shape node {node.name} is replaced by Constant.")
 
         # if the input value_info is not used by other node
         # delete this input value_info
