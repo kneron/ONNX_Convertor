@@ -430,6 +430,8 @@ def get_shape(data):
     shape = []
     if type(data) not in [type(np.array([1])), type([1])]:
         return []
+    if data.size == 0:
+        return []
     sub_data = data[0]
     shape.append(len(data))
     while type(sub_data) in [type(np.array([1])), type([1])]:

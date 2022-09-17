@@ -165,7 +165,7 @@ def replace_Unsqueeze_with_Reshape(g):
         if output_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
         if output_value is None:
-            raise RuntimeError("Cannot get shape for Unsqueeze")
+            helper.logger.warn("Cannot get shape for Unsqueeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
         if len(shape) == 0:
             g.value_info.remove(output_value)
@@ -1349,8 +1349,8 @@ def replace_Expand_with_Reshape(g):
         if output_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
         if output_value is None:
-            helper.logger.error(f"Cannot get output shape for Expand: {node.name}")
-            exit(1)
+            helper.logger.warning(f"Cannot get output shape for Expand: {node.name}")
+            continue
         output_shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
         # Get input shape
         input_value = helper.find_value_by_name(g, node.input[0])
