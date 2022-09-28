@@ -127,7 +127,8 @@ def replace_Squeeze_with_Reshape(g):
         if output_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
         if output_value is None:
-            raise RuntimeError("Cannot get shape for Squeeze")
+            logging.warn("Cannot get shape for Squeeze")
+            continue
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
         if len(shape) == 0:
             g.value_info.remove(output_value)
@@ -742,7 +743,7 @@ def replace_div_to_bn(g):
 
         ones = [1.0] * c_dim
         zeros = [0.0] * c_dim
-        muls = (1 / np.array(muls)).tolist()
+        muls = [1 / i for i in muls]
         bn_name = div_op_node.output[0]
         mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
         variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
@@ -921,7 +922,7 @@ def replace_sub_to_bn(g):
             scale = [-1.0] * c_dim
         else:
             scale = ones
-            bias *= -1
+            bias = [-1.0 * i for i in bias]
         bn_name = sub_op_node.output[0]
         mean_value_node = helper.list_to_constant(bn_name+'_mean', np.array(zeros).shape, zeros)
         variance_value_node = helper.list_to_constant(bn_name+'_var', np.array(ones).shape, ones)
