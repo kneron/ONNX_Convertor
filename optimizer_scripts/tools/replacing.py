@@ -10,7 +10,7 @@ from . import helper
 from . import modhelper
 from .other import topological_sort
 
-def replace_initializer_with_Constant(g, duplicate_shared_weights=True):
+def replace_initializer_with_Constant(g, duplicate_shared_weights=False):
     """
     Replace initializers with Constant and a corresponding value_info
     If the initializer has related input, remove it.

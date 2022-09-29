@@ -141,7 +141,9 @@ def scalar_to_constant(name, data, data_type=None):
     :returns: the generated onnx constant node
     """
     if not data_type:
-        if isinstance(data, int):
+        if isinstance(data, bool):
+            data_type = onnx.helper.TensorProto.BOOL
+        elif isinstance(data, int):
             data_type = onnx.helper.TensorProto.INT64
         elif isinstance(data, float):
             data_type = onnx.helper.TensorProto.FLOAT
@@ -318,6 +320,10 @@ def get_shape_from_value_name(g, name):
         value = find_input_by_name(g, name)
     if value is None:
         value = find_output_by_name(g, name)
+    if value is None:
+        value = find_initializer_by_name(g, name)
+        if value is not None:
+            return value.dims
     if value is None:
         return None
     return get_shape_from_value_info(value)

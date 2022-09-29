@@ -4,10 +4,8 @@ import numpy as np
 import logging
 import traceback
 
-from . import helper
-from .general_graph import Graph, Node
+from . import helper, modhelper
 from .other import topological_sort
-from .replacing import replace_shape_with_constant
 from .helper import logger
 
 def are_all_inputs_Constant_with_one_child(g, node):
@@ -113,9 +111,7 @@ def duplicate_constant_node(g):
                 node.attribute[0].t.data_type,
                 data_shape
             )
-            input_ind = list(foldable_output_nodes[i].input).index(
-                node.output[0])
-            foldable_output_nodes[i].input[input_ind] = output_name
+            modhelper.replace_node_input(foldable_output_nodes[i], node.output[0], output_name)
 
             g.node.extend([new_constant_node])
             g.value_info.extend([new_val_info])
@@ -1067,6 +1063,33 @@ def DequantizeLinear_constant_folding(g, node):
     return True
 
 
+def Less_constant_folding(g, node):
+    """ Fold constant and less node to a single constant node.
+    """
+    node_a = helper.find_node_by_output_name(g, node.input[0])
+    _, data_a = helper.constant_to_list(node_a)
+    node_b = helper.find_node_by_output_name(g, node.input[1])
+    _, data_b = helper.constant_to_list(node_b)
+    data = data_a < data_b
+
+    new_node = helper.scalar_to_constant(node.output[0], data)
+    g.node.extend([new_node])
+
+    value_info = helper.find_value_by_name(g, node_a.output[0])
+    if value_info is not None:
+        g.value_info.remove(value_info)
+    value_info = helper.find_value_by_name(g, node_b.output[0])
+    if value_info is not None:
+        g.value_info.remove(value_info)
+    value_info = helper.find_value_by_name(g, node.output[0])
+    if value_info is not None:
+        g.value_info.remove(value_info)
+    g.node.remove(node_a)
+    g.node.remove(node_b)
+
+    return True
+
+
 def expand_constant_folding(g, node):
     """ Fold constant and Expand nodes to a single constant node.
     """
@@ -1113,6 +1136,7 @@ constant_folding_nodes = {
     'Expand': expand_constant_folding,
     'Floor': floor_constant_folding,
     'Gather': gather_constant_folding,
+    'Less': Less_constant_folding,
     'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
