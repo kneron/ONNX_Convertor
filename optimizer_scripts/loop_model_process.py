@@ -152,12 +152,16 @@ def loop_node_process(m, loop_node, input_values):
     Returns:
         ModelProto: the processed model.
     """
-    # 1. Setup input and output.
+    # 1. Setup input and output. Add hidden inputs
     inner_graph = loop_node.attribute[0].g
     # 2, Create temporary model.
     for name in input_values:
+        # Hidden inputs should be added.
         if name not in loop_node.input:
+            loop_node.input.append(name)
+            loop_node.output.insert(len(loop_node.input) - 3, name + '_matching_output')
             inner_graph.input.append(input_values[name])
+            inner_graph.output.insert(len(loop_node.input) - 2 ,input_values[name])
     temp_model = onnx.helper.make_model(inner_graph)
     temp_model.opset_import[0].version = 12
     temp_model.ir_version = 7
@@ -170,8 +174,6 @@ def loop_node_process(m, loop_node, input_values):
         onnx.save(temp_model, f"{debug_path}/debug_inner_{loop_node.name.replace('/', '_')}.onnx")
     # 4. Extract loop to outer.
     new_inner_graph = temp_model.graph
-    while len(new_inner_graph.input) > len(loop_node.input):
-        new_inner_graph.input.pop()
     loop_node.attribute.pop()
     loop_node.attribute.append(onnx.helper.make_attribute("body", value=new_inner_graph))
     # 5. Redo outer shape inference
