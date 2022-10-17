@@ -342,6 +342,8 @@ def find_size_shape_from_value(value):
     size = 1
     shape = []
     for i in range(len(value.type.tensor_type.shape.dim)):
+        if value.type.tensor_type.shape.dim[i].dim_value == 0:
+            return None, None
         size *= max(1, value.type.tensor_type.shape.dim[i].dim_value)
         shape.append(max(1, value.type.tensor_type.shape.dim[i].dim_value))
 

@@ -350,6 +350,8 @@ def inference_shapes(m):
             inferencing_shapes = True
         if inference_split_shape(g):
             inferencing_shapes = True
+        if inference_add_sub_mul_div_shape(g):
+            inferencing_shapes = True
         if inferencing_shapes:
             topological_sort(g)
             m = infer_shapes(m)
@@ -358,6 +360,7 @@ def inference_shapes(m):
     m = infer_shapes(m)
     eliminating.eliminate_empty_value_infos(m.graph)
     return m
+
 
 def inference_resize_shape(g):
     for node in g.node:
@@ -403,9 +406,9 @@ def inference_resize_shape(g):
     return False
 
 
-def inference_add_shape(g):
+def inference_add_sub_mul_div_shape(g):
     for node in g.node:
-        if node.op_type != 'Add':
+        if node.op_type != 'Add' and node.op_type != 'Sub' and node.op_type != 'Mul' and node.op_type != 'Div':
             continue
         output_value = helper.find_value_by_name(g, node.output[0])
         output_value = helper.find_output_by_name(g, node.output[0]) if output_value is None else output_value
@@ -434,11 +437,11 @@ def inference_add_shape(g):
         if len(input_a_shape) == 1:
             input_a_shape = input_b_shape
         elif len(input_a_shape) < len(output_shape):
-            input_a_shape = ([1] * (len(output_shape) - len(input_a_shape))) + input_a_shape
+            input_a_shape = ([1] * (len(output_shape) - len(input_a_shape))) + list(input_a_shape)
         if len(input_b_shape) == 1:
             input_b_shape = input_a_shape
         elif len(input_b_shape) < len(output_shape):
-            input_b_shape = ([1] * (len(output_shape) - len(input_b_shape))) + input_b_shape
+            input_b_shape = ([1] * (len(output_shape) - len(input_b_shape))) + list(input_b_shape)
         for i in range(len(output_shape)):
             output_shape[i] = input_a_shape[i] if input_a_shape[i] != 1 else input_b_shape[i]
         output_value = onnx.helper.make_tensor_value_info(

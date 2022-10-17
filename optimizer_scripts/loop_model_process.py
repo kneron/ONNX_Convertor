@@ -166,10 +166,10 @@ def loop_node_process(m, loop_node, input_values):
     temp_model.opset_import[0].version = 12
     temp_model.ir_version = 7
     # 3. Shape inference.
-    temp_model = other.infer_shapes(temp_model)
+    temp_model = other.inference_shapes(temp_model)
     replacing.replace_split_with_slices(temp_model.graph)
     other.topological_sort(temp_model.graph)
-    temp_model = other.infer_shapes(temp_model)
+    temp_model = other.inference_shapes(temp_model)
     if debug:
         onnx.save(temp_model, f"{debug_path}/debug_inner_{loop_node.name.replace('/', '_')}.onnx")
     # 4. Extract loop to outer.
@@ -177,7 +177,7 @@ def loop_node_process(m, loop_node, input_values):
     loop_node.attribute.pop()
     loop_node.attribute.append(onnx.helper.make_attribute("body", value=new_inner_graph))
     # 5. Redo outer shape inference
-    m = infer_shapes(m)
+    m = other.inference_shapes(m)
     carried_var_num = len(loop_node.input) - 2
     # first n outputs
     for i in range(0, carried_var_num):
@@ -200,7 +200,7 @@ def loop_node_process(m, loop_node, input_values):
             continue
         output_value.type.tensor_type.shape.dim[0].dim_value = max_loop_count
         remove_following_shapes(m.graph, loop_node.output[i])
-    m = infer_shapes(m)
+    m = other.inference_shapes(m)
     return m
 
 
@@ -222,7 +222,7 @@ def compiler_onnx_process(m):
     modhelper.setup_current_opset_version(m)
     # Format shapes in the first place
     onnx_shape_format(m.graph)
-    m = other.infer_shapes(m)
+    m = other.inference_shapes(m)
     other.rename_all_node_name(m.graph)
     # Find loop node
     todo_loop_names = deque()
