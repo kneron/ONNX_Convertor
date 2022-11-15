@@ -453,8 +453,6 @@ def squeeze_constant_folding(g, node):
     next_val_info = helper.find_value_by_name(g, node.output[0])
     if pre_val_info is not None:
         g.value_info.remove(pre_val_info)
-    else:
-        print(node.name)
     if next_val_info is not None:
         g.value_info.remove(next_val_info)
 
@@ -501,8 +499,6 @@ def unsqueeze_constant_folding(g, node):
     next_val_info = helper.find_value_by_name(g, node.output[0])
     if pre_val_info is not None:
         g.value_info.remove(pre_val_info)
-    else:
-        print(node.name)
     if next_val_info is not None:
         g.value_info.remove(next_val_info)
 
@@ -729,8 +725,10 @@ def matmul_constant_folding(g, node):
     node_to_del.extend([node, pre_node_1, pre_node_2])
     g.node.extend([new_node])
 
-    g.value_info.remove(pre_value_info1)
-    g.value_info.remove(pre_value_info2)
+    if pre_value_info1 is not None:
+        g.value_info.remove(pre_value_info1)
+    if pre_value_info2 is not None:
+        g.value_info.remove(pre_value_info2)
 
     while node_to_del:
         node = node_to_del.pop()
@@ -783,8 +781,10 @@ def mul_constant_folding(g, node):
     node_to_del.extend([node, pre_node_1, pre_node_2])
     g.node.extend([new_node])
 
-    g.value_info.remove(pre_value_info1)
-    g.value_info.remove(pre_value_info2)
+    if pre_value_info1 is not None:
+        g.value_info.remove(pre_value_info1)
+    if pre_value_info2 is not None:
+        g.value_info.remove(pre_value_info2)
 
     while node_to_del:
         node = node_to_del.pop()
@@ -842,8 +842,10 @@ def div_constant_folding(g, node):
     node_to_del.extend([node, pre_node_1, pre_node_2])
     g.node.extend([new_node])
 
-    g.value_info.remove(pre_value_info1)
-    g.value_info.remove(pre_value_info2)
+    if pre_value_info1 is not None:
+        g.value_info.remove(pre_value_info1)
+    if pre_value_info2 is not None:
+        g.value_info.remove(pre_value_info2)
 
     while node_to_del:
         node = node_to_del.pop()
@@ -888,8 +890,10 @@ def sub_constant_folding(g, node):
     g.node.extend([new_node])
     node_to_del.extend([node, pre_node_1, pre_node_2])
 
-    g.value_info.remove(pre_val_info_1)
-    g.value_info.remove(pre_val_info_2)
+    if pre_val_info_1 is not None:
+        g.value_info.remove(pre_val_info_1)
+    if pre_val_info_2 is not None:
+        g.value_info.remove(pre_val_info_2)
 
     while node_to_del:
         node = node_to_del.pop()
@@ -1125,6 +1129,46 @@ def expand_constant_folding(g, node):
     return True
 
 
+def range_constant_folding(g, node):
+    """Fold Range node constant folding.
+
+    Args:
+        g (GraphProto): the outer graph.
+        node (NodeProto): the range node.
+    """
+    # Prepare data
+    node_to_del = []
+    start_node = helper.find_node_by_output_name(g, node.input[0])
+    limit_node = helper.find_node_by_output_name(g, node.input[1])
+    delta_node = helper.find_node_by_output_name(g, node.input[2])
+
+    input_value_infos = []
+    for i in range(len(node.input)):
+        input_value_infos.append(helper.find_value_by_name(g, node.input[i]))
+
+    start_data = helper.constant_to_numpy(start_node)
+    limit_data = helper.constant_to_numpy(limit_node)
+    delta_data = helper.constant_to_numpy(delta_node)
+
+    # Calculate new node
+    new_data = list(range(start_data[0], limit_data[0], delta_data[0]))
+    new_node = helper.list_to_constant(node.output[0], [len(new_data)], new_data)
+
+    # Reconnect the graph
+    node_to_del.extend([start_node, limit_node, delta_node])
+    g.node.extend([new_node])
+
+    for value in input_value_infos:
+        if value is not None:
+            g.value_info.remove(value)
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
 # Available constant folding names to function map.
 constant_folding_nodes = {
     'Add': add_constant_folding,
@@ -1139,6 +1183,7 @@ constant_folding_nodes = {
     'Less': Less_constant_folding,
     'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
+    'Range': range_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
     'ReduceProd': reduceprod_constant_folding,
     'Reshape': reshape_constant_input_folding,

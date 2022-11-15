@@ -162,6 +162,7 @@ def pytorch_constant_folding(m):
     :return: the new model after preprocessing
     """
     logger.info("Working on constant folding.")
+    m = other.inference_shapes(m)
     replacing.replace_shape_with_constant(m.graph)
     replacing.replace_ConstantOfShape_with_constant(m.graph)
 
