@@ -87,6 +87,11 @@ if __name__ == '__main__':
     # g.node.remove(transpose_node)
     # onnx.save(src_onnx_m, "/home/kneron/Downloads/hate_speech_mod/hate_speech.3.onnx")
 
+    # Run outside the script: python pytorch_exported_onnx_preprocess.py ~/Downloads/hate_speech_mod/hate_speech.3.onnx ~/Downloads/hate_speech_mod/hate_speech.5.onnx
+    om = onnx.load("hate_speech.5.onnx")
+    om.opset_import.pop()
+    onnx.save(om, "hate_speech.6.onnx")
+
     # Remove reshapes
     src_onnx_path = "/home/kneron/Downloads/hate_speech_mod/hate_speech.6.onnx"
     src_onnx_m = onnx.load(src_onnx_path)
