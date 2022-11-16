@@ -1193,12 +1193,14 @@ def inference_shapes_until_complete_all(m):
     all_outputs = set()
     for node in m.graph.node:
         all_outputs = all_outputs.union(set(node.output))
+    onnx.save(m, "debug.onnx")
     eliminating.eliminate_empty_value_infos(m.graph)
     current_generated_size = len(m.graph.output) + len(m.graph.value_info)
     while current_generated_size < len(all_outputs):
         last_size = current_generated_size
         m = inference_shapes(m)
         current_generated_size = len(m.graph.output) + len(m.graph.value_info)
+        print(current_generated_size, ' ', last_size)
         if current_generated_size == last_size:
             helper.logger.warn("Cannot inference all shapes. If no other error is raised, please ignore this message.")
             break

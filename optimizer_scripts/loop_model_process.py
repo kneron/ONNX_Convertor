@@ -4,7 +4,6 @@ import argparse
 import logging
 import copy
 from collections import deque
-from onnx.shape_inference import infer_shapes
 from tools import eliminating, other, replacing, helper, constant_folding, modhelper
 
 # For models with Loop node, we should carefully limit the use of polish_model.
@@ -222,6 +221,7 @@ def compiler_onnx_process(m):
     modhelper.setup_current_opset_version(m)
     # Format shapes in the first place
     onnx_shape_format(m.graph)
+    onnx.save(m, "debug.onnx")
     m = other.inference_shapes(m)
     other.rename_all_node_name(m.graph)
     # Find loop node
