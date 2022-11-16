@@ -76,6 +76,8 @@ if __name__ == '__main__':
     # other.change_output_shape(g, ['dense_2 1 1'])
     # onnx.save(src_onnx_m, "/home/kneron/Downloads/hate_speech_mod/hate_speech.1.onnx")
 
+    # Run outside the script: python extract_loop.py ~/Downloads/hate_speech_mod/hate_speech.1.onnx ~/Downloads/hate_speech_mod/hate_speech.2.onnx
+
     # Reset shapes
     # src_onnx_path = "/home/kneron/Downloads/hate_speech_mod/hate_speech.2.onnx"
     # src_onnx_m = onnx.load(src_onnx_path)
@@ -88,6 +90,8 @@ if __name__ == '__main__':
     # onnx.save(src_onnx_m, "/home/kneron/Downloads/hate_speech_mod/hate_speech.3.onnx")
 
     # Run outside the script: python pytorch_exported_onnx_preprocess.py ~/Downloads/hate_speech_mod/hate_speech.3.onnx ~/Downloads/hate_speech_mod/hate_speech.5.onnx
+
+    # Remove unsupported opset.
     om = onnx.load("hate_speech.5.onnx")
     om.opset_import.pop()
     onnx.save(om, "hate_speech.6.onnx")
