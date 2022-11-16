@@ -221,7 +221,6 @@ def compiler_onnx_process(m):
     modhelper.setup_current_opset_version(m)
     # Format shapes in the first place
     onnx_shape_format(m.graph)
-    onnx.save(m, "debug.onnx")
     m = other.inference_shapes(m)
     other.rename_all_node_name(m.graph)
     # Find loop node

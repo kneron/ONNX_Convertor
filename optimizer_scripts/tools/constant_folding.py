@@ -1111,6 +1111,8 @@ def expand_constant_folding(g, node):
 
     # Calculate new node
     new_data = x_data.astype(np.float32) * np.ones(x_shape_data)
+    if x_node.attribute[0].t.data_type == 7:
+        new_data = new_data.astype('int64')
 
     new_node = helper.numpy_to_constant(node.output[0], new_data)
 
