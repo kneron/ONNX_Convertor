@@ -650,7 +650,7 @@ def parse_shape_change_input(s: str):
     """
     s_list = s.split(' ')
     if len(s_list) < 2:
-        print("Cannot parse the shape change input: {}".format(s))
+        helper.logger.error("Cannot parse the shape change input: {}".format(s))
         return None
     shape = []
     for i in range(1, len(s_list)):
@@ -663,10 +663,10 @@ def change_input_shape(g, target_list):
             name, shape = parse_shape_change_input(target)
             input_value = helper.find_input_by_name(g, name)
             if input_value is None:
-                print("Cannot find input {}".format(name))
+                helper.logger.error("Cannot find input {}".format(name))
                 continue
             if len(shape) != len(input_value.type.tensor_type.shape.dim):
-                print("The dimension doesn't match for input {}".format(name))
+                helper.logger.error("The dimension doesn't match for input {}".format(name))
                 continue
             for i in range(len(shape)):
                 input_value.type.tensor_type.shape.dim[i].dim_value = shape[i]
@@ -675,7 +675,7 @@ def change_input_shape(g, target_list):
             continue
         except ValueError:
             # This happens when the input cannot be converter into int
-            print("Cannot parse {} into name and int".format(target))
+            helper.logger.error("Cannot parse {} into name and int".format(target))
             continue
 
 def change_output_shape(g, target_list):
@@ -684,10 +684,10 @@ def change_output_shape(g, target_list):
             name, shape = parse_shape_change_input(target)
             output_value = helper.find_output_by_name(g, name)
             if output_value is None:
-                print("Cannot find output {}".format(name))
+                helper.logger.error("Cannot find output {}".format(name))
                 continue
             if len(shape) > len(output_value.type.tensor_type.shape.dim):
-                print("The dimension doesn't match for output {}".format(name))
+                helper.logger.error("The dimension doesn't match for output {}".format(name))
                 continue
             while len(shape) < len(output_value.type.tensor_type.shape.dim):
                 output_value.type.tensor_type.shape.dim.pop()
@@ -698,7 +698,7 @@ def change_output_shape(g, target_list):
             continue
         except ValueError:
             # This happens when the input cannot be converter into int
-            print("Cannot parse {} into name and int".format(target))
+            helper.logger.error("Cannot parse {} into name and int".format(target))
             continue
 
 def add_nop_conv_after(g, value_names):
@@ -717,7 +717,7 @@ def add_nop_conv_after(g, value_names):
         if value is None:
             value = helper.find_output_by_name(g, value_name)
         if value is None:
-            print("Cannot find an value_info named {}".format(value_name))
+            helper.logger.warn("Cannot find an value_info named {}".format(value_name))
             continue
         # Get the channel number from value info
         shape = helper.get_shape_from_value_info(value)
@@ -780,7 +780,7 @@ def add_nop_bn_after(g, value_names):
         if value is None:
             value = helper.find_output_by_name(g, value_name)
         if value is None:
-            print("Cannot find an value_info named {}".format(value_name))
+            helper.logger.warn("Cannot find an value_info named {}".format(value_name))
             continue
         # Get the channel number from value info
         shape = helper.get_shape_from_value_info(value)
@@ -844,7 +844,7 @@ def add_bias_scale_bn_after(g, value_name, channel_bias, channel_scale):
     if value is None:
         value = helper.find_output_by_name(g, value_name)
     if value is None:
-        print("Cannot find an value_info named {}".format(value_name))
+        helper.logger.warn("Cannot find an value_info named {}".format(value_name))
         return
     # Get the channel number from value info
     shape = helper.get_shape_from_value_info(value)
@@ -1199,7 +1199,6 @@ def inference_shapes_until_complete_all(m):
         last_size = current_generated_size
         m = inference_shapes(m)
         current_generated_size = len(m.graph.output) + len(m.graph.value_info)
-        print(current_generated_size, ' ', last_size)
         if current_generated_size == last_size:
             helper.logger.warn("Cannot inference all shapes. If no other error is raised, please ignore this message.")
             break

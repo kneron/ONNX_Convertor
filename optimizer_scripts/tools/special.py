@@ -50,11 +50,11 @@ def change_input_from_bgr_to_rgb(m):
     """
     g = m.graph
     if len(g.input) > 1:
-        print("This model has multiple inputs. Cannot change to RGB input.")
+        helper.logger.error("This model has multiple inputs. Cannot change to RGB input.")
         return
     input_shape = helper.get_shape_from_value_info(g.input[0])
     if len(input_shape) != 4 or input_shape[1] != 3:
-        print("The input shape is invalid for bgr conversion.")
+        helper.logger.error("The input shape is invalid for bgr conversion.")
         return
     # Try change conv weight first
     if change_first_conv_from_bgr_to_rgb(m):
@@ -97,11 +97,11 @@ def add_0_5_to_normalized_input(m):
     """
     g = m.graph
     if len(g.input) > 1:
-        print("This model has multiple inputs. Cannot normalize input.")
+        helper.logger.error("This model has multiple inputs. Cannot normalize input.")
         return
     input_shape = helper.get_shape_from_value_info(g.input[0])
     if len(input_shape) != 4:
-        print("The input shape is not BCHW. Cannot normalize input.")
+        helper.logger.error("The input shape is not BCHW. Cannot normalize input.")
         return
     # Construct weight
     ch = input_shape[1]
@@ -152,11 +152,11 @@ def add_rgb2yynn_node(m):
     """
     g = m.graph
     if len(g.input) > 1:
-        print("This model has multiple inputs. Cannot change to rgb input.")
+        helper.logger.error("This model has multiple inputs. Cannot change to rgb input.")
         return
     input_shape = helper.get_shape_from_value_info(g.input[0])
     if len(input_shape) != 4:
-        print("The input shape is not BCHW. Cannot normalize input.")
+        helper.logger.error("The input shape is not BCHW. Cannot normalize input.")
         return
     # Construct weight
     ch = input_shape[1]
@@ -634,7 +634,7 @@ def unsqueeze_softmax(g):
         # Check attribute
         output_shape = helper.get_shape_from_value_name(g, node.output[0])
         if output_shape is None or output_shape[0] == 1:
-            print(output_shape)
+            helper.logger.warn(f"Invalid softmax {node.name} output shape: {output_shape}")
             continue
         # Create Unsqueeze for all the inputs\
         unsqueeze_node = onnx.helper.make_node(

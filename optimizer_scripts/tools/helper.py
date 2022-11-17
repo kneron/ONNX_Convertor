@@ -199,7 +199,7 @@ def initializer_to_numpy(tensor):
         else:
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
-        print("Not supported data type {} from initializer {}".format(tensor.data_type, tensor.name))
+        logger.warn("Not supported data type {} from initializer {}".format(tensor.data_type, tensor.name))
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)
@@ -243,7 +243,7 @@ def constant_to_list(node):
         else:
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
-        print("Not supported data type {} from node {}".format(tensor.data_type, node.name))
+        logger.warn("Not supported data type {} from node {}".format(tensor.data_type, node.name))
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)
@@ -389,7 +389,7 @@ def get_list_attribute_by_name(node, attr_name: str, attr_type: str):
         else:
             return list(attr_proto.strings)
     else:
-        print("Warning: undefined type for list attribute extraction")
+        logger.warn("undefined type for list attribute extraction")
         return None
 
 def get_var_attribute_by_name(node, attr_name: str, attr_type: str):
@@ -415,7 +415,7 @@ def get_var_attribute_by_name(node, attr_name: str, attr_type: str):
     elif attr_type == "tensor":
         return attr_proto.t
     else:
-        print("Warning: undefined type for variable attribute extraction")
+        logger.warn("undefined type for variable attribute extraction")
         return None
 
 def flatten_with_depth(data, depth):

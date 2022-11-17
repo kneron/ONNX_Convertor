@@ -94,7 +94,7 @@ if args.cut_node is not None or args.cut_type is not None:
 # Rename nodes
 if args.rename_output:
     if len(args.rename_output) % 2 != 0:
-        print("Rename output should be paires of names.")
+        helper.logger.warn("Rename output should be paires of names.")
     else:
         for i in range(0, len(args.rename_output), 2):
             other.rename_output_name(g, args.rename_output[i], args.rename_output[i + 1])

@@ -151,7 +151,7 @@ def onnx1_4to1_6(model: onnx.ModelProto) -> onnx.ModelProto:
     graph = model.graph
 
     if model.opset_import[0].version == 11:
-        print("(Stop) the input model is already opset 11, no need to upgrade")
+        helper.logger.error("(Stop) the input model is already opset 11, no need to upgrade")
         exit(1)
 
     # deal with empty node name issue

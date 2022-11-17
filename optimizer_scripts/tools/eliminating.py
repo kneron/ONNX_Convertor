@@ -386,7 +386,7 @@ def eliminate_single_input_Concat(g):
         try:
             g.value_info.remove(value_between)
         except:
-            print("No value info to delete while eliminating identity layers.")
+            helper.logger.warn("No value info to delete while eliminating identity layers.")
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:
@@ -426,7 +426,7 @@ def eliminate_nop_Maxpool_and_AveragePool(g):
         try:
             g.value_info.remove(value_between)
         except:
-            print("No value info to delete while eliminating identity layers.")
+            helper.logger.warn("No value info to delete while eliminating identity layers.")
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:

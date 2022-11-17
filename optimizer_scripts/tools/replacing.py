@@ -259,7 +259,7 @@ def replace_dilated_conv(g):
                 if strides != [1, 1]:
                     has_strides = True
         if has_dilations and has_strides:
-            print("Warning: Both strides and dilations are set in ", node.name)
+            helper.logger.warn("Both strides and dilations are set in ", node.name)
             continue
         if not has_dilations:
             continue
