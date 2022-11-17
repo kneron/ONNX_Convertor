@@ -231,7 +231,6 @@ def check_operator_type(g):
         "LessOrEqual",
         "MeanVarianceNormalization",
         "NegativeLogLikelihoodLoss",
-        "Range",
         "SoftmaxCrossEntropyLoss"
     }
     not_in_onnx_model_operators = set()

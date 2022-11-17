@@ -10,7 +10,7 @@ from . import helper
 from . import modhelper
 from .other import topological_sort
 
-def replace_initializer_with_Constant(g, duplicate_shared_weights=True):
+def replace_initializer_with_Constant(g, duplicate_shared_weights=False):
     """
     Replace initializers with Constant and a corresponding value_info
     If the initializer has related input, remove it.
@@ -166,7 +166,7 @@ def replace_Unsqueeze_with_Reshape(g):
         if output_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
         if output_value is None:
-            raise RuntimeError("Cannot get shape for Unsqueeze")
+            helper.logger.warn("Cannot get shape for Unsqueeze")
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
         if len(shape) == 0:
             g.value_info.remove(output_value)
@@ -259,7 +259,7 @@ def replace_dilated_conv(g):
                 if strides != [1, 1]:
                     has_strides = True
         if has_dilations and has_strides:
-            print("Warning: Both strides and dilations are set in ", node.name)
+            helper.logger.warn("Both strides and dilations are set in ", node.name)
             continue
         if not has_dilations:
             continue
@@ -1298,6 +1298,44 @@ def replace_Gather_with_Reshape(g):
     # Topological sort
     topological_sort(g)
 
+
+def replace_Gather_with_Slice(g):
+    """
+    Replace Gather nodes with slice node.
+    (Special process function for model_se)
+
+    :param g: the input graph
+    """
+    node_to_remove = []
+    axes_node = helper.list_to_constant('gather_nodes_axes', [1], [0])
+    g.node.append(axes_node)
+    for node in g.node:
+        # Find Gather node
+        if node.op_type != 'Gather':
+            continue
+        # Get the shape and Construct the shape
+        constant_input = helper.find_node_by_output_name(g, node.input[1])
+        if constant_input.op_type != 'Constant':
+            exit(1)
+        _, constant_value = helper.constant_to_list(constant_input)
+        constant_value = constant_value[0]
+        starts_node = helper.list_to_constant(node.name + "_starts", [1], [constant_value])
+        ends_node = helper.list_to_constant(node.name + "_ends", [1], [constant_value + 1])
+        new_node = onnx.helper.make_node(
+            "Slice",
+            [node.input[0], starts_node.output[0], ends_node.output[0], axes_node.output[0]],
+            [node.output[0]],
+            name=node.name
+        )
+        g.node.extend([starts_node, ends_node, new_node])
+        node_to_remove.append(node)
+    # Remove old nodes
+    for node in node_to_remove:
+        g.node.remove(node)
+    # Topological sort
+    topological_sort(g)
+
+
 def replace_Expand_with_Reshape(g):
     """
     Replace Expand nodes with Reshape node.
@@ -1314,8 +1352,8 @@ def replace_Expand_with_Reshape(g):
         if output_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
         if output_value is None:
-            helper.logger.error(f"Cannot get output shape for Expand: {node.name}")
-            exit(1)
+            helper.logger.warning(f"Cannot get output shape for Expand: {node.name}")
+            continue
         output_shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
         # Get input shape
         input_value = helper.find_value_by_name(g, node.input[0])

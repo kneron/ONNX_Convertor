@@ -4,10 +4,8 @@ import numpy as np
 import logging
 import traceback
 
-from . import helper
-from .general_graph import Graph, Node
+from . import helper, modhelper
 from .other import topological_sort
-from .replacing import replace_shape_with_constant
 from .helper import logger
 
 def are_all_inputs_Constant_with_one_child(g, node):
@@ -113,9 +111,7 @@ def duplicate_constant_node(g):
                 node.attribute[0].t.data_type,
                 data_shape
             )
-            input_ind = list(foldable_output_nodes[i].input).index(
-                node.output[0])
-            foldable_output_nodes[i].input[input_ind] = output_name
+            modhelper.replace_node_input(foldable_output_nodes[i], node.output[0], output_name)
 
             g.node.extend([new_constant_node])
             g.value_info.extend([new_val_info])
@@ -141,7 +137,7 @@ def slice_constant_folding_Opset_10(g, node):
     """ Fold constant and slice nodes to a single constant node.
     """
     pre_node = helper.find_node_by_output_name(g, node.input[0])
-    pre_shape, data_list = helper.constant_to_list(pre_node)
+    pre_data = helper.constant_to_numpy(pre_node)
 
     starts_node = helper.find_node_by_output_name(g, node.input[1])
     _, starts = helper.constant_to_list(starts_node)
@@ -152,13 +148,13 @@ def slice_constant_folding_Opset_10(g, node):
 
     axes_node = None if len(node.input) <= 3 else helper.find_node_by_output_name(g, node.input[3])
     if not axes_node:
-        axes = list(range(len(helper.get_shape(data_list))))
+        axes = list(range(len(pre_data.shape)))
     else:
         _, axes = helper.constant_to_list(axes_node)
 
     steps_node = None if len(node.input) <= 4 else helper.find_node_by_output_name(g, node.input[4])
     if not steps_node:
-        steps = [1]*len(helper.get_shape(data_list))
+        steps = [1]*len(pre_data.shape)
     else:
         _, steps = helper.constant_to_list(steps_node)
 
@@ -168,11 +164,16 @@ def slice_constant_folding_Opset_10(g, node):
     axes = list(map(int, axes))
     steps = list(map(int, steps))
 
-    data_list = np.reshape(data_list, pre_shape)
+    for i in range(len(pre_data.shape)):
+        if i not in axes:
+            axes.insert(i, i)
+            starts.insert(i, 0)
+            ends.insert(i, pre_data.shape[i])
+            steps.insert(i, 1)
 
     new_data = None
     for idx, _ in enumerate(axes):
-        new_data = np.apply_along_axis( lambda x: x[starts[idx] : ends[idx] : steps[idx]], idx, data_list )
+        new_data = np.apply_along_axis( lambda x: x[starts[idx] : ends[idx] : steps[idx]], idx, pre_data )
 
     new_node = helper.list_to_constant(node.output[0], helper.get_shape(
         new_data), helper.flatten_to_list(new_data))
@@ -1066,6 +1067,70 @@ def DequantizeLinear_constant_folding(g, node):
     return True
 
 
+def Less_constant_folding(g, node):
+    """ Fold constant and less node to a single constant node.
+    """
+    node_a = helper.find_node_by_output_name(g, node.input[0])
+    _, data_a = helper.constant_to_list(node_a)
+    node_b = helper.find_node_by_output_name(g, node.input[1])
+    _, data_b = helper.constant_to_list(node_b)
+    data = data_a < data_b
+
+    new_node = helper.scalar_to_constant(node.output[0], data)
+    g.node.extend([new_node])
+
+    value_info = helper.find_value_by_name(g, node_a.output[0])
+    if value_info is not None:
+        g.value_info.remove(value_info)
+    value_info = helper.find_value_by_name(g, node_b.output[0])
+    if value_info is not None:
+        g.value_info.remove(value_info)
+    value_info = helper.find_value_by_name(g, node.output[0])
+    if value_info is not None:
+        g.value_info.remove(value_info)
+    g.node.remove(node_a)
+    g.node.remove(node_b)
+
+    return True
+
+
+def expand_constant_folding(g, node):
+    """ Fold constant and Expand nodes to a single constant node.
+    """
+    # Prepare data
+    node_to_del = []
+    x_node = helper.find_node_by_output_name(g, node.input[0])
+    x_shape_node = helper.find_node_by_output_name(g, node.input[1])
+
+    input_value_info = []
+    for i in range(len(node.input)):
+        input_value_info.append(helper.find_value_by_name(g, node.input[i]))
+
+    x_data = helper.constant_to_numpy(x_node)
+    x_shape_data = helper.constant_to_numpy(x_shape_node)
+
+    # Calculate new node
+    new_data = x_data.astype(np.float32) * np.ones(x_shape_data)
+    if x_node.attribute[0].t.data_type == 7:
+        new_data = new_data.astype('int64')
+
+    new_node = helper.numpy_to_constant(node.output[0], new_data)
+
+    # Reconnect the graph
+    node_to_del.extend([node, x_node, x_shape_node])
+    g.node.extend([new_node])
+
+    for value in input_value_info:
+        if value is not None:
+            g.value_info.remove(value)
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
 def range_constant_folding(g, node):
     """Fold Range node constant folding.
 
@@ -1114,8 +1179,10 @@ constant_folding_nodes = {
     'Concat': concat_constant_folding,
     'DequantizeLinear': DequantizeLinear_constant_folding,
     'Div': div_constant_folding,
+    'Expand': expand_constant_folding,
     'Floor': floor_constant_folding,
     'Gather': gather_constant_folding,
+    'Less': Less_constant_folding,
     'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
     'Range': range_constant_folding,

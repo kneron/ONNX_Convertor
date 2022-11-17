@@ -2,7 +2,7 @@ import onnxruntime
 import onnx
 import argparse
 import numpy as np
-from tools import helper
+from ..tools import helper
 
 
 onnx2np_dtype = {0: 'float', 1: 'float32', 2: 'uint8', 3: 'int8', 4: 'uint16', 5: 'int16', 6: 'int32', 7: 'int64', 8: 'str', 9: 'bool', 10: 'float16', 11: 'double', 12: 'uint32', 13: 'uint64', 14: 'complex64', 15: 'complex128', 16: 'float'}

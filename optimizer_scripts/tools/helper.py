@@ -141,7 +141,9 @@ def scalar_to_constant(name, data, data_type=None):
     :returns: the generated onnx constant node
     """
     if not data_type:
-        if isinstance(data, int):
+        if isinstance(data, bool):
+            data_type = onnx.helper.TensorProto.BOOL
+        elif isinstance(data, int):
             data_type = onnx.helper.TensorProto.INT64
         elif isinstance(data, float):
             data_type = onnx.helper.TensorProto.FLOAT
@@ -197,7 +199,7 @@ def initializer_to_numpy(tensor):
         else:
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
-        print("Not supported data type {} from initializer {}".format(tensor.data_type, tensor.name))
+        logger.warn("Not supported data type {} from initializer {}".format(tensor.data_type, tensor.name))
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)
@@ -241,7 +243,7 @@ def constant_to_list(node):
         else:
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
-        print("Not supported data type {} from node {}".format(tensor.data_type, node.name))
+        logger.warn("Not supported data type {} from node {}".format(tensor.data_type, node.name))
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)
@@ -319,6 +321,10 @@ def get_shape_from_value_name(g, name):
     if value is None:
         value = find_output_by_name(g, name)
     if value is None:
+        value = find_initializer_by_name(g, name)
+        if value is not None:
+            return value.dims
+    if value is None:
         return None
     return get_shape_from_value_info(value)
 
@@ -336,6 +342,8 @@ def find_size_shape_from_value(value):
     size = 1
     shape = []
     for i in range(len(value.type.tensor_type.shape.dim)):
+        if value.type.tensor_type.shape.dim[i].dim_value == 0:
+            return None, None
         size *= max(1, value.type.tensor_type.shape.dim[i].dim_value)
         shape.append(max(1, value.type.tensor_type.shape.dim[i].dim_value))
 
@@ -381,7 +389,7 @@ def get_list_attribute_by_name(node, attr_name: str, attr_type: str):
         else:
             return list(attr_proto.strings)
     else:
-        print("Warning: undefined type for list attribute extraction")
+        logger.warn("undefined type for list attribute extraction")
         return None
 
 def get_var_attribute_by_name(node, attr_name: str, attr_type: str):
@@ -407,7 +415,7 @@ def get_var_attribute_by_name(node, attr_name: str, attr_type: str):
     elif attr_type == "tensor":
         return attr_proto.t
     else:
-        print("Warning: undefined type for variable attribute extraction")
+        logger.warn("undefined type for variable attribute extraction")
         return None
 
 def flatten_with_depth(data, depth):
@@ -429,6 +437,8 @@ def flatten_to_list(data):
 def get_shape(data):
     shape = []
     if type(data) not in [type(np.array([1])), type([1])]:
+        return []
+    if data.size == 0:
         return []
     sub_data = data[0]
     shape.append(len(data))

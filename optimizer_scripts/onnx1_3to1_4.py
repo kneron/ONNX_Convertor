@@ -3,7 +3,6 @@
 import sys
 import onnx
 import numpy as np
-from onnx import numpy_helper
 from tools import other, helper
 
 """

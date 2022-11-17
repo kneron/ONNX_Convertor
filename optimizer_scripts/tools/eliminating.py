@@ -386,7 +386,7 @@ def eliminate_single_input_Concat(g):
         try:
             g.value_info.remove(value_between)
         except:
-            print("No value info to delete while eliminating identity layers.")
+            helper.logger.warn("No value info to delete while eliminating identity layers.")
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:
@@ -426,7 +426,7 @@ def eliminate_nop_Maxpool_and_AveragePool(g):
         try:
             g.value_info.remove(value_between)
         except:
-            print("No value info to delete while eliminating identity layers.")
+            helper.logger.warn("No value info to delete while eliminating identity layers.")
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:
@@ -488,11 +488,14 @@ def eliminate_trivial_maxpool(g):
 
 def eliminate_empty_value_infos(g):
     to_remove = []
-    constant_outputs = set([node.output[0] for node in g.node if node.op_type == 'Constant'])
+    skip_values = set()
+    for node in g.node:
+        if node.op_type == 'Constant' or node.op_type == 'Loop':
+            skip_values = skip_values.union(set(node.output))
     for initializer in g.initializer:
-        constant_outputs.add(initializer.name)
+        skip_values.add(initializer.name)
     for value_info in g.value_info:
-        if value_info.name in constant_outputs:
+        if value_info.name in skip_values:
             continue
         if len(value_info.type.tensor_type.shape.dim) == 0:
             to_remove.append(value_info)

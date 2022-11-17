@@ -5,7 +5,7 @@ import struct
 import collections
 import numpy as np
 import onnx.helper
-import onnx.utils
+from onnx.shape_inference import infer_shapes
 import math
 import logging
 from . import helper, modhelper
@@ -274,6 +274,9 @@ def topological_sort(g):
     length = len(g.node)
     for _ in range(length):
         node = g.node.pop()
+        if node.name in node_map:
+            helper.logger.error(f"Nodes with the same name exist: {node.name}")
+            exit(1)
         node_map[node.name] = node
         if len([i for i in node.input if i != '']) == 0:
             to_add.append(node.name)
@@ -286,6 +289,14 @@ def topological_sort(g):
     # sort
     # deal with input first
     for value_info in g.input:
+        input_name = value_info.name
+        for node_name in output_nodes[input_name]:
+            in_degree[node_name] -= 1
+            if in_degree[node_name] == 0:
+                to_add.append(node_name)
+                del in_degree[node_name]
+    # Also deal with initializers
+    for value_info in g.initializer:
         input_name = value_info.name
         for node_name in output_nodes[input_name]:
             in_degree[node_name] -= 1
@@ -326,7 +337,7 @@ def topological_sort(g):
 
 def inference_shapes(m):
     eliminating.eliminate_empty_value_infos(m.graph)
-    m = onnx.utils.polish_model(m)
+    m = infer_shapes(m)
     g = m.graph
     inferencing_shapes = True
     while inferencing_shapes:
@@ -339,14 +350,17 @@ def inference_shapes(m):
             inferencing_shapes = True
         if inference_split_shape(g):
             inferencing_shapes = True
+        if inference_add_sub_mul_div_shape(g):
+            inferencing_shapes = True
         if inferencing_shapes:
             topological_sort(g)
-            m = onnx.utils.polish_model(m)
+            m = infer_shapes(m)
             g = m.graph
     eliminating.eliminate_empty_value_infos(g)
-    m = onnx.utils.polish_model(m)
+    m = infer_shapes(m)
     eliminating.eliminate_empty_value_infos(m.graph)
     return m
+
 
 def inference_resize_shape(g):
     for node in g.node:
@@ -390,6 +404,54 @@ def inference_resize_shape(g):
             g.value_info.extend([output_value])
             return True
     return False
+
+
+def inference_add_sub_mul_div_shape(g):
+    for node in g.node:
+        if node.op_type != 'Add' and node.op_type != 'Sub' and node.op_type != 'Mul' and node.op_type != 'Div':
+            continue
+        output_value = helper.find_value_by_name(g, node.output[0])
+        output_value = helper.find_output_by_name(g, node.output[0]) if output_value is None else output_value
+        if output_value is not None:
+            continue
+
+        input_a_shape = helper.get_shape_from_value_name(g, node.input[0])
+        input_b_shape = helper.get_shape_from_value_name(g, node.input[1])
+        if input_a_shape is None:
+            input_a_node = helper.find_node_by_output_name(g, node.input[0])
+            input_a_init = helper.find_initializer_by_name(g, node.input[0])
+            if input_a_node is None and input_a_init is None:
+                continue
+            if input_a_node is not None and input_a_node.op_type != "Constant":
+                continue
+            input_a_shape = [1]
+        if input_b_shape is None:
+            input_b_node = helper.find_node_by_output_name(g, node.input[1])
+            input_b_init = helper.find_initializer_by_name(g, node.input[1])
+            if input_b_node is None and input_b_init is None:
+                continue
+            if input_b_node is not None and input_b_node.op_type != "Constant":
+                continue
+            input_b_shape = [1]
+        output_shape = [None] * max(len(input_a_shape), len(input_b_shape))
+        if len(input_a_shape) == 1:
+            input_a_shape = input_b_shape
+        elif len(input_a_shape) < len(output_shape):
+            input_a_shape = ([1] * (len(output_shape) - len(input_a_shape))) + list(input_a_shape)
+        if len(input_b_shape) == 1:
+            input_b_shape = input_a_shape
+        elif len(input_b_shape) < len(output_shape):
+            input_b_shape = ([1] * (len(output_shape) - len(input_b_shape))) + list(input_b_shape)
+        for i in range(len(output_shape)):
+            output_shape[i] = input_a_shape[i] if input_a_shape[i] != 1 else input_b_shape[i]
+        output_value = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    onnx.TensorProto.FLOAT,
+                    [int(v) for v in output_shape])
+        g.value_info.extend([output_value])
+        return True
+    return False
+
 
 def inference_upsample_shape(g):
     """For onnx v1.4.1+, onnx cannot inference upsample output shape. Let's\\
@@ -458,8 +520,14 @@ def inference_cov_shape(g):
 
         # Now start the inference.
         # Check kernel shape
-        kernel_value_info = helper.find_value_by_name(g, node.input[1])
-        _, kernel_shape = helper.find_size_shape_from_value(kernel_value_info)
+        kernel_node = helper.find_node_by_output_name(g, node.input[1])
+        if kernel_node is not None:
+            kernel_value_info = helper.find_value_by_name(g, node.input[1])
+            _, kernel_shape = helper.find_size_shape_from_value(kernel_value_info)
+        else:
+            # Kernel is initializer
+            kernel_init = helper.find_initializer_by_name(g, node.input[1])
+            kernel_shape = list(kernel_init.dims)
         if not kernel_shape:
             continue
         # If auto_pad is set, use the auto_pad.
@@ -483,10 +551,22 @@ def inference_cov_shape(g):
                 logger.error("Unrecognized auto_pad value: " + str(auto_pad))
                 exit(1)
 
-        strides = helper.get_attribute_by_name(node, 'strides').ints
+        strides = helper.get_attribute_by_name(node, 'strides')
+        if strides is None:
+            strides = [1] * (len(input_shape) - 2)
+        else:
+            strides = strides.ints
         if not pads:
-            pads = helper.get_attribute_by_name(node, 'pads').ints
-        dilation = helper.get_attribute_by_name(node, 'dilations').ints
+            pads = helper.get_attribute_by_name(node, 'pads')
+            if pads is None:
+                pads = [0] * (len(input_shape) - 2) * 2
+            else:
+                pads = pads.ints
+        dilation = helper.get_attribute_by_name(node, 'dilations')
+        if dilation is None:
+            dilation = [1] * (len(input_shape) - 2)
+        else:
+            dilation = dilation.ints
 
         # Pytorch model has the case where strides only have one number
         if len(strides) == 1:
@@ -570,7 +650,7 @@ def parse_shape_change_input(s: str):
     """
     s_list = s.split(' ')
     if len(s_list) < 2:
-        print("Cannot parse the shape change input: {}".format(s))
+        helper.logger.error("Cannot parse the shape change input: {}".format(s))
         return None
     shape = []
     for i in range(1, len(s_list)):
@@ -583,10 +663,10 @@ def change_input_shape(g, target_list):
             name, shape = parse_shape_change_input(target)
             input_value = helper.find_input_by_name(g, name)
             if input_value is None:
-                print("Cannot find input {}".format(name))
+                helper.logger.error("Cannot find input {}".format(name))
                 continue
             if len(shape) != len(input_value.type.tensor_type.shape.dim):
-                print("The dimension doesn't match for input {}".format(name))
+                helper.logger.error("The dimension doesn't match for input {}".format(name))
                 continue
             for i in range(len(shape)):
                 input_value.type.tensor_type.shape.dim[i].dim_value = shape[i]
@@ -595,7 +675,7 @@ def change_input_shape(g, target_list):
             continue
         except ValueError:
             # This happens when the input cannot be converter into int
-            print("Cannot parse {} into name and int".format(target))
+            helper.logger.error("Cannot parse {} into name and int".format(target))
             continue
 
 def change_output_shape(g, target_list):
@@ -604,10 +684,10 @@ def change_output_shape(g, target_list):
             name, shape = parse_shape_change_input(target)
             output_value = helper.find_output_by_name(g, name)
             if output_value is None:
-                print("Cannot find output {}".format(name))
+                helper.logger.error("Cannot find output {}".format(name))
                 continue
             if len(shape) > len(output_value.type.tensor_type.shape.dim):
-                print("The dimension doesn't match for output {}".format(name))
+                helper.logger.error("The dimension doesn't match for output {}".format(name))
                 continue
             while len(shape) < len(output_value.type.tensor_type.shape.dim):
                 output_value.type.tensor_type.shape.dim.pop()
@@ -618,7 +698,7 @@ def change_output_shape(g, target_list):
             continue
         except ValueError:
             # This happens when the input cannot be converter into int
-            print("Cannot parse {} into name and int".format(target))
+            helper.logger.error("Cannot parse {} into name and int".format(target))
             continue
 
 def add_nop_conv_after(g, value_names):
@@ -637,7 +717,7 @@ def add_nop_conv_after(g, value_names):
         if value is None:
             value = helper.find_output_by_name(g, value_name)
         if value is None:
-            print("Cannot find an value_info named {}".format(value_name))
+            helper.logger.warn("Cannot find an value_info named {}".format(value_name))
             continue
         # Get the channel number from value info
         shape = helper.get_shape_from_value_info(value)
@@ -700,7 +780,7 @@ def add_nop_bn_after(g, value_names):
         if value is None:
             value = helper.find_output_by_name(g, value_name)
         if value is None:
-            print("Cannot find an value_info named {}".format(value_name))
+            helper.logger.warn("Cannot find an value_info named {}".format(value_name))
             continue
         # Get the channel number from value info
         shape = helper.get_shape_from_value_info(value)
@@ -764,7 +844,7 @@ def add_bias_scale_bn_after(g, value_name, channel_bias, channel_scale):
     if value is None:
         value = helper.find_output_by_name(g, value_name)
     if value is None:
-        print("Cannot find an value_info named {}".format(value_name))
+        helper.logger.warn("Cannot find an value_info named {}".format(value_name))
         return
     # Get the channel number from value info
     shape = helper.get_shape_from_value_info(value)
@@ -1122,7 +1202,7 @@ def inference_shapes_until_complete_all(m):
         if current_generated_size == last_size:
             helper.logger.warn("Cannot inference all shapes. If no other error is raised, please ignore this message.")
             break
-    m = onnx.utils.polish_model(m)
+    m = infer_shapes(m)
     return m
 
 def convert_opset12_constants(g):
