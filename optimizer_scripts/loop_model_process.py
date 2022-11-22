@@ -116,7 +116,16 @@ def get_max_loop_count(g, loop_node):
     Returns:
         int: the max loop count
     """
-    max = -1
+    m_name = loop_node.input[0]
+    node = helper.find_node_by_output_name(g, m_name)
+    if node is not None:
+        max_loop_count = helper.constant_to_numpy(node)[0]
+    else:
+        init = helper.find_initializer_by_name(g, m_name)
+        if init is None:
+            max_loop_count = -1
+        else:
+            max_loop_count = helper.initializer_to_numpy(init)[0]
     for i in range(2, len(loop_node.input)):
         input_name = loop_node.input[i]
         node = helper.find_node_by_output_name(g, input_name)
@@ -133,11 +142,11 @@ def get_max_loop_count(g, loop_node):
             logging.error(f"Multiple int inputs for {loop_node.name}")
             exit(1)
         else:
-            max = value[0]
-    if max == -1:
-        logging.error(f"Int input for {loop_node.name} not found")
+            max_loop_count = value[0]
+    if max_loop_count > 65535 or max_loop_count < 1:
+        logging.error(f"Cannot inference loop count for {loop_node.name}.")
         exit(1)
-    return max
+    return max_loop_count
 
 
 def loop_node_process(m, loop_node, input_values):
@@ -222,6 +231,7 @@ def compiler_onnx_process(m):
     # Format shapes in the first place
     onnx_shape_format(m.graph)
     m = other.inference_shapes(m)
+    other.add_name_to_node(m.graph)
     other.rename_all_node_name(m.graph)
     # Find loop node
     todo_loop_names = deque()
