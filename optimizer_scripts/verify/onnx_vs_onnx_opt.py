@@ -4,8 +4,10 @@ import glob
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
+import sys, os
 
-from ..tools import helper
+sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, 'tools'))
+import helper
 import onnx_vs_onnx as onnx_tester
 
 def compare_results(results_a, results_b):

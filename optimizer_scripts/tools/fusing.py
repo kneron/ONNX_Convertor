@@ -1004,7 +1004,16 @@ def fuse_slice_nodes_into_conv(g):
                     # More than one following nodes. Skip.
                     continue
                 input_weight = helper.find_node_by_output_name(g, following_node.input[i])
-                g.node.remove(input_weight)
+                if input_weight is None:
+                    input_weight = helper.find_initializer_by_name(g, following_node.input[i])
+                    if input_weight is None:
+                        # Weight not found, skip
+                        helper.logger.debug(f"{following_node.input[i]} is not found while fusing slice nodes. It might has already been deleted")
+                        continue
+                    else:
+                        g.initializer.remove(input_weight)
+                else:
+                    g.node.remove(input_weight)
             # Remove Slice nodes
             g.node.remove(following_node)
     # define remove value_info function
