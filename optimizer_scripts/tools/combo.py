@@ -66,6 +66,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     other.convert_opset12_constants(model_proto.graph)
     defusing.defuse_Einsum(model_proto.graph)
     defusing.defuse_ReduceSum(model_proto.graph)
+    defusing.defuse_div_with_reciprocal_and_mul(model_proto.graph)
     replacing.replace_initializer_with_Constant(model_proto.graph)
     other.topological_sort(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
