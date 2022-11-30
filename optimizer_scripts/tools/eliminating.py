@@ -69,10 +69,7 @@ def remove_useless_last_nodes(g):
                 if cur_input_output is not None and cur_input_output_in_output is None:
                     g.output.extend([cur_input_output])
         node_to_remove.append(cur_node.proto)
-        try:
-            g.value_info.remove(helper.find_value_by_name(g, cur_node.proto.output[0]))
-        except ValueError:
-            pass
+        modhelper.delete_value_with_name_if_exists(g, cur_node.proto.output[0])
         if cur_node_output is not None:
             g.output.remove(cur_node_output)
         cur_node.proto = None
@@ -125,7 +122,7 @@ def eliminate_shape_changing_after_input(g):
             shape_outputs = helper.find_nodes_by_input_name(g, shape_node.output[0])
             if len(shape_outputs) <= 1:
                 node_to_remove.append(shape_node)
-                g.value_info.remove(helper.find_value_by_name(g, shape_node.output[0]))
+                modhelper.delete_value_with_name_if_exists(g, shape_node.output[0])
 
             # Delete value info
             g.input.remove(old_input)
@@ -253,11 +250,10 @@ def eliminate_Reshape_Cast(g):
         else:
             raise NotImplementedError()
         # Change Value info
-        origin_weight_out = helper.find_value_by_name(g, weight_node.output[0])
         weight_node.output.pop()
         weight_node.output.extend([reshape_node.input[1]])
         # Delete
-        g.value_info.remove(origin_weight_out)
+        modhelper.delete_value_with_name_if_exists(g, weight_node.output[0])
         g.node.remove(cast_node)
 
 def eliminate_Cast_after_input(g):
@@ -306,8 +302,7 @@ def eliminate_consecutive_Cast(g):
         node.input[0] = first_node.input[0]
         # Remove the first node and its output value info
         node_to_remove.append(first_node)
-        first_output = helper.find_value_by_name(g, first_node.output[0])
-        g.value_info.remove(first_output)
+        modhelper.delete_value_with_name_if_exists(g, first_node.output[0])
     for node in node_to_remove:
         g.node.remove(node)
 
@@ -345,9 +340,7 @@ def eliminate_consecutive_reshape_like_nodes(g):
         modhelper.replace_node_input(following_node, node.output[0], node.input[0])
         # Clean up
         node_to_del.extend([node])
-        mid_val_info = helper.find_value_by_name(g, node.output[0])
-        if mid_val_info:
-            g.value_info.remove(mid_val_info)
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
 
     while node_to_del:
         node = node_to_del.pop()
@@ -382,11 +375,7 @@ def eliminate_single_input_Concat(g):
         for following_node in following_nodes:
             modhelper.replace_node_input(following_node, node.output[0], node.input[0])
         # Delete value info
-        value_between = helper.find_value_by_name(g, node.output[0])
-        try:
-            g.value_info.remove(value_between)
-        except:
-            helper.logger.warn("No value info to delete while eliminating identity layers.")
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:
@@ -422,11 +411,7 @@ def eliminate_nop_Maxpool_and_AveragePool(g):
         for following_node in following_nodes:
             modhelper.replace_node_input(following_node, node.output[0], node.input[0])
         # Delete value info
-        value_between = helper.find_value_by_name(g, node.output[0])
-        try:
-            g.value_info.remove(value_between)
-        except:
-            helper.logger.warn("No value info to delete while eliminating identity layers.")
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:
@@ -478,8 +463,7 @@ def eliminate_trivial_maxpool(g):
         for next_node in next_nodes:
             modhelper.replace_node_input(next_node, node.output[0], node.input[0])
         
-        next_val_info = helper.find_value_by_name(g, node.output[0])
-        g.value_info.remove(next_val_info)
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -539,11 +523,7 @@ def eliminate_nop_pads(g):
         for following_node in following_nodes:
             modhelper.replace_node_input(following_node, node.output[0], node.input[0])
         # Delete value info
-        value_between = helper.find_value_by_name(g, node.output[0])
-        try:
-            g.value_info.remove(value_between)
-        except:
-            helper.logger.info("No value info to delete while eliminating identity layers.")
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:
@@ -577,9 +557,7 @@ def eliminate_trivial_elementwise_calculation(g):
             continue
         # Remove the node
         node_to_remove.append(node)
-        output_value_info = helper.find_value_by_name(g, node.output[0])
-        if output_value_info is not None:
-            g.value_info.remove(output_value_info)
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
         # Replace next node input if any.
         following_nodes = helper.find_following_nodes_by_input_value_name(g, node.output[0])
         for following_node in following_nodes:
@@ -595,9 +573,7 @@ def eliminate_trivial_elementwise_calculation(g):
         constant_following_nodes = helper.find_following_nodes_by_input_value_name(g, weight_node.output[0])
         if len(constant_following_nodes) == 1:
             node_to_remove.append(weight_node)
-            output_value_info = helper.find_value_by_name(g, weight_node.output[0])
-            if output_value_info is not None:
-                g.value_info.remove(output_value_info)
+            modhelper.delete_value_with_name_if_exists(g, weight_node.output[0])
     for node in node_to_remove:
         g.node.remove(node)
 
@@ -636,9 +612,7 @@ def eliminate_nop_cast(g):
         for following_node in following_nodes:
             modhelper.replace_node_input(following_node, node.output[0], node.input[0])
         # Delete value info
-        value_between = helper.find_value_by_name(g, node.output[0])
-        if value_between is not None:
-            g.value_info.remove(value_between)
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
         # Node is waiting for elimination
         node_to_remove.append(node)
     for node in node_to_remove:

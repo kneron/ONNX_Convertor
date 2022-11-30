@@ -56,8 +56,7 @@ def fuse_Transpose_into_Constant(g):
                 )
             g.value_info.extend([new_value])
             if new_node.output[0]:
-                val_info_to_del = helper.find_value_by_name(g, new_node.output[0])
-                g.value_info.remove(val_info_to_del)
+                delete_value_with_name_if_exists(g, new_node.output[0])
 
     for node in node_to_remove:
         g.node.remove(node)
