@@ -4,11 +4,11 @@ import sys
 import onnx
 import onnx.helper
 import argparse
+from tools.modhelper import delete_value_with_name_if_exists
 
 # StatefulPartitionedCall/nn_cut_lstm_0607_addmini_8e5_alldata_25f_25filt_4c_at55dB_cnn_45r_oneoutput2/time_distributed_564/Reshape_1_kn
 def change_reshape_size(g, rehape_name):
     reshape_node = helper.find_node_by_node_name(g, rehape_name)
-    reshape_output = helper.find_value_by_name(g, reshape_node.output[0])
     flatten_node = onnx.helper.make_node(
         "Flatten",
         [reshape_node.input[0]],
@@ -18,8 +18,7 @@ def change_reshape_size(g, rehape_name):
         )
     g.node.remove(reshape_node)
     g.node.append(flatten_node)
-    if reshape_output is not None:
-        g.value_info.remove(reshape_output)
+    delete_value_with_name_if_exists(g, reshape_node.output[0])
 
 parser = argparse.ArgumentParser(description="Edit an ONNX model.")
 parser.add_argument('in_file', type=str, help='input ONNX FILE')

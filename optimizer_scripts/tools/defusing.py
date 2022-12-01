@@ -173,3 +173,45 @@ def defuse_ReduceSum(g):
                 axes = helper.get_list_attribute_by_name(node, 'axes', 'int')
         )
         g.node.append(squeeze_node)
+
+
+def defuse_div_with_reciprocal_and_mul(g):
+    """
+    Defuse Div with Reciprocal and Mul.
+
+    Args:
+        g (GraphProto): the graph to process
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find Div node
+        if node.op_type != 'Div':
+            continue
+        # Check if the second input is not constant
+        second_input = helper.find_initializer_by_name(g, node.input[1])
+        if second_input is not None:
+            continue
+        second_input = helper.find_node_by_output_name(g, node.input[1])
+        if second_input is not None and second_input.op_type == 'Constant':
+            continue
+        # Construct new nodes.
+        reciprocal_node = onnx.helper.make_node(
+            "Reciprocal",
+            [node.input[1]],
+            [node.input[1] + '_reciprocal'],
+            name=node.input[1] + '_reciprocal'
+        )
+        mul_node = onnx.helper.make_node(
+            'Mul',
+            [node.input[0], node.input[1] + '_reciprocal'],
+            node.output,
+            name=node.name
+        )
+        # Construct new Mul node.
+        g.node.extend([reciprocal_node, mul_node])
+        node_to_remove.append(node)
+    # Remove old nodes
+    for node in node_to_remove:
+        g.node.remove(node)
+    # Topological sort
+    topological_sort(g)

@@ -4,6 +4,7 @@ import sys
 import onnx
 import numpy as np
 from tools import other, helper
+from tools.modhelper import delete_value_with_name_if_exists
 
 """
 Change onnx model from version 1.3 to version 1.4. 
@@ -93,9 +94,7 @@ def PRelu_weight_reshape(g):
                 (1, slope.dims[1], 1, 1))
             g.input.remove(input_value)
             g.input.append(new_input)
-        value_info = helper.find_value_by_name(g, node.input[1])
-        if value_info is not None:
-            g.value_info.remove(value_info)
+        delete_value_with_name_if_exists(g, node.input[1])
 
 def do_convert(m):
     graph = m.graph

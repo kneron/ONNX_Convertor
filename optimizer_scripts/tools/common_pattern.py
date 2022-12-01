@@ -3,7 +3,7 @@ import numpy as np
 import onnx.helper
 import onnx.utils
 
-from . import modhelper
+from .modhelper import delete_value_with_name_if_exists
 from . import helper
 from . import other
 
@@ -86,20 +86,14 @@ def pattern_matmul_mul_add(g, matmul_node):
         new_matmul_weight_node = helper.numpy_to_constant(matmul_weight_node.name, new_matmul_weight)
         g.node.remove(matmul_weight_node)
         g.node.extend([new_matmul_weight_node])
-    value = helper.find_value_by_name(g, matmul_weight_node.output[0])
-    if value is not None:
-        g.value_info.remove(value)
+    delete_value_with_name_if_exists(g, matmul_weight_node.output[0])
     # Remove Mul node
     if len(helper.find_following_nodes_by_input_value_name(g, mul_weight_node.output[0])) <= 1:
         # Only remove the weight when it is not shared.
         g.node.remove(mul_weight_node)
-    value = helper.find_value_by_name(g, mul_weight_node.output[0])
-    if value is not None:
-        g.value_info.remove(value)
+    delete_value_with_name_if_exists(g, mul_weight_node.output[0])
     g.node.remove(mul_node)
-    value = helper.find_value_by_name(g, mul_node.output[0])
-    if value is not None:
-        g.value_info.remove(value)
+    delete_value_with_name_if_exists(g, mul_node.output[0])
     # Fuse Matmul and Add
     gemm_node = onnx.helper.make_node(
         'Gemm',
@@ -115,9 +109,7 @@ def pattern_matmul_mul_add(g, matmul_node):
     # Clean up
     g.node.remove(matmul_node)
     g.node.remove(add_node)
-    value = helper.find_value_by_name(g, matmul_node.output[0])
-    if value is not None:
-        g.value_info.remove(value)
+    delete_value_with_name_if_exists(g, matmul_node.output[0])
     other.topological_sort(g)
 
 def make_UpsamplingBilinear2d_value_info(g, resize_node_name):

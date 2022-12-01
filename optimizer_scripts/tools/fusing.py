@@ -56,8 +56,7 @@ def fuse_Transpose_into_Constant(g):
                 )
             g.value_info.extend([new_value])
             if new_node.output[0]:
-                val_info_to_del = helper.find_value_by_name(g, new_node.output[0])
-                g.value_info.remove(val_info_to_del)
+                delete_value_with_name_if_exists(g, new_node.output[0])
 
     for node in node_to_remove:
         g.node.remove(node)
@@ -580,12 +579,14 @@ def fuse_consecutive_transposes(g):
 def fuse_mul_and_add_into_bn(g):
     node_to_del = []
     for node in g.node:
+        # Check for Add
         if node.op_type != 'Add':
             continue
         add_node = node
         input_nodes_add = [helper.find_node_by_output_name(g, input_name) for input_name in add_node.input]
         if any([n == None for n in input_nodes_add]):
             continue
+        # Check for Mul
         mul_node, const_add = None, None
         for input_node_add in input_nodes_add:
             if input_node_add.op_type == 'Mul':
@@ -596,6 +597,7 @@ def fuse_mul_and_add_into_bn(g):
                 pass
         if not mul_node or not const_add:
             continue
+        # Check for constant inputs
         data_input_name, const_mul = None, None
         for input_name in mul_node.input:
             input_node = helper.find_node_by_output_name(g, input_name)
@@ -612,88 +614,108 @@ def fuse_mul_and_add_into_bn(g):
         if not const_mul:
             continue
 
+        # Get shape for scale and bias
         scale_shape, scale_data = helper.constant_to_list(const_mul)
         bias_shape, __ = helper.constant_to_list(const_add)
-        c_dim = len(scale_data)
         if scale_shape != bias_shape:
             continue
+        # Check if scale_shape and bias_shape only has one valid dimension
+        if scale_shape == 1:
+            pass
+        else:
+            only_one_valid = True
+            valid_dimension_found = False
+            for d in scale_shape:
+                if d == 1:
+                    continue
+                elif valid_dimension_found:
+                    only_one_valid = False
+                    break
+                else:
+                    valid_dimension_found = True
+            if not only_one_valid:
+                # Multiple dimension not 1.
+                continue
+        c_dim = len(scale_data)
+
 
         data_input_value = helper.find_value_by_name(g, data_input_name)
         if data_input_value is None:
             data_input_value = helper.find_input_by_name(g, data_input_name)
         _ , previous_node_output_shape = helper.find_size_shape_from_value(data_input_value)
-        # only allow 4 dim data input due to the hardware limitation
-        if previous_node_output_shape is None or len(previous_node_output_shape) != 4:
+        # only allow data input dimension larger than 3
+        if previous_node_output_shape is None or len(previous_node_output_shape) < 3:
             continue
 
         # check if mul's dim and input channel dimension are matched
+        transpose_perm = None
         if previous_node_output_shape[1] != c_dim:
-            continue
-
-        if scale_shape == [1, c_dim, 1, 1]:
-            # remove all '1'
-            for _ in range(3):
-                const_add.attribute[0].t.dims.remove(1)
-                const_mul.attribute[0].t.dims.remove(1)
-        elif scale_shape == [1, c_dim]:
-            # remove all '1'
-            const_add.attribute[0].t.dims.remove(1)
-            const_mul.attribute[0].t.dims.remove(1)
-        elif scale_shape == 1 and c_dim == 1:
+            # Need to construct transpose before and after
+            transpose_perm = [i for i in range(len(previous_node_output_shape))]
+            # Find which is the c_dim for bn
+            for i in range(len(previous_node_output_shape)):
+                if previous_node_output_shape[i] == c_dim:
+                    transpose_perm[1] = i
+                    transpose_perm[i] = 1
+            if transpose_perm[1] == 1:
+                # Cannot find match dimension while doing fusion
+                helper.logger.warn(f"Cannot find matching dimension while fusing Mul({mul_node.name}) and Add({add_node.name}) into BN")
+                continue
+        if scale_shape == 1 and c_dim == 1:
             # Single value weight
             const_add.attribute[0].t.dims.append(1)
             const_mul.attribute[0].t.dims.append(1)
-        else:
-            continue
+        elif len(scale_shape) != 1:
+            # Remove 1 for [1, x, 1, 1]
+            for i in range(len(scale_shape)):
+                if i == 1:
+                    continue
+                if scale_shape[i] == 1:
+                    const_add.attribute[0].t.dims.remove(1)
+                    const_mul.attribute[0].t.dims.remove(1)
 
-        bn_name = add_node.output[0]
+        bn_name = add_node.output[0] + '_fused'
         const_mean = helper.list_to_constant(bn_name+'_mean', [c_dim], [0.0 for _ in range(c_dim)])
         const_var = helper.list_to_constant(bn_name+'_var', [c_dim], [1.0 for _ in range(c_dim)])
 
+        if transpose_perm is None:
+            input_name = data_input_name
+            output_name = add_node.output[0]
+        else:
+            input_name = data_input_name + '_transposed'
+            output_name = bn_name
+
         bn_node = onnx.helper.make_node(
             'BatchNormalization',
-            [data_input_name, const_mul.output[0], const_add.output[0],\
+            [input_name, const_mul.output[0], const_add.output[0],\
                 const_mean.output[0], const_var.output[0]],
-            [add_node.output[0]],
+            [output_name],
             name=bn_name,
             epsilon=0.00000001
         )
+        g.node.extend([const_mean, const_var, bn_node])
 
-        mid_val_info = helper.find_value_by_name(g, mul_node.output[0])
-        scale_val_info = helper.find_value_by_name(g, const_mul.output[0])
-        bais_val_info = helper.find_value_by_name(g, const_add.output[0])
-        g.value_info.remove(mid_val_info)
-        g.value_info.remove(scale_val_info)
-        g.value_info.remove(bais_val_info)
-
-        new_scale_val_info = onnx.helper.make_tensor_value_info(
-            const_mul.output[0],
-            const_mul.attribute[0].t.data_type,
-            [c_dim]
+        if transpose_perm is not None:
+            transpose_in_node = onnx.helper.make_node(
+                'Transpose',
+                [data_input_name],
+                [input_name],
+                name=input_name,
+                perm=transpose_perm
             )
-        new_bais_val_info = onnx.helper.make_tensor_value_info(
-            const_add.output[0],
-            const_add.attribute[0].t.data_type,
-            [c_dim]
-        )
-        mean_val_info = onnx.helper.make_tensor_value_info(
-            const_mean.output[0],
-            const_mean.attribute[0].t.data_type,
-            [c_dim]
-        )
-        var_val_info = onnx.helper.make_tensor_value_info(
-            const_var.output[0],
-            const_var.attribute[0].t.data_type,
-            [c_dim]
-        )
+            transpose_out_node = onnx.helper.make_node(
+                'Transpose',
+                [output_name],
+                [add_node.output[0]],
+                name=add_node.output[0],
+                perm=transpose_perm
+            )
+            g.node.extend([transpose_in_node, transpose_out_node])
 
-        g.value_info.extend([new_scale_val_info])
-        g.value_info.extend([new_bais_val_info])
-        g.value_info.extend([mean_val_info])
-        g.value_info.extend([var_val_info])
-        g.node.extend([bn_node])
-        g.node.extend([const_mean])
-        g.node.extend([const_var])
+        delete_value_with_name_if_exists(g, mul_node.output[0])
+        delete_value_with_name_if_exists(g, const_mul.output[0])
+        delete_value_with_name_if_exists(g, const_add.output[0])
+
         node_to_del.extend([mul_node, add_node])
 
     while node_to_del:

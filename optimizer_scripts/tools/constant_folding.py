@@ -178,9 +178,7 @@ def slice_constant_folding_Opset_10(g, node):
     new_node = helper.list_to_constant(node.output[0], helper.get_shape(
         new_data), helper.flatten_to_list(new_data))
     g.node.extend([new_node])
-    value_info = helper.find_value_by_name(g, pre_node.output[0])
-    if value_info is not None:
-        g.value_info.remove(value_info)
+    modhelper.delete_value_with_name_if_exists(g, pre_node.output[0])
     g.node.remove(node)
     g.node.remove(pre_node)
 
@@ -206,9 +204,7 @@ def slice_constant_folding_Opset_1(g, node):
     new_node = helper.list_to_constant(node.output[0], helper.get_shape(
         new_data), helper.flatten_to_list(new_data))
     g.node.extend([new_node])
-    value_info = helper.find_value_by_name(g, pre_node.output[0])
-    if value_info is not None:
-        g.value_info.remove(value_info)
+    modhelper.delete_value_with_name_if_exists(g, pre_node.output[0])
     g.node.remove(node)
     g.node.remove(pre_node)
 
@@ -250,12 +246,8 @@ def cast_constant_folding(g, node):
     )
     g.node.extend([new_node])
 
-    value_info = helper.find_value_by_name(g, pre_node.output[0])
-    if value_info is not None:
-        g.value_info.remove(value_info)
-    value_info = helper.find_value_by_name(g, node.output[0])
-    if value_info is not None:
-        g.value_info.remove(value_info)
+    modhelper.delete_value_with_name_if_exists(g, pre_node.output[0])
+    modhelper.delete_value_with_name_if_exists(g, node.output[0])
     g.node.remove(pre_node)
     g.node.remove(node)
 
@@ -294,12 +286,7 @@ def reduceprod_constant_folding(g, node):
     )
 
     g.node.extend([new_node])
-    value_info = None
-    for item in g.value_info:
-        if item.name == pre_node.output[0]:
-            value_info = item
-    if value_info is not None:
-        g.value_info.remove(value_info)
+    modhelper.delete_value_with_name_if_exists(g, pre_node.output[0])
     g.node.remove(pre_node)
     g.node.remove(node)
 
@@ -331,11 +318,8 @@ def reshape_constant_input_folding(g, node):
     )
     g.node.extend([new_node])
 
-    data_val_info = helper.find_value_by_name(g, pre_data_node.output[0])
-    shape_val_info = helper.find_value_by_name(g, pre_shape_node.output[0])
-
-    g.value_info.remove(data_val_info)
-    g.value_info.remove(shape_val_info)
+    modhelper.delete_value_with_name_if_exists(g, pre_data_node.output[0])
+    modhelper.delete_value_with_name_if_exists(g, pre_shape_node.output[0])
 
     g.node.remove(node)
     g.node.remove(pre_data_node)
@@ -380,9 +364,7 @@ def concat_constant_folding(g, node):
     node_to_del.append(node)
 
     for input_name in node.input:
-        val_info = helper.find_value_by_name(g, input_name)
-        if val_info:
-            g.value_info.remove(val_info)
+        modhelper.delete_value_with_name_if_exists(g, input_name)
 
     while node_to_del:
         node = node_to_del.pop()
@@ -412,11 +394,8 @@ def transpose_constant_folding(g, node):
     g.node.extend([new_node])
     node_to_del.extend([node, pre_node])
 
-    pre_val_info = helper.find_value_by_name(g, node.input[0])
-    g.value_info.remove(pre_val_info)
-
-    next_val_info = helper.find_value_by_name(g, node.output[0])
-    g.value_info.remove(next_val_info)
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.output[0])
 
     new_val_info = onnx.helper.make_tensor_value_info(
         node.output[0],
@@ -449,12 +428,8 @@ def squeeze_constant_folding(g, node):
     g.node.extend([new_node])
     node_to_del.extend([node, pre_node])
 
-    pre_val_info = helper.find_value_by_name(g, node.input[0])
-    next_val_info = helper.find_value_by_name(g, node.output[0])
-    if pre_val_info is not None:
-        g.value_info.remove(pre_val_info)
-    if next_val_info is not None:
-        g.value_info.remove(next_val_info)
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.output[0])
 
     new_val_info = onnx.helper.make_tensor_value_info(
         node.output[0],
@@ -495,12 +470,8 @@ def unsqueeze_constant_folding(g, node):
     g.node.extend([new_node])
     node_to_del.extend([node, pre_node])
 
-    pre_val_info = helper.find_value_by_name(g, node.input[0])
-    next_val_info = helper.find_value_by_name(g, node.output[0])
-    if pre_val_info is not None:
-        g.value_info.remove(pre_val_info)
-    if next_val_info is not None:
-        g.value_info.remove(next_val_info)
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.output[0])
 
     new_val_info = onnx.helper.make_tensor_value_info(
         node.output[0],
@@ -547,21 +518,15 @@ def gather_constant_folding(g, node):
     node_to_del.extend([node, pre_data_node, pre_indices_node])
     g.node.extend([new_node])
 
-    val_info_1 = helper.find_value_by_name(g, node.input[0])
-    val_info_2 = helper.find_value_by_name(g, node.input[1])
-    val_info_3 = helper.find_value_by_name(g, node.output[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
+    modhelper.delete_value_with_name_if_exists(g, node.output[0])
     new_val_info = onnx.helper.make_tensor_value_info(
         new_node.output[0],
         pre_data_node.attribute[0].t.data_type,
         new_shape
     )
 
-    if val_info_1 is not None:
-        g.value_info.remove(val_info_1)
-    if val_info_2 is not None:
-        g.value_info.remove(val_info_2)
-    if val_info_3 is not None:
-        g.value_info.remove(val_info_3)
     g.value_info.extend([new_val_info])
 
     while node_to_del:
@@ -598,8 +563,8 @@ def add_constant_folding(g, node):
 
     g.node.extend([new_node])
     node_to_del.extend([node, pre_node_1, pre_node_2])
-    g.value_info.remove(helper.find_value_by_name(g, pre_node_1.output[0]))
-    g.value_info.remove(helper.find_value_by_name(g, pre_node_2.output[0]))
+    modhelper.delete_value_with_name_if_exists(g, pre_node_1.output[0])
+    modhelper.delete_value_with_name_if_exists(g, pre_node_2.output[0])
     folded = True
 
     while node_to_del:
@@ -617,7 +582,6 @@ def sqrt_constant_folding(g, node):
     shape, data = helper.constant_to_list(pre_node)
     np_data = np.sqrt(np.reshape(data, shape))
     output_val_info = helper.find_value_by_name(g, node.output[0])
-    input_val_info = helper.find_value_by_name(g, node.input[0])
     data_type = output_val_info.type.tensor_type.elem_type
 
     new_tensor = onnx.helper.make_tensor(
@@ -634,7 +598,7 @@ def sqrt_constant_folding(g, node):
         value=new_tensor
     )
 
-    g.value_info.remove(input_val_info)
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
     node_to_del.extend([pre_node, node])
     g.node.extend([new_node])
 
@@ -656,7 +620,6 @@ def reciprocal_constant_folding(g, node):
     np_data = np.reshape(data, shape)
     np_data = np.reciprocal(np_data)
 
-    input_val_info = helper.find_value_by_name(g, node.input[0])
     output_val_info = helper.find_value_by_name(g, node.output[0])
     data_type = output_val_info.type.tensor_type.elem_type
 
@@ -677,7 +640,7 @@ def reciprocal_constant_folding(g, node):
     node_to_del.extend([node, pre_node])
     g.node.extend([new_node])
 
-    g.value_info.remove(input_val_info)
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
 
     while node_to_del:
         node = node_to_del.pop()
@@ -925,7 +888,7 @@ def neg_constant_folding(g, node):
 
     g.node.extend([new_node])
     node_to_del.extend([pre_node, node])
-    g.value_info.remove(helper.find_value_by_name(g, node.input[0]))
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -961,9 +924,7 @@ def floor_constant_folding(g, node):
 
     g.node.extend([new_node])
     node_to_del.extend([pre_node, node])
-    old_value = helper.find_value_by_name(g, node.input[0])
-    if old_value is not None:
-        g.value_info.remove(old_value)
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
 
     while node_to_del:
         g.node.remove(node_to_del.pop())
@@ -1079,15 +1040,9 @@ def Less_constant_folding(g, node):
     new_node = helper.scalar_to_constant(node.output[0], data)
     g.node.extend([new_node])
 
-    value_info = helper.find_value_by_name(g, node_a.output[0])
-    if value_info is not None:
-        g.value_info.remove(value_info)
-    value_info = helper.find_value_by_name(g, node_b.output[0])
-    if value_info is not None:
-        g.value_info.remove(value_info)
-    value_info = helper.find_value_by_name(g, node.output[0])
-    if value_info is not None:
-        g.value_info.remove(value_info)
+    modhelper.delete_value_with_name_if_exists(g, node_a.output[0])
+    modhelper.delete_value_with_name_if_exists(g, node_b.output[0])
+    modhelper.delete_value_with_name_if_exists(g, node.output[0])
     g.node.remove(node_a)
     g.node.remove(node_b)
 
