@@ -164,6 +164,7 @@ def loop_node_process(m, loop_node, input_values):
     temp_model.ir_version = 7
     # 3. Shape inference.
     temp_model = other.inference_shapes(temp_model)
+    replacing.replace_initializer_with_Constant(temp_model.graph, False)
     replacing.replace_split_with_slices(temp_model.graph)
     other.topological_sort(temp_model.graph)
     temp_model = other.inference_shapes(temp_model)
