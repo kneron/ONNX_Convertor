@@ -276,6 +276,7 @@ def topological_sort(g):
         node = g.node.pop()
         if node.name in node_map:
             helper.logger.error(f"Nodes with the same name exist: {node.name}")
+            helper.logger.error(f"{node_map[node.name]} vs {node}")
             exit(1)
         node_map[node.name] = node
         if len([i for i in node.input if i != '']) == 0:
