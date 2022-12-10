@@ -1349,6 +1349,10 @@ def replace_Expand_with_Reshape(g):
         # Find Gather node
         if node.op_type != 'Expand':
             continue
+        # Check node input[1]
+        input_shape_node = helper.find_node_by_output_name(g, node.input[1])
+        if input_shape_node is None or input_shape_node.op_type != 'Constant':
+            continue
         # Get the output shape and Construct the shape
         output_value = helper.find_value_by_name(g, node.output[0])
         if output_value is None:
@@ -1374,6 +1378,8 @@ def replace_Expand_with_Reshape(g):
             input_total_count *= i
         if input_total_count != output_total_count:
             continue
+        # Construct new constant node
+        new_shape = helper.list_to_constant(node.input[1], [len(output_shape)], output_shape)
         # Construct new reshape node.
         new_node = onnx.helper.make_node(
             "Reshape",
@@ -1381,8 +1387,9 @@ def replace_Expand_with_Reshape(g):
             node.output,
             name=node.name
         )
-        g.node.extend([new_node])
+        g.node.extend([new_shape, new_node])
         node_to_remove.append(node)
+        node_to_remove.append(input_shape_node)
     # Remove old nodes
     for node in node_to_remove:
         g.node.remove(node)
