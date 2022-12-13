@@ -3,6 +3,7 @@ import onnx.helper
 import argparse
 import logging
 import copy
+import json
 from collections import deque
 from tools import eliminating, other, replacing, helper, constant_folding, modhelper
 
@@ -114,7 +115,25 @@ def get_max_loop_count(g, loop_node):
     Returns:
         int: the max loop count
     """
-    max = -1
+    # Try to check loop node comment
+    if len(loop_node.doc_string) != 0:
+        try:
+            doc_json = json.loads(loop_node.doc_string)
+        except ValueError:
+            doc_json = {'doc_string': loop_node.doc_string}
+        if 'max_loop_count' in doc_json:
+            return doc_json[max_loop_count]
+    # Inference the value
+    m_name = loop_node.input[0]
+    node = helper.find_node_by_output_name(g, m_name)
+    if node is not None:
+        max_loop_count = helper.constant_to_numpy(node)[0]
+    else:
+        init = helper.find_initializer_by_name(g, m_name)
+        if init is None:
+            max_loop_count = -1
+        else:
+            max_loop_count = helper.initializer_to_numpy(init)[0]
     for i in range(2, len(loop_node.input)):
         input_name = loop_node.input[i]
         node = helper.find_node_by_output_name(g, input_name)
@@ -127,15 +146,22 @@ def get_max_loop_count(g, loop_node):
             continue
         elif value[0] == 0:
             continue
-        elif max != -1:
+        elif max_loop_count > 0 and max_loop_count <= 65535:
             logging.error(f"Multiple int inputs for {loop_node.name}")
             exit(1)
         else:
-            max = value[0]
-    if max == -1:
-        logging.error(f"Int input for {loop_node.name} not found")
+            max_loop_count = value[0]
+    if max_loop_count > 65535 or max_loop_count < 1:
+        logging.error(f"Cannot inference loop count for {loop_node.name}.")
         exit(1)
-    return max
+    # Save the max_loop_count into doc_string
+    new_loop = helper.find_node_by_node_name(g, loop_node.name)
+    if len(loop_node.doc_string) == 0:
+        new_loop.doc_string = json.dumps({'max_loop_count': int(max_loop_count)})
+    else:
+        doc_json['max_loop_count'] = int(max_loop_count)
+        new_loop.doc_string = json.dumps(doc_json)
+    return max_loop_count
 
 
 def loop_node_process(m, loop_node, input_values):
@@ -221,6 +247,7 @@ def compiler_onnx_process(m):
     # Format shapes in the first place
     onnx_shape_format(m.graph)
     m = other.inference_shapes(m)
+    other.add_name_to_node(m.graph)
     other.rename_all_node_name(m.graph)
     # Find loop node
     todo_loop_names = deque()

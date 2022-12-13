@@ -44,6 +44,8 @@ def add_name_to_node(g):
     for node in g.node:
         if len(node.name) == 0:
             node.name = node.output[0]
+        if node.op_type == 'Loop':
+            add_name_to_node(node.attribute[0].g)
 
 def rename_all_node_name(g):
     """
