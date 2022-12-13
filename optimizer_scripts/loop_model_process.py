@@ -101,9 +101,7 @@ def remove_following_shapes(g, value_info_name):
     while len(todo) != 0:
         node = todo.popleft()
         for output in node.output:
-            value = helper.find_value_by_name(g, output)
-            if value is not None:
-                g.value_info.remove(value)
+            modhelper.delete_value_with_name_if_exists(g, output)
             todo.extend(helper.find_following_nodes_by_input_value_name(g, output))
 
 
@@ -192,6 +190,7 @@ def loop_node_process(m, loop_node, input_values):
     temp_model.ir_version = 7
     # 3. Shape inference.
     temp_model = other.inference_shapes(temp_model)
+    replacing.replace_initializer_with_Constant(temp_model.graph, False)
     replacing.replace_split_with_slices(temp_model.graph)
     other.topological_sort(temp_model.graph)
     temp_model = other.inference_shapes(temp_model)

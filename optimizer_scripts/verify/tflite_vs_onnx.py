@@ -3,8 +3,10 @@ import numpy as np
 import tensorflow as tf
 import onnx
 import onnxruntime
+import sys, os
 
-from ..tools import helper
+sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, 'tools'))
+import helper
 
 def compare_tflite_and_onnx(tflite_file, onnx_file, total_times=10):
     # Setup onnx session and get meta data
