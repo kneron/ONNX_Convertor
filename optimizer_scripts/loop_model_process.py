@@ -159,9 +159,9 @@ def get_max_loop_count(g, loop_node):
     # Save the max_loop_count into doc_string
     new_loop = helper.find_node_by_node_name(g, loop_node.name)
     if len(loop_node.doc_string) == 0:
-        new_loop.doc_string = json.dumps({'max_loop_count': max_loop_count})
+        new_loop.doc_string = json.dumps({'max_loop_count': int(max_loop_count)})
     else:
-        doc_json['max_loop_count'] = max_loop_count
+        doc_json['max_loop_count'] = int(max_loop_count)
         new_loop.doc_string = json.dumps(doc_json)
     return max_loop_count
 
