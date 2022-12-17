@@ -301,6 +301,8 @@ def topological_sort(g):
     for value_info in g.initializer:
         input_name = value_info.name
         for node_name in output_nodes[input_name]:
+            if node_name not in in_degree:
+                continue
             in_degree[node_name] -= 1
             if in_degree[node_name] == 0:
                 to_add.append(node_name)
@@ -317,6 +319,8 @@ def topological_sort(g):
         for output_name in node.output:
             next_node_names.extend(output_nodes[output_name])
         for next_node_name in next_node_names:
+            if next_node_name not in in_degree:
+                continue
             in_degree[next_node_name] -= 1
             if in_degree[next_node_name] == 0:
                 to_add.append(next_node_name)
