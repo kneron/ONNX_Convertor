@@ -177,7 +177,7 @@ def loop_node_process(m, loop_node, input_values):
     """
     # 1. Setup input and output. Add hidden inputs
     inner_graph = loop_node.attribute[0].g
-    # 2, Create temporary model.
+    # 2. Create temporary model.
     for name in input_values:
         # Hidden inputs should be added.
         if name not in loop_node.input:
@@ -185,6 +185,16 @@ def loop_node_process(m, loop_node, input_values):
             loop_node.output.insert(len(loop_node.input) - 3, name + '_matching_output')
             inner_graph.input.append(input_values[name])
             inner_graph.output.insert(len(loop_node.input) - 2 ,input_values[name])
+    # Inner graph input of the same name.
+    for i in range(len(loop_node.input)):
+        if loop_node.input[i] == inner_graph.input[i].name:
+            inner_graph.input[i].name = loop_node.input[i] + '_inside_' + loop_node.name
+            following_nodes = helper.find_following_nodes_by_input_value_name(inner_graph, loop_node.input[i])
+            for node in following_nodes:
+                modhelper.replace_node_input(node, loop_node.input[i], loop_node.input[i] + '_inside_' + loop_node.name)
+            for output in inner_graph.output:
+                if output.name == loop_node.input[i]:
+                    output.name = loop_node.input[i] + '_inside_' + loop_node.name
     temp_model = onnx.helper.make_model(inner_graph)
     temp_model.opset_import[0].version = 12
     temp_model.ir_version = 7

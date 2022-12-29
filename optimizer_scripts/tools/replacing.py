@@ -437,31 +437,33 @@ def replace_ConstantOfShape_with_constant(g):
         if node.op_type != 'ConstantOfShape':
             continue
         # Check  input
-        input_value = helper.find_value_by_name(g, node.input[0])
-        if input_value is None:
-            input_value = helper.find_input_by_name(g, node.input[0])
-        if input_value is None or len(input_value.type.tensor_type.shape.dim) == 0:
-            continue
-
-        # Replace to constant node
         pre_node = helper.find_node_by_output_name(g, node.input[0])
-        _, target_shape = helper.constant_to_list(pre_node)
+        if pre_node is not None and pre_node.op_type != 'Constant':
+            continue
+        elif pre_node is not None:
+            _, target_shape = helper.constant_to_list(pre_node)
+        else:
+            pre_initializer = helper.find_initializer_by_name(g, node.input[0])
+            if pre_initializer is None:
+                continue
+            target_shape = helper.initializer_to_numpy(pre_initializer)
 
-        value = helper.get_attribute_by_name(node, 'value').i
+        # Get value to fill
+        value_attr = helper.get_attribute_by_name(node, 'value')
+        if value_attr is None:
+            value = [0.0]
+        else:
+            value = helper.initializer_to_numpy(value_attr.t)
 
         node_name = node.output[0]
-        new_node = helper.list_to_constant(
-            node_name, [target_shape[0]], [value] * target_shape[0])
-
+        new_node = helper.numpy_to_constant(node_name, np.full(target_shape, value[0]))
         g.node.extend([new_node])
 
         # remove old node
         node_to_remove.append(node)
 
         # delete value_info
-        val_info_used = sum([input_value.name in node.input for node in g.node])
-        if val_info_used == 1:
-            g.value_info.remove(input_value)
+        modhelper.delete_value_with_name_if_exists(g, node.input[0])
 
     replaced = True if len(node_to_remove) > 0 else False
 
@@ -1347,6 +1349,10 @@ def replace_Expand_with_Reshape(g):
         # Find Gather node
         if node.op_type != 'Expand':
             continue
+        # Check node input[1]
+        input_shape_node = helper.find_node_by_output_name(g, node.input[1])
+        if input_shape_node is None or input_shape_node.op_type != 'Constant':
+            continue
         # Get the output shape and Construct the shape
         output_value = helper.find_value_by_name(g, node.output[0])
         if output_value is None:
@@ -1372,6 +1378,8 @@ def replace_Expand_with_Reshape(g):
             input_total_count *= i
         if input_total_count != output_total_count:
             continue
+        # Construct new constant node
+        new_shape = helper.list_to_constant(node.input[1], [len(output_shape)], output_shape)
         # Construct new reshape node.
         new_node = onnx.helper.make_node(
             "Reshape",
@@ -1379,8 +1387,9 @@ def replace_Expand_with_Reshape(g):
             node.output,
             name=node.name
         )
-        g.node.extend([new_node])
+        g.node.extend([new_shape, new_node])
         node_to_remove.append(node)
+        node_to_remove.append(input_shape_node)
     # Remove old nodes
     for node in node_to_remove:
         g.node.remove(node)
