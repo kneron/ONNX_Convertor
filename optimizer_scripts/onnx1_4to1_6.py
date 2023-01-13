@@ -3,8 +3,7 @@
 import sys
 import onnx
 import onnx.utils
-import numpy as np
-from onnx import numpy_helper
+import logging
 from tools import other, helper, replacing
 
 """
@@ -150,16 +149,18 @@ def onnx1_4to1_6(model: onnx.ModelProto) -> onnx.ModelProto:
     """
     graph = model.graph
 
-    if model.opset_import[0].version == 11:
-        helper.logger.error("(Stop) the input model is already opset 11, no need to upgrade")
+    if model.opset_import[0].version >= 11:
+        helper.logger.error("(Stop) the input model opset is greater than 11, no need to upgrade")
         exit(1)
 
+    helper.logger.info("Adding required information for the model.")
     # deal with empty node name issue
     other.add_name_to_node(graph)
     # simplify the node param type from initializer to constant
     replacing.replace_initializer_with_Constant(graph)
 
     # Modify the nodes.
+    helper.logger.info("Modifying nodes according to the opset change.")
     replace_min_max_attribute_to_const_node_in_clip_node(graph)
     replace_all_attribute_to_const_node_in_slice_node(graph)
     replace_all_attribute_to_const_node_in_pad_node(graph)
@@ -167,13 +168,17 @@ def onnx1_4to1_6(model: onnx.ModelProto) -> onnx.ModelProto:
     other.topological_sort(graph)
 
     # Change model properties.
+    helper.logger.info("Changing model meta data.")
     model.ir_version = 6
     model.opset_import[0].version = 11
 
+    while len(graph.value_info) > 0:
+        graph.value_info.pop()
     model = onnx.utils.polish_model(model)
     return model
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     if len(sys.argv) != 3:
         print("Usage:{} file_in file_out".format(sys.argv[0]))
         exit(1)
