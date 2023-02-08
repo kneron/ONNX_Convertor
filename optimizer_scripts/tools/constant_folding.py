@@ -373,7 +373,8 @@ def concat_constant_folding(g, node):
 
     while node_to_del:
         node = node_to_del.pop()
-        g.node.remove(node)
+        if node in g.node:
+            g.node.remove(node)
 
     return True
 
