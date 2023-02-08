@@ -11,8 +11,9 @@ def expand_lstm_like_nodes(m):
     node_to_remove = []
     for node in g.node:
         if node.op_type == "LSTM":
-            expand_LSTM_node(g, node)
-            node_to_remove.append(node)
+            expand_sucess = expand_LSTM_node(g, node)
+            if expand_sucess:
+                node_to_remove.append(node)
         elif node.op_type == "GRU":
             expand_GRU_node(g, node)
             node_to_remove.append(node)
@@ -216,9 +217,15 @@ def expand_LSTM_node(g, node):
         helper.logger.error(f"Cannot expand LSTM node {node.name}: cannot find input value_info {input_x}.")
         exit(1)
     input_x_shape = helper.get_shape_from_value_info(input_x_value_info)
+    if len(input_x_shape) is 0:
+        helper.logger.error(f"Cannot expand LSTM node {node.name}: input value_info {input_x} shape not found.")
+        return False
     seq_length = input_x_shape[0]
     batch_size = input_x_shape[1]
     input_size = input_x_shape[2]
+    if seq_length is 0 or batch_size is 0 or input_size is 0:
+        helper.logger.error(f"Cannot expand LSTM node {node.name}: input shape {input_x} is invalid.")
+        return False
     # Get info from input_sequence_lens. It should be a constant
     if input_sequence_lens == '':
         sequence_lens = [seq_length] * batch_size
@@ -489,6 +496,8 @@ def expand_LSTM_node(g, node):
         helper.logger.error(f"Cannot expand LSTM node {node.name}: invalid direction {direction}.")
         exit(1)
     g.node.extend(new_nodes)
+
+    return True
 
 
 def make_LSTM_block(x_t, w_iofc, r_iofc, b_iofc, h_pre, c_pre, p_iof, y_h, y_c, hidden_size, batch_size):

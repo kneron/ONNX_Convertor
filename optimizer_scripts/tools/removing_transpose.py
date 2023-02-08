@@ -219,7 +219,7 @@ def split_transpose_for_multiple_next_nodes(g):
       continue
     for i in range(len(output_nodes)):
       output_node = output_nodes[i]
-      new_trans_node_name = node.name + '_' + str(i)
+      new_trans_node_name = node.name + '_kn' + str(i)
       new_trans_node = onnx.helper.make_node(
         'Transpose',
         [node.input[0]],

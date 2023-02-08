@@ -166,7 +166,8 @@ def replace_Unsqueeze_with_Reshape(g):
         if output_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
         if output_value is None:
-            helper.logger.warn("Cannot get shape for Unsqueeze")
+            helper.logger.warn("Cannot get shape for Unsqueeze " + node.name )
+            continue
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
         if len(shape) == 0:
             g.value_info.remove(output_value)
@@ -686,7 +687,8 @@ def replace_mul_to_bn(g):
         )
 
         scale_val_info = helper.find_value_by_name(g, mul_value_node.output[0])
-        g.value_info.remove(scale_val_info)
+        if scale_val_info in g.value_info:
+            g.value_info.remove(scale_val_info)
 
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])
@@ -767,7 +769,8 @@ def replace_div_to_bn(g):
         )
 
         scale_val_info = helper.find_value_by_name(g, div_value_node.output[0])
-        g.value_info.remove(scale_val_info)
+        if scale_val_info in g.value_info:
+            g.value_info.remove(scale_val_info)
 
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])
@@ -848,7 +851,8 @@ def replace_add_to_bn(g):
         )
 
         add_val_info = helper.find_value_by_name(g, add_value_node.output[0])
-        g.value_info.remove(add_val_info)
+        if add_val_info in g.value_info:
+            g.value_info.remove(add_val_info)
 
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])
@@ -1111,7 +1115,7 @@ def replace_constant_input_concat_with_pad(g):
                 mode = 'left'
                 constant_value = helper.constant_to_numpy(input_1st_node)
                 real_input_name = node.input[1]
-                value = constant_value.flatten()[0]
+                value = constant_value.flatten()[0].item()
                 # Check if the values are all the same.
                 if np.any(constant_value - value):
                     continue
@@ -1119,7 +1123,7 @@ def replace_constant_input_concat_with_pad(g):
                 mode = 'right'
                 constant_value = helper.constant_to_numpy(input_2nd_node)
                 real_input_name = node.input[0]
-                value = constant_value.flatten()[0]
+                value = constant_value.flatten()[0].item()
                 # Check if the values are all the same.
                 if np.any(constant_value - value):
                     continue
@@ -1138,7 +1142,7 @@ def replace_constant_input_concat_with_pad(g):
             real_input_name = node.input[1]
             input_1st_value = helper.constant_to_numpy(input_1st_node)
             input_3rd_value = helper.constant_to_numpy(input_3rd_node)
-            value = input_1st_value.flatten()[0]
+            value = input_1st_value.flatten()[0].item()
             # Check if all the values are all the same
             if np.any(input_1st_value - value):
                 continue
@@ -1149,6 +1153,8 @@ def replace_constant_input_concat_with_pad(g):
             continue
         # Make weight nodes
         input_value_info = helper.find_value_by_name(g, real_input_name)
+        if input_value_info is None:
+            continue
         input_shape = helper.get_shape_from_value_info(input_value_info)
         pads = [0] * (len(input_shape) * 2)
         axis = helper.get_var_attribute_by_name(node, 'axis', 'int')
@@ -1213,8 +1219,8 @@ def replace_Gather_with_Reshape(g):
         if output_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
         if output_value is None:
-            helper.logger.error(f"Cannot get shape for Gather: {node.name}")
-            exit(1)
+            helper.logger.warn(f"Cannot get shape for Gather: {node.name}")
+            continue
         shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
         # Get the axis attribute
         axis = helper.get_var_attribute_by_name(node, 'axis', 'int')
