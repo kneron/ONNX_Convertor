@@ -198,7 +198,6 @@ def check_operator_type(g):
         "RandomNormal",
         "RandomUniform",
         "RandomUniformLike",
-        "Reciprocal",
         "ReduceL1",
         "ReduceL2",
         "ReduceProd",
