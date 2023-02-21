@@ -1216,6 +1216,11 @@ def fuse_Mul_ReduceSum_into_MatMul(g):
                 perm_a[i] = j
                 perm_b[i] = j
         else:
+            # Each side should have only one 1.
+            if input_a_shape[different_axes[0]] == input_a_shape[different_axes[1]]:
+                continue
+            if input_b_shape[different_axes[0]] == input_b_shape[different_axes[1]]:
+                continue
             # Transpose into [1, a, x] * [1, x, b]
             if input_a_shape[different_axes[0]] != 1:
                 perm_a[-2] = different_axes[0]
