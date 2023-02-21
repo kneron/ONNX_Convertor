@@ -1301,9 +1301,8 @@ def fuse_Mul_ReduceSum_into_MatMul(g):
             new_nodes.append(squeeze_node)
         # Clean
         g.node.extend(new_nodes)
-        mul_value_info = helper.find_value_by_name(g, mul_node.output[0])
-        if mul_value_info is not None:
-            g.value_info.remove(mul_value_info)
+        delete_value_with_name_if_exists(g, mul_node.output[0])
+        delete_value_with_name_if_exists(g, reduce_sum_node.output[0])
         node_to_del.append(mul_node)
         node_to_del.append(reduce_sum_node)
 

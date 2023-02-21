@@ -70,7 +70,6 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     other.topological_sort(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
     fusing.fuse_Mul_ReduceSum_into_MatMul(model_proto.graph)
-    other.topological_sort(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
     passes = ['extract_constant_to_initializer',
               'eliminate_nop_dropout',
