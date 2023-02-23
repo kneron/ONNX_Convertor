@@ -43,7 +43,7 @@ def eliminate_Identify_and_Dropout(g):
 def remove_useless_last_nodes(g):
     """Remove useless nodes from the tail of the graph
     """
-    USELESS = ["Reshape", "Identity", "Transpose", "Flatten", "Dropout", "Mystery", "Constant", "Squeeze", "Unsqueeze", 'Softmax']
+    USELESS = ["Reshape", "Identity", "Transpose", "Flatten", "Dropout", "Mystery", "Constant", "Squeeze", "Unsqueeze", 'Softmax', 'Expand']
     graph = Graph(g)
     todo = collections.deque()
     for node in graph.output_nodes:
@@ -68,6 +68,7 @@ def remove_useless_last_nodes(g):
                 cur_input_output_in_output = helper.find_output_by_name(g, cur_input.proto.output[0])
                 if cur_input_output is not None and cur_input_output_in_output is None:
                     g.output.extend([cur_input_output])
+        helper.logger.info(f"Removing node {cur_node.proto.name}. Please add it into postprocess.")
         node_to_remove.append(cur_node.proto)
         modhelper.delete_value_with_name_if_exists(g, cur_node.proto.output[0])
         if cur_node_output is not None:
@@ -832,3 +833,63 @@ def eliminate_reshape_transpose_pattern(g):
         # Delete both nodes
         g.node.remove(reshape_node)
         g.node.remove(transpose_node)
+
+
+def eliminate_Expand_followed_by_broadcast_nodes(g):
+    broadcast_ops = set(['Add', 'Sub', 'Mul', 'Div'])
+    for n in g.node:
+        # Check the operator type
+        if n.op_type != 'Expand':
+            continue
+        # Get the following nodes and check
+        following_nodes = helper.find_following_nodes_by_input_value_name(g, n.output[0])
+        if len(following_nodes) == 0:
+            continue
+        if helper.find_output_by_name(g, n.output[0]) is not None:
+            continue
+        not_valid = False
+        for following_node in following_nodes:
+            # Check op_type
+            if following_node.op_type not in broadcast_ops:
+                not_valid = True
+                break
+            # Check the shape difference
+            # Get output shape
+            output_value = helper.find_value_by_name(g, following_node.output[0])
+            if output_value is None:
+                output_value = helper.find_output_by_name(g, following_node.output[0])
+            if output_value is None:
+                not_valid = True
+                break
+            output_shape = helper.get_shape_from_value_info(output_value)
+            # Get other shape
+            other_input = None
+            for input_name in following_node.input:
+                if input_name != n.output[0]:
+                    other_input = input_name
+            if other_input is None:
+                not_valid = True
+                break
+            other_value = helper.find_value_by_name(g, other_input)
+            if other_value is None:
+                other_value = helper.find_input_by_name(g, other_input)
+            if other_value is None:
+                other_value = helper.find_output_by_name(g, other_input)
+            if other_value is None:
+                not_valid = True
+                break
+            other_shape = helper.get_shape_from_value_info(other_value)
+            # Compare
+            if other_shape != output_shape:
+                not_valid = True
+                break
+        if not_valid:
+            continue
+
+        # Reconnect the graph
+        for following_node in following_nodes:
+            modhelper.replace_node_input(following_node, n.output[0], n.input[0])
+        # Delete the value_info
+        modhelper.delete_value_with_name_if_exists(g, n.output[0])
+        # Delete the node
+        g.node.remove(n)

@@ -98,6 +98,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     eliminating.eliminate_Identify_and_Dropout(g)
     eliminating.eliminate_trivial_maxpool(g)
     eliminating.eliminate_no_children_input(g)
+    eliminating.eliminate_Expand_followed_by_broadcast_nodes(g)
     other.format_value_info_shape(g)
     other.topological_sort(g)
     m = other.inference_shapes_until_complete_all(m)
