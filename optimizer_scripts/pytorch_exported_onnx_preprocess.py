@@ -38,19 +38,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Optimize a Pytorch generated model for Kneron compiler")
     parser.add_argument('in_file', help='input ONNX')
     parser.add_argument('out_file', help="ouput ONNX FILE")
-    parser.add_argument('--log', default='i', type=str, help="set log level")
+    parser.add_argument('--log', default='info', type=str, help="set log level")
     parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
 
     args = parser.parse_args()
 
-    if args.log == 'w':
+    if args.log == 'warning':
         logging.basicConfig(level=logging.WARN)
-    elif args.log == 'd':
+    elif args.log == 'debug':
         logging.basicConfig(level=logging.DEBUG)
-    elif args.log == 'e':
+    elif args.log == 'error':
         logging.basicConfig(level=logging.ERROR)
+    elif args.log == 'info':
+        logging.basicConfig(level=logging.INFO)
     else:
+        print(f"Invalid log level: {args.log}")
         logging.basicConfig(level=logging.INFO)
 
     if len(args.in_file) <= 4:

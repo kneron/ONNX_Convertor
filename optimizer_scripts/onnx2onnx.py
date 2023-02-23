@@ -92,7 +92,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Optimize an ONNX model for Kneron compiler")
     parser.add_argument('in_file', help='input ONNX FILE')
     parser.add_argument('-o', '--output', dest='out_file', type=str, help="ouput ONNX FILE")
-    parser.add_argument('--log', default='i', type=str, help="set log level")
+    parser.add_argument('--log', default='info', type=str, help="set log level")
     parser.add_argument('--bgr', action='store_true', default=False, help="set if the model is trained in BGR mode")
     parser.add_argument('--norm', action='store_true', default=False, help="set if you have the input -0.5~0.5")
     parser.add_argument('--rgba2yynn', action='store_true', default=False, help="set if the model has yynn input but you want to take rgba images")
@@ -117,15 +117,17 @@ if __name__ == "__main__":
     else:
         outfile = args.out_file
 
-    if args.log == 'w':
+    if args.log == 'warning':
         logging.basicConfig(level=logging.WARN)
-    elif args.log == 'd':
+    elif args.log == 'debug':
         logging.basicConfig(level=logging.DEBUG)
-    elif args.log == 'e':
+    elif args.log == 'error':
         logging.basicConfig(level=logging.ERROR)
-    else:
+    elif args.log == 'info':
         logging.basicConfig(level=logging.INFO)
-
+    else:
+        print(f"Invalid log level: {args.log}")
+        logging.basicConfig(level=logging.INFO)
     # onnx Polish model includes:
     #    -- nop
     #    -- eliminate_identity
