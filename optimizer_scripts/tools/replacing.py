@@ -449,6 +449,7 @@ def replace_ConstantOfShape_with_constant(g):
                 continue
             target_shape = helper.initializer_to_numpy(pre_initializer)
 
+        helper.logger.debug(f"Replacing ConstantOfShape {node.name} to Constant.")
         # Get value to fill
         value_attr = helper.get_attribute_by_name(node, 'value')
         if value_attr is None:

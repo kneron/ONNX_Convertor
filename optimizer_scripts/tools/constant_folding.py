@@ -1,7 +1,6 @@
 import onnx.utils
 import onnx
 import numpy as np
-import logging
 import traceback
 
 from . import helper, modhelper
@@ -49,12 +48,12 @@ def constant_folding(g):
                     continue
                 # Constant folding for the specific node
                 if constant_folding_nodes[node.op_type](g, node):
-                    logging.debug("Constant nodes and %s %s are folded.",
+                    logger.debug("Constant nodes and %s %s are folded.",
                                   node.op_type, node.name)
                     folded = True
                     keep_folding = True
                 else:
-                    logging.debug(
+                    logger.debug(
                         "Constant nodes and %s %s are skipped.", node.op_type, node.name)
     except Exception as e:
         logger.error("An exception is raised while constant folding.")
@@ -96,7 +95,7 @@ def duplicate_constant_node(g):
 
         # Duplicate the node needed by foldable nodes
         for i in range(len(foldable_output_nodes)):
-            logging.debug("Found constant %s and %s %s are availble for folding. Duplicate constant.",
+            logger.debug("Found constant %s and %s %s are availble for folding. Duplicate constant.",
                           node.name, foldable_output_nodes[i].op_type, foldable_output_nodes[i].name)
             output_name = node.output[0] + '_dup_' + str(i)
             new_constant_node = onnx.helper.make_node(

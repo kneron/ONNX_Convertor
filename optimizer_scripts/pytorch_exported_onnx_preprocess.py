@@ -1,18 +1,10 @@
 import onnx
 import onnx.utils
-from onnx import optimizer
-import sys
-import numpy as np
-import struct
 import logging
 import argparse
 
-from tools import eliminating
-from tools import fusing
-from tools import replacing
 from tools import other
 from tools import combo
-from tools import special
 
 # Define general pytorch exported onnx optimize process
 def torch_exported_onnx_flow(m: onnx.ModelProto, disable_fuse_bn=False) -> onnx.ModelProto:
