@@ -41,6 +41,8 @@ if __name__ == "__main__":
     parser.add_argument('--log', default='info', type=str, help="set log level")
     parser.add_argument('--no-bn-fusion', dest='disable_fuse_bn', action='store_true', default=False,
                         help="set if you have met errors which related to inferenced shape mismatch. This option will prevent fusing BatchNormailization into Conv.")
+    parser.add_argument('--input', dest='input_change', type=str, nargs='+', help="change input shape (e.g. --input 'input_0 1 3 224 224')")
+    parser.add_argument('--output', dest='output_change', type=str, nargs='+', help="change output shape (e.g. --output 'input_0 1 3 224 224')")
 
     args = parser.parse_args()
 
@@ -74,6 +76,12 @@ if __name__ == "__main__":
     ######################################
 
     m = onnx.load(onnx_in)
+
+    # Change input and output shapes as requested
+    if args.input_change is not None:
+        other.change_input_shape(m.graph, args.input_change)
+    if args.output_change is not None:
+        other.change_output_shape(m.graph, args.output_change)
 
     m = torch_exported_onnx_flow(m, args.disable_fuse_bn)
 
