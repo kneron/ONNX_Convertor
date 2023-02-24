@@ -1216,6 +1216,11 @@ def fuse_Mul_ReduceSum_into_MatMul(g):
                 perm_a[i] = j
                 perm_b[i] = j
         else:
+            # Each side should have only one 1.
+            if input_a_shape[different_axes[0]] == input_a_shape[different_axes[1]]:
+                continue
+            if input_b_shape[different_axes[0]] == input_b_shape[different_axes[1]]:
+                continue
             # Transpose into [1, a, x] * [1, x, b]
             if input_a_shape[different_axes[0]] != 1:
                 perm_a[-2] = different_axes[0]
@@ -1301,9 +1306,8 @@ def fuse_Mul_ReduceSum_into_MatMul(g):
             new_nodes.append(squeeze_node)
         # Clean
         g.node.extend(new_nodes)
-        mul_value_info = helper.find_value_by_name(g, mul_node.output[0])
-        if mul_value_info is not None:
-            g.value_info.remove(mul_value_info)
+        delete_value_with_name_if_exists(g, mul_node.output[0])
+        delete_value_with_name_if_exists(g, reduce_sum_node.output[0])
         node_to_del.append(mul_node)
         node_to_del.append(reduce_sum_node)
 
