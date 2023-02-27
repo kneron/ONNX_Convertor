@@ -3,6 +3,7 @@ import numpy as np
 from . import helper
 from .other import topological_sort
 from .modhelper import delete_value_with_name_if_exists, replace_node_input
+from .fusing import fuse_branched_Transpose
 
 def defuse_Einsum(g):
     """
@@ -215,3 +216,44 @@ def defuse_div_with_reciprocal_and_mul(g):
         g.node.remove(node)
     # Topological sort
     topological_sort(g)
+
+
+def defuse_Conv3D(g):
+    """
+    Defuse Conv3D with special kernel into Conv2D.
+
+    Args:
+        g (GraphProto): the graph to process
+    """
+    node_to_remove = []
+    for node in g.node:
+        # Find Conv3D node
+        if node.op_type != 'Conv':
+            continue
+        input_shape = helper.get_shape_from_value_name(g, node.input[0])
+        if input_shape is None or len(input_shape) != 5:
+            continue
+        weight_shape = helper.get_shape_from_value_name(g, node.input[1])
+        if weight_shape is None:
+            continue
+        elif weight_shape[3] == 1 and weight_shape[4] == 1:
+            node_to_remove.extend(defuse_Conv3D_to_Conv2D_kernel_k_1_1(g, node, input_shape))
+        elif weight_shape[2] == 1:
+            node_to_remove.extend(defuse_Conv3D_to_Conv2D_kernel_1_a_b(g, node, input_shape))
+        else:
+            continue
+    for node in node_to_remove:
+        g.node.remove(node)
+    # Topological sort
+    topological_sort(g)
+    fuse_branched_Transpose(g)
+
+
+def defuse_Conv3D_to_Conv2D_kernel_1_a_b(g, n, input_shape):
+    return []
+
+
+def defuse_Conv3D_to_Conv2D_kernel_k_1_1(g, n, input_shape):
+    # Create Reshape before
+    # Create Reshape after
+    return []
