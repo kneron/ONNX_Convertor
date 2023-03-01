@@ -170,12 +170,11 @@ def slice_constant_folding_Opset_10(g, node):
             ends.insert(i, pre_data.shape[i])
             steps.insert(i, 1)
 
-    new_data = None
+    new_data = pre_data
     for idx, _ in enumerate(axes):
-        new_data = np.apply_along_axis( lambda x: x[starts[idx] : ends[idx] : steps[idx]], idx, pre_data )
+        new_data = np.apply_along_axis(lambda x: x[starts[idx] : ends[idx] : steps[idx]], idx, new_data)
 
-    new_node = helper.list_to_constant(node.output[0], helper.get_shape(
-        new_data), helper.flatten_to_list(new_data))
+    new_node = helper.numpy_to_constant(node.output[0], new_data)
     g.node.extend([new_node])
     modhelper.delete_value_with_name_if_exists(g, pre_node.output[0])
     g.node.remove(node)
@@ -829,40 +828,25 @@ def sub_constant_folding(g, node):
     node_to_del = []
     pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
     pre_node_2 = helper.find_node_by_output_name(g, node.input[1])
-    pre_val_info_1 = helper.find_value_by_name(g, node.input[0])
-    pre_val_info_2 = helper.find_value_by_name(g, node.input[1])
-
     shape1, data1 = helper.constant_to_list(pre_node_1)
     shape2, data2 = helper.constant_to_list(pre_node_2)
+    data1_np = np.reshape(data1, shape1)
+    data2_np = np.reshape(data2, shape2)
 
-    new_data = np.subtract(data1, data2)
+    new_data = np.subtract(data1_np, data2_np)
     # Special shape for single element.
     if shape1 == 1 and shape2 == 1:
         new_shape = []
     else:
         new_shape = new_data.shape
 
-    new_tensor = onnx.helper.make_tensor(
-        name=node.output[0]+'_data',
-        data_type=pre_node_1.attribute[0].t.data_type,
-        dims=new_shape,
-        vals=helper.flatten_to_list(new_data)
-    )
-    new_node = onnx.helper.make_node(
-        'Constant',
-        [],
-        [node.output[0]],
-        name=node.output[0],
-        value=new_tensor
-    )
+    new_node = helper.list_to_constant(node.output[0], new_shape, helper.flatten_to_list(new_data))
 
     g.node.extend([new_node])
     node_to_del.extend([node, pre_node_1, pre_node_2])
 
-    if pre_val_info_1 is not None:
-        g.value_info.remove(pre_val_info_1)
-    if pre_val_info_2 is not None:
-        g.value_info.remove(pre_val_info_2)
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
 
     while node_to_del:
         node = node_to_del.pop()
@@ -1183,6 +1167,33 @@ def pow_constant_folding(g, node):
     return True
 
 
+def nonzero_constant_folding(g, node):
+    """ Fold constant and Nonzero nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node = helper.find_node_by_output_name(g, node.input[0])
+
+    shape, data = helper.constant_to_list(pre_node)
+    if not isinstance(shape, list):
+        helper.logger.warning("Do not support scalar nonzero constant folding.")
+        return False
+    np_data = np.reshape(data, shape)
+
+    result = np.array(np.nonzero(np_data))
+    new_node = helper.numpy_to_constant(node.output[0], result)
+
+    node_to_del.extend([node, pre_node])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
 # Available constant folding names to function map.
 constant_folding_nodes = {
     'Add': add_constant_folding,
@@ -1197,6 +1208,7 @@ constant_folding_nodes = {
     'Less': Less_constant_folding,
     'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
+    'NonZero': nonzero_constant_folding,
     'Pow': pow_constant_folding,
     'Range': range_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
