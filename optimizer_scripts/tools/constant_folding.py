@@ -2,6 +2,7 @@ import onnx.utils
 import onnx
 import numpy as np
 import traceback
+import struct
 
 from . import helper, modhelper
 from .other import topological_sort
@@ -222,6 +223,13 @@ def cast_constant_folding(g, node):
         data = list(map(float, data))
         data_type = onnx.helper.TensorProto.FLOAT
         helper.logger.warning(f"{node.name}(Cast): Data type float64 is not supported. Try treating it as float.")
+    elif data_type == onnx.helper.TensorProto.BOOL:
+        data = list(map((lambda x: x != 0), data))
+        raw_data = b''
+        for b in data:
+            raw_data += struct.pack('?', b)
+        data = raw_data
+        data_type = onnx.helper.TensorProto.BOOL
     else:
         helper.logger.error(f'{node.name}(Cast): Data type {data_type} not supported')
         raise RuntimeError()
@@ -232,6 +240,14 @@ def cast_constant_folding(g, node):
             data_type=data_type,
             dims=[],
             vals=data
+        )
+    elif data_type == onnx.helper.TensorProto.BOOL:
+        tensor = onnx.helper.make_tensor(
+            name=pre_node.attribute[0].name,
+            data_type=data_type,
+            dims=shape,
+            vals=data,
+            raw=True
         )
     else:
         tensor = onnx.helper.make_tensor(

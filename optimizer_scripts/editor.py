@@ -28,9 +28,9 @@ args = parser.parse_args()
 
 # Load model and polish
 m = onnx.load(args.in_file)
+replacing.replace_initializer_with_Constant(m.graph)
 m = onnx.utils.polish_model(m)
 g = m.graph
-replacing.replace_initializer_with_Constant(g)
 other.topological_sort(g)
 
 # Remove nodes according to the given arguments.
