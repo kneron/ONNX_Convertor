@@ -176,6 +176,7 @@ def pytorch_constant_folding(m):
 
         m = other.inference_shapes(m)
         replacing.replace_shape_with_constant(m.graph)
+        replacing.replace_ConstantOfShape_with_constant(m.graph)
     other.topological_sort(m.graph)
     m = other.inference_shapes(m)
     m = torch_pattern_match(m)

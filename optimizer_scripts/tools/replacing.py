@@ -449,6 +449,7 @@ def replace_ConstantOfShape_with_constant(g):
                 continue
             target_shape = helper.initializer_to_numpy(pre_initializer)
 
+        helper.logger.debug(f"Replacing ConstantOfShape {node.name} to Constant.")
         # Get value to fill
         value_attr = helper.get_attribute_by_name(node, 'value')
         if value_attr is None:
@@ -1324,7 +1325,8 @@ def replace_Gather_with_Slice(g):
         # Get the shape and Construct the shape
         constant_input = helper.find_node_by_output_name(g, node.input[1])
         if constant_input.op_type != 'Constant':
-            exit(1)
+            logging.warning(f"Unsupported Gather: {node.name}")
+            continue
         _, constant_value = helper.constant_to_list(constant_input)
         constant_value = constant_value[0]
         starts_node = helper.list_to_constant(node.name + "_starts", [1], [constant_value])

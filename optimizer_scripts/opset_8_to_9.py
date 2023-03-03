@@ -2,12 +2,13 @@
 
 import sys
 import onnx
+import onnx.helper
 import numpy as np
 from tools import other, helper
 from tools.modhelper import delete_value_with_name_if_exists
 
 """
-Change onnx model from version 1.3 to version 1.4. 
+Change onnx model from version 1.3 to version 1.4.
 Modify the BN node by removing the spatial attribute
 Modify the Upsample node by removing the 'scales' attribute, and adding a constant node instead.
 Model's ir_version and opset_import are updated.
@@ -96,39 +97,54 @@ def PRelu_weight_reshape(g):
             g.input.append(new_input)
         delete_value_with_name_if_exists(g, node.input[1])
 
-def do_convert(m):
-    graph = m.graph
-    
+
+def convert_opset_8_to_9(model: onnx.ModelProto) -> onnx.ModelProto:
+    """Update opset from 8 to 9.
+
+    Args:
+        model (onnx.ModelProto): input onnx model.
+
+    Returns:
+        onnx.ModelProto: updated onnx model.
+    """
+    # Check opset
+    helper.logger.info("Checking and changing model meta data.")
+    if len(model.opset_import) == 0:
+        helper.logger.warning("Updating a model with no opset. Please make sure the model is using opset 8.")
+        opset = onnx.helper.make_opsetid('', 9)
+        model.opset.append(opset)
+    else:
+        for opset in model.opset_import:
+            if len(opset.domain) != 0:
+                continue
+            elif opset.version == 8:
+                opset.version = 9
+                break
+            elif opset.version >= 9:
+                helper.logger.error(f"Converting opset {opset.version} to opset 9. No need to convert.")
+                return None
+            else:
+                helper.logger.warn(f"Converting opset {opset.version} to opset 9. Only opset 8 is supported.")
+                opset.version = 9
+                break
+
     # Modify the nodes.
+    helper.logger.info("Modifying nodes according to the opset change.")
+    graph = model.graph
     remove_BN_spatial(graph)
     upsample_attribute_to_const(graph)
     relu6_to_clip(graph)
     PRelu_weight_reshape(graph)
     other.topological_sort(graph)
 
-    # Change model properties.
-    m.ir_version = 4
-    m.opset_import[0].version = 9
-    return m
+    return model
 
 if __name__ == "__main__":
-    print("***This script is deprecated. Please use `opset_8_to_9.py` instead.***")
     if len(sys.argv) != 3:
         print("Usage:{} file_in file_out".format(sys.argv[0]))
         exit(1)
 
     model = onnx.load(sys.argv[1])
-    graph = model.graph
+    new_model = convert_opset_8_to_9(model)
 
-    # Modify the nodes.
-    remove_BN_spatial(graph)
-    upsample_attribute_to_const(graph)
-    relu6_to_clip(graph)
-    PRelu_weight_reshape(graph)
-    other.topological_sort(graph)
-
-    # Change model properties.
-    model.ir_version = 4
-    model.opset_import[0].version = 9
-
-    onnx.save(model, sys.argv[2])
+    onnx.save(new_model, sys.argv[2])

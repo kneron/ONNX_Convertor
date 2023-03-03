@@ -198,6 +198,18 @@ def initializer_to_numpy(tensor):
             data = list(tensor.double_data)
         else:
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.INT8:
+        logger.warning(f"Data type INT8 from {tensor.name} is not fully supported. Treating it as INT32.")
+        if len(tensor.int32_data) != 0:
+            data = list(tensor.int32_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('b', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.UINT8:
+        logger.warning(f"Data type UINT8 from {tensor.name} is not supported. Treating it as INT32.")
+        if len(tensor.int32_data) != 0:
+            data = list(tensor.int32_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('B', tensor.raw_data)]
     else:
         logger.warn("Not supported data type {} from initializer {}".format(tensor.data_type, tensor.name))
         raise RuntimeError
@@ -228,10 +240,17 @@ def constant_to_list(node):
         else:
             data = [i[0] for i in struct.iter_unpack('q', tensor.raw_data)]
     elif tensor.data_type == onnx.helper.TensorProto.INT8:
+        logger.warning(f"Data type INT8 from {node.name} is not fully supported. Treating it as INT32.")
         if len(tensor.int32_data) != 0:
             data = list(tensor.int32_data)
         else:
             data = [i[0] for i in struct.iter_unpack('b', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.UINT8:
+        logger.warning(f"Data type UINT8 from {node.name} is not fully supported. Treating it as INT32.")
+        if len(tensor.int32_data) != 0:
+            data = list(tensor.int32_data)
+        else:
+            data = [i[0] for i in struct.iter_unpack('B', tensor.raw_data)]
     elif tensor.data_type == onnx.helper.TensorProto.FLOAT:
         if len(tensor.float_data) != 0:
             data = list(tensor.float_data)
