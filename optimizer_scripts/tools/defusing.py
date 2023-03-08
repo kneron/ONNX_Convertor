@@ -1,9 +1,8 @@
 import onnx
+import onnx.helper
 import numpy as np
-from . import helper
+from . import helper, modhelper
 from .other import topological_sort
-from .modhelper import delete_value_with_name_if_exists, replace_node_input
-from .fusing import fuse_branched_Transpose
 
 def defuse_Einsum(g):
     """
@@ -246,14 +245,99 @@ def defuse_Conv3D(g):
         g.node.remove(node)
     # Topological sort
     topological_sort(g)
-    fuse_branched_Transpose(g)
 
 
 def defuse_Conv3D_to_Conv2D_kernel_1_a_b(g, n, input_shape):
+    new_nodes = []
+    # Check Conv attribute
+    dilations = helper.get_list_attribute_by_name(n, 'dilations', 'int')
     return []
 
 
 def defuse_Conv3D_to_Conv2D_kernel_k_1_1(g, n, input_shape):
+    output_shape = helper.get_shape_from_value_name(g, n.output[0])
+    if output_shape is None:
+        return []
+    new_nodes = []
+    # Check Conv attribute
+    dilations = helper.get_list_attribute_by_name(n, 'dilations', 'int')
+    if dilations is not None and dilations[1:] != [1, 1]:
+        return []
+    elif dilations is None:
+        new_dilations = [1, 1]
+    else:
+        new_dilations = dilations[:1]
+    pads = helper.get_list_attribute_by_name(n, 'pads', 'int')
+    if pads is not None and (pads[1:3] != [0, 0] or pads[-2:] != [0, 0]):
+        return []
+    elif pads is None:
+        new_pads = [0, 0, 0, 0]
+    else:
+        new_pads = [pads[0], 0, pads[3], 0]
+    strides = helper.get_list_attribute_by_name(n, 'strides', 'int')
+    if strides is not None and strides[1:] != [1, 1]:
+        return []
+    elif strides is None:
+        new_strides = [1, 1]
+    else:
+        new_strides = [strides[0], 1]
+    group = helper.get_var_attribute_by_name(n, 'group', 'int')
+    if group is None:
+        group = 1
     # Create Reshape before
+    new_input_shape = input_shape[:-2] + [input_shape[-2] * input_shape[-1]]
+    new_shape_constant = helper.list_to_constant(
+        n.name + '_prev_reshape_shape',
+        [4],
+        new_input_shape
+    )
+    reshape_prev = onnx.helper.make_node(
+        'Reshape',
+        [n.input[0], new_shape_constant.name],
+        [n.name + '_prev_reshape'],
+        name=n.name + '_prev_reshape'
+    )
+    new_nodes.append(new_shape_constant)
+    new_nodes.append(reshape_prev)
+    # Create new Conv
+    original_weight_node = helper.find_node_by_output_name(g, n.input[1])
+    weight_shape, weight_value = helper.constant_to_list(original_weight_node)
+    new_weight_node = helper.list_to_constant(
+        n.input[1] + '_reshaped',
+        weight_shape[:-1],
+        weight_value
+    )
+    new_inputs = [reshape_prev.output[0], new_weight_node.output[0]]
+    if len(n.input) > 2:
+        new_inputs.append(n.input[2])
+    new_conv_node = onnx.helper.make_node(
+        'Conv',
+        new_inputs,
+        [n.name + '_2d_conv'],
+        name=n.name + '_2d_conv',
+        dilations=new_dilations,
+        pads=new_pads,
+        strides=new_strides,
+        group=group,
+        kernel_shape=weight_shape[2:-1]
+    )
+    new_nodes.append(new_weight_node)
+    new_nodes.append(new_conv_node)
     # Create Reshape after
-    return []
+    new_shape_constant = helper.list_to_constant(
+        n.name + '_post_reshape_shape',
+        [5],
+        output_shape
+    )
+    reshape_post = onnx.helper.make_node(
+        'Reshape',
+        [new_conv_node.output[0], new_shape_constant.name],
+        [n.output[0]],
+        name=n.name + '_post_reshape'
+    )
+    new_nodes.append(new_shape_constant)
+    new_nodes.append(reshape_post)
+    # Modify the graph
+    g.node.extend(new_nodes)
+    modhelper.delete_value_with_name_if_exists(g, n.input[1])
+    return [original_weight_node, n]

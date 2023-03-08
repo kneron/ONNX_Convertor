@@ -51,7 +51,7 @@ def remove_not_connected_nodes(g):
     # Remove nodes that are not reachable by input node.
     other.topological_sort(g)
 
-def extract_model(model_in, inputs, outputs):
+def extract_model(model_in, inputs=None, outputs=None):
     """Extract the subgraph to a model.
 
     Args:
@@ -64,16 +64,18 @@ def extract_model(model_in, inputs, outputs):
     """
     # Create new input and outputs
     g = model_in.graph
-    while len(g.input) > 0:
-        g.input.pop()
-    while len(g.output) > 0:
-        g.output.pop()
-    for input in inputs:
-        input_value = create_value_info(input[0], input[1], input[2])
-        g.input.append(input_value)
-    for output in outputs:
-        output_value = create_value_info(output[0], output[1], output[2])
-        g.output.append(output_value)
+    if inputs is not None:
+        while len(g.input) > 0:
+            g.input.pop()
+        for input in inputs:
+            input_value = create_value_info(input[0], input[1], input[2])
+            g.input.append(input_value)
+    if outputs is not None:
+        while len(g.output) > 0:
+            g.output.pop()
+        for output in outputs:
+            output_value = create_value_info(output[0], output[1], output[2])
+            g.output.append(output_value)
     # Remove not connected nodes
     remove_not_connected_nodes(g)
     # Remove value_infos
