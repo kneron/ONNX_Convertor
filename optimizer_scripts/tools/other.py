@@ -1349,3 +1349,34 @@ def reorder_Conv_Reshape_Add(g):
             modhelper.replace_node_input(child_node, add_node.output[0], reshape_node.output[0])
         # Remove Add
         g.node.remove(add_node)
+
+def swap_reshape_and_following_node(g, reshape_node):
+    passable_nodes = set(['Relu', 'Neg', 'LeakyRelu', 'Sqrt', 'Reciprocal', 'Tanh', 'Selu'])
+    following_nodes = helper.find_following_nodes_by_input_value_name(g, reshape_node.output[0])
+    if len(following_nodes) != 1:
+        return False
+    if following_nodes[0].op_type not in passable_nodes:
+        return False
+    modhelper.delete_value_with_name_if_exists(g, reshape_node.output[0])
+    following_node = following_nodes[0]
+    new_output = following_node.output[0]
+    modhelper.replace_node_input(following_node, reshape_node.output[0], reshape_node.input[0])
+    following_node.output[0] = new_output + '_moved'
+    reshape_node.input[0] = new_output + '_moved'
+    reshape_node.output[0] = new_output
+    return True
+
+def move_4D_to_5D_Reshape(g):
+    for reshape_node in g.node:
+        # Find a reshape
+        if reshape_node.op_type != 'Reshape':
+            continue
+        prev_shape = helper.get_shape_from_value_name(g, reshape_node.input[0])
+        post_shape = helper.get_shape_from_value_name(g, reshape_node.output[0])
+        if prev_shape is None or post_shape is None:
+            continue
+        if len(prev_shape) != 4 or len(post_shape) != 5:
+            continue
+        while True:
+            if not swap_reshape_and_following_node(g, reshape_node):
+                break
