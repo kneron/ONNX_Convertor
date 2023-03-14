@@ -687,9 +687,7 @@ def replace_mul_to_bn(g):
             epsilon=0.00000001
         )
 
-        scale_val_info = helper.find_value_by_name(g, mul_value_node.output[0])
-        if scale_val_info in g.value_info:
-            g.value_info.remove(scale_val_info)
+        modhelper.delete_value_with_name_if_exists(g, mul_value_node.output[0])
 
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])
@@ -769,9 +767,7 @@ def replace_div_to_bn(g):
             epsilon=0.00000001
         )
 
-        scale_val_info = helper.find_value_by_name(g, div_value_node.output[0])
-        if scale_val_info in g.value_info:
-            g.value_info.remove(scale_val_info)
+        modhelper.delete_value_with_name_if_exists(g, div_value_node.output[0])
 
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])
@@ -851,9 +847,7 @@ def replace_add_to_bn(g):
             epsilon=0.00000001
         )
 
-        add_val_info = helper.find_value_by_name(g, add_value_node.output[0])
-        if add_val_info in g.value_info:
-            g.value_info.remove(add_val_info)
+        modhelper.delete_value_with_name_if_exists(g, add_value_node.output[0])
 
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])
@@ -950,8 +944,7 @@ def replace_sub_to_bn(g):
             epsilon=0.00000001
         )
 
-        add_val_info = helper.find_value_by_name(g, constant_node.output[0])
-        g.value_info.remove(add_val_info)
+        modhelper.delete_value_with_name_if_exists(g, constant_node.output[0])
 
         g.node.extend([bn_node])
         g.node.extend([mean_value_node])

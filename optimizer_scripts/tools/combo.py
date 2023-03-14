@@ -66,9 +66,10 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     other.convert_opset12_constants(model_proto.graph)
     defusing.defuse_Einsum(model_proto.graph)
     defusing.defuse_ReduceSum(model_proto.graph)
+    defusing.defuse_Conv3D(model_proto.graph)
     replacing.replace_initializer_with_Constant(model_proto.graph)
     other.topological_sort(model_proto.graph)
-    m = onnx.utils.polish_model(model_proto)
+    model_proto = onnx.utils.polish_model(model_proto)
     fusing.fuse_Mul_ReduceSum_into_MatMul(model_proto.graph)
     m = onnx.utils.polish_model(model_proto)
     passes = ['extract_constant_to_initializer',
@@ -258,6 +259,7 @@ def postprocess(m):
     removing_transpose.fuse_Transpose_into_Gemm_weight(m.graph)
 
     # removing reshapes
+    other.move_4D_to_5D_Reshape(m.graph)
     eliminating.eliminate_consecutive_reshape_like_nodes(m.graph)
     eliminating.eliminate_nop_reshape(m.graph)
     eliminating.eliminate_nop_flatten(m.graph)
