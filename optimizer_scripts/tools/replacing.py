@@ -1320,7 +1320,11 @@ def replace_Gather_with_Slice(g):
         if constant_input.op_type != 'Constant':
             logging.warning(f"Unsupported Gather: {node.name}")
             continue
-        _, constant_value = helper.constant_to_list(constant_input)
+        shape, constant_value = helper.constant_to_list(constant_input)
+        if isinstance(shape, int):
+            continue
+        elif len(shape)> 1 or shape[0] ==1:
+            continue
         constant_value = constant_value[0]
         starts_node = helper.list_to_constant(node.name + "_starts", [1], [constant_value])
         ends_node = helper.list_to_constant(node.name + "_ends", [1], [constant_value + 1])

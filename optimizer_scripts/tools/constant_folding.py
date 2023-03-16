@@ -1210,7 +1210,7 @@ def nonzero_constant_folding(g, node):
     return True
 
 def equal_constant_folding(g, node):
-    """ Fold constant and mul nodes to a single constant node.
+    """ Fold constant and equal nodes to a single constant node.
     """
     node_to_del = []
     pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
@@ -1224,7 +1224,7 @@ def equal_constant_folding(g, node):
     try:
         new_data = np.equal(np_data1, np_data2)
     except:
-        helper.logger.error(f"{node.name}(Pow): Cannot broadcast and power two data sets.")
+        helper.logger.error(f"{node.name}(Equal): Cannot broadcast and equal two data sets.")
         raise RuntimeError()
 
     # Special shape for single element.
@@ -1261,7 +1261,7 @@ def equal_constant_folding(g, node):
 
 
 def where_constant_folding(g, node):
-    """ Fold constant and mul nodes to a single constant node.
+    """ Fold constant and where nodes to a single constant node.
     """
     node_to_del = []
     pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
@@ -1281,7 +1281,7 @@ def where_constant_folding(g, node):
     try:
         new_data = np.where(np_data1, np_data2, np_data3)
     except:
-        helper.logger.error(f"{node.name}(Pow): Cannot broadcast and power two data sets.")
+        helper.logger.error(f"{node.name}(Where): Cannot broadcast and where two data sets.")
         raise RuntimeError()
 
     # Special shape for single element.
@@ -1318,6 +1318,41 @@ def where_constant_folding(g, node):
 
     return True
 
+
+
+
+def relu_constant_folding(g, node):
+    """ Fold constant and Relu nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node = helper.find_node_by_output_name(g, node.input[0])
+
+    shape, data = helper.constant_to_list(pre_node)
+
+    if not isinstance(shape, list):
+        helper.logger.warning("Do not support scalar nonzero constant folding.")
+        return False
+    np_data = np.reshape(data, shape)
+
+    try:
+        result = np.maximum(0, np_data)
+    except:
+        helper.logger.error(f"{node.name}(Equal): Cannot broadcast and equal two data sets.")
+        raise RuntimeError()
+
+    new_node = helper.numpy_to_constant(node.output[0], result)
+
+    node_to_del.extend([node, pre_node])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
 # Available constant folding names to function map.
 constant_folding_nodes = {
     'Add': add_constant_folding,
@@ -1338,6 +1373,7 @@ constant_folding_nodes = {
     'Range': range_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
     'ReduceProd': reduceprod_constant_folding,
+    'Relu': relu_constant_folding,
     'Reshape': reshape_constant_input_folding,
     'Slice': slice_constant_folding,
     'Sqrt': sqrt_constant_folding,
