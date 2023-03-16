@@ -1209,6 +1209,114 @@ def nonzero_constant_folding(g, node):
 
     return True
 
+def equal_constant_folding(g, node):
+    """ Fold constant and mul nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
+    pre_node_2 = helper.find_node_by_output_name(g, node.input[1])
+
+    shape1, data1 = helper.constant_to_list(pre_node_1)
+    shape2, data2 = helper.constant_to_list(pre_node_2)
+    np_data1 = np.reshape(data1, shape1)
+    np_data2 = np.reshape(data2, shape2)
+
+    try:
+        new_data = np.equal(np_data1, np_data2)
+    except:
+        helper.logger.error(f"{node.name}(Pow): Cannot broadcast and power two data sets.")
+        raise RuntimeError()
+
+    # Special shape for single element.
+    if shape1 == 1 and shape2 == 1:
+        new_shape = []
+    else:
+        new_shape = new_data.shape
+
+    new_tensor = onnx.helper.make_tensor(
+        name=node.output[0]+'_data',
+        data_type=pre_node_1.attribute[0].t.data_type,
+        dims=new_shape,
+        vals=new_data.flatten().tolist()
+    )
+    new_node = onnx.helper.make_node(
+        'Constant',
+        [],
+        [node.output[0]],
+        name=node.output[0],
+        value=new_tensor
+    )
+
+    node_to_del.extend([node, pre_node_1, pre_node_2])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
+def where_constant_folding(g, node):
+    """ Fold constant and mul nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
+    pre_node_2 = helper.find_node_by_output_name(g, node.input[1])
+    pre_node_3 = helper.find_node_by_output_name(g, node.input[2])
+
+
+    shape1, data1 = helper.constant_to_list(pre_node_1)
+    shape2, data2 = helper.constant_to_list(pre_node_2)
+    shape3, data3 = helper.constant_to_list(pre_node_3)
+
+    np_data1 = np.reshape(data1, shape1)
+    np_data2 = np.reshape(data2, shape2)
+    np_data3 = np.reshape(data3, shape3)
+
+
+    try:
+        new_data = np.where(np_data1, np_data2, np_data3)
+    except:
+        helper.logger.error(f"{node.name}(Pow): Cannot broadcast and power two data sets.")
+        raise RuntimeError()
+
+    # Special shape for single element.
+    if shape1 == 1 and shape2 == 1:
+        new_shape = []
+    else:
+        new_shape = new_data.shape
+
+    new_tensor = onnx.helper.make_tensor(
+        name=node.output[0]+'_data',
+        data_type=pre_node_1.attribute[0].t.data_type,
+        dims=new_shape,
+        vals=new_data.flatten().tolist()
+    )
+    new_node = onnx.helper.make_node(
+        'Constant',
+        [],
+        [node.output[0]],
+        name=node.output[0],
+        value=new_tensor
+    )
+
+    node_to_del.extend([node, pre_node_1, pre_node_2])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
+    modhelper.delete_value_with_name_if_exists(g, node.input[2])
+
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
 
 # Available constant folding names to function map.
 constant_folding_nodes = {
@@ -1218,6 +1326,7 @@ constant_folding_nodes = {
     'Concat': concat_constant_folding,
     'DequantizeLinear': DequantizeLinear_constant_folding,
     'Div': div_constant_folding,
+    'Equal': equal_constant_folding,
     'Expand': expand_constant_folding,
     'Floor': floor_constant_folding,
     'Gather': gather_constant_folding,
@@ -1235,6 +1344,7 @@ constant_folding_nodes = {
     'Squeeze': squeeze_constant_folding,
     'Transpose': transpose_constant_folding,
     'Unsqueeze': unsqueeze_constant_folding,
+    'Where': where_constant_folding,
     'Sub': sub_constant_folding,
     'Neg': neg_constant_folding
 }
