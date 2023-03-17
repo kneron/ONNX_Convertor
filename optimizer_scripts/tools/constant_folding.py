@@ -573,10 +573,14 @@ def add_constant_folding(g, node):
         new_data = np.add(np_data1, np_data2)
     except:
         raise RuntimeError('can\'t broadcast and add two data sets')
-
+        # Special shape for single element.
+    if shape1 == 1 and shape2 == 1:
+        new_shape = []
+    else:
+        new_shape = new_data.shape
     new_node = helper.list_to_constant(
         node.output[0],
-        new_data.shape,
+        new_shape,
         new_data.flatten().tolist(),
         data_type=pre_node_1.attribute[0].t.data_type
     )
@@ -877,11 +881,14 @@ def neg_constant_folding(g, node):
 
     shape, data_list = helper.constant_to_list(pre_node)
     new_data_list = [-num for num in data_list]
-
+    if shape == 1:
+        new_shape = []
+    else:
+        new_shape = shape
     new_tensor = onnx.helper.make_tensor(
         name=pre_node.name+'_neg_tensor',
         data_type=pre_node.attribute[0].t.data_type,
-        dims=shape,
+        dims=new_shape,
         vals=new_data_list
     )
     new_node = onnx.helper.make_node(
@@ -1317,8 +1324,6 @@ def where_constant_folding(g, node):
         g.node.remove(node)
 
     return True
-
-
 
 
 def relu_constant_folding(g, node):

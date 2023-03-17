@@ -1323,7 +1323,7 @@ def replace_Gather_with_Slice(g):
         shape, constant_value = helper.constant_to_list(constant_input)
         if isinstance(shape, int):
             continue
-        elif len(shape)> 1 or shape[0] ==1:
+        elif len(shape)> 1 or shape[0] !=1:
             continue
         constant_value = constant_value[0]
         starts_node = helper.list_to_constant(node.name + "_starts", [1], [constant_value])
