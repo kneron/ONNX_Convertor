@@ -1317,7 +1317,7 @@ def replace_Gather_with_Slice(g):
             continue
         # Get the shape and Construct the shape
         constant_input = helper.find_node_by_output_name(g, node.input[1])
-        if constant_input.op_type != 'Constant':
+        if constant_input is None or constant_input.op_type != 'Constant':
             logging.warning(f"Unsupported Gather: {node.name}")
             continue
         shape, constant_value = helper.constant_to_list(constant_input)

@@ -1358,6 +1358,41 @@ def relu_constant_folding(g, node):
 
     return True
 
+def reducemax_constant_folding(g, node):
+    """ Fold constant and ReduceMax nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node = helper.find_node_by_output_name(g, node.input[0])
+    shape, data = helper.constant_to_list(pre_node)
+    np_data = np.reshape(data, shape)
+    axes = None
+    for att in node.attribute:
+        if att.name == 'axes':
+            axes = list(att.ints)
+        else:
+            keepdims = int(att.i)
+
+    try:
+        result = np.maximum.reduce(np_data, axis=axes, keepdims=keepdims == 1)
+    except:
+        helper.logger.error(f"{node.name}(reducemax)): Cannot broadcast and reducemax data sets.")
+        raise RuntimeError()
+
+    new_node = helper.numpy_to_constant(node.output[0], result)
+
+    node_to_del.extend([node, pre_node])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
+
 # Available constant folding names to function map.
 constant_folding_nodes = {
     'Add': add_constant_folding,
@@ -1378,6 +1413,7 @@ constant_folding_nodes = {
     'Range': range_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
     'ReduceProd': reduceprod_constant_folding,
+    'ReduceMax': reducemax_constant_folding,
     'Relu': relu_constant_folding,
     'Reshape': reshape_constant_input_folding,
     'Slice': slice_constant_folding,
