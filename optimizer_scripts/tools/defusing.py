@@ -20,7 +20,6 @@ def defuse_Einsum(g):
             exit(1)
         equation = helper.get_var_attribute_by_name(node, 'equation', 'string')
         equation_list = equation.split('->')
-        # print(equation_list)
         inputs = equation_list[0].split(',')
         if len(equation_list) != 2:
             helper.logger.error(f"Currently do not support classical Einsum node: {node.name}")
@@ -28,16 +27,12 @@ def defuse_Einsum(g):
         if '...' in equation_list[0]:
             helper.logger.error(f"Currently do not support Einsum node with broadcasting: {node.name}")
             exit(1)
-        # print(node)
         if len(inputs) == 2:
             new_nodes = defuse_Einsum_2_inputs(inputs[0], inputs[1], equation_list[1],
                                                 node.input[0], node.input[1], node.output[0])
             g.node.extend(new_nodes)
             node_to_remove.append(node)
         else:
-            # print("abnormal inputs")
-            # print(inputs)
-            # print(equation_list)
             new_nodes = defuse_Einsum_2_inputs(inputs[0], inputs[1], equation_list[1],
                                                 node.input[0], node.input[1], node.output[0] + '_defuse_phase_0')
             g.node.extend(new_nodes)
@@ -45,7 +40,6 @@ def defuse_Einsum(g):
                                                 node.output[0] + '_defuse_phase_0', node.input[2], node.output[0])
             g.node.extend(new_nodes)
             node_to_remove.append(node)
-        # print(new_nodes)
 
     for node in node_to_remove:
         g.node.remove(node)
@@ -85,7 +79,7 @@ def defuse_Einsum_2_inputs(input_a_str, input_b_str, output_str, input_a_name, i
             input_b_str_list.insert(index_prev_b + 1, '#')
             break
     
-    # Gxpand inputs and outputs
+    # Expand inputs and outputs
     for i in full_str_list:
         if i not in input_a_str_list:
             index_of_i_in_full = full_str_list.index(i)

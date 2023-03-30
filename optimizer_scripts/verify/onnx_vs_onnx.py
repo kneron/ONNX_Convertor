@@ -30,8 +30,6 @@ def onnx_model_results(path_a, path_b, total_times=10):
         out_shape_a, out_shape_b = outputs_a[i].shape, outputs_b[i].shape
         out_shape_a = list(map(lambda x: x if type(x) == type(1) else 1, out_shape_a))
         out_shape_b = list(map(lambda x: x if type(x) == type(1) else 1, out_shape_b))
-        # print(out_shape_a)
-        # print(out_shape_b)
         assert out_shape_a == out_shape_b, 'Output {} has unmatched shapes'.format(i)
 
 
@@ -106,7 +104,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    results_a, results_b = onnx_model_results(args.in_file_a, args.in_file_b, total_times=2)
+    results_a, results_b = onnx_model_results(args.in_file_a, args.in_file_b, total_times=10)
     ra_flat = helper.flatten_with_depth(results_a, 0)
     rb_flat = helper.flatten_with_depth(results_b, 0)
     shape_a = [item[1] for item in ra_flat]

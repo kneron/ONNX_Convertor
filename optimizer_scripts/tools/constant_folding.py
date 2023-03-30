@@ -174,9 +174,8 @@ def slice_constant_folding_Opset_10(g, node):
     new_data = pre_data
     for idx, _ in enumerate(axes):
         new_data = np.apply_along_axis(lambda x: x[starts[idx] : ends[idx] : steps[idx]], idx, new_data)
+
     new_node = helper.numpy_to_constant(node.output[0], new_data)
-    if (node.name=="Slice_4"):
-        print(new_node)
     g.node.extend([new_node])
     modhelper.delete_value_with_name_if_exists(g, pre_node.output[0])
     g.node.remove(node)
@@ -362,8 +361,6 @@ def concat_constant_folding(g, node):
     for input_name in node.input:
         input_node = helper.find_node_by_output_name(g, input_name)
         s, d = helper.constant_to_list(input_node)
-        # if node.name == "Concat_10":
-        #     print(d)
         if len(d) == 0:
             continue
         d = np.reshape(d, s)
@@ -373,18 +370,10 @@ def concat_constant_folding(g, node):
 
     concat_data = np.concatenate(input_data, axis=node.attribute[0].i)
     node_data_type = input_node.attribute[0].t.data_type
-    # if node.name=="Concat_10":
-    #     print(node.input)
-    #     print(input_data)
-    #     print(concat_data.dtype)
-    #     print(np.int32, np.int64)
-    #     print(np.float32, np.float64)
     if concat_data.dtype in [np.int32, np.int64]:
         node_data_type = onnx.helper.TensorProto.INT64
     elif concat_data.dtype in [np.float32, np.float64]:
         node_data_type = onnx.helper.TensorProto.FLOAT
-
-    # node_data_type = onnx.helper.TensorProto.INT64
 
     new_node = helper.list_to_constant(
         node.output[0],
@@ -393,9 +382,6 @@ def concat_constant_folding(g, node):
         data_type=node_data_type
     )
     g.node.extend([new_node])
-    # if (node.name=="Concat_10"):
-    #     print(node)
-    #     print(new_node)
     node_to_del.append(node)
 
     for input_name in node.input:

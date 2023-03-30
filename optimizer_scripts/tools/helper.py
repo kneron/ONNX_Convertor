@@ -268,8 +268,6 @@ def constant_to_list(node):
     else:
         logger.warn("Not supported data type {} from node {}".format(tensor.data_type, node.name))
         raise RuntimeError
-    if (node.name=="onnx::Concat_444"):
-        print(node)
     if len(tensor.dims) == 0:
         shape = len(data)
     else:
