@@ -20,6 +20,7 @@ def defuse_Einsum(g):
             exit(1)
         equation = helper.get_var_attribute_by_name(node, 'equation', 'string')
         equation_list = equation.split('->')
+        # print(equation_list)
         inputs = equation_list[0].split(',')
         if len(equation_list) != 2:
             helper.logger.error(f"Currently do not support classical Einsum node: {node.name}")
@@ -27,12 +28,16 @@ def defuse_Einsum(g):
         if '...' in equation_list[0]:
             helper.logger.error(f"Currently do not support Einsum node with broadcasting: {node.name}")
             exit(1)
+        # print(node)
         if len(inputs) == 2:
             new_nodes = defuse_Einsum_2_inputs(inputs[0], inputs[1], equation_list[1],
                                                 node.input[0], node.input[1], node.output[0])
             g.node.extend(new_nodes)
             node_to_remove.append(node)
         else:
+            # print("abnormal inputs")
+            # print(inputs)
+            # print(equation_list)
             new_nodes = defuse_Einsum_2_inputs(inputs[0], inputs[1], equation_list[1],
                                                 node.input[0], node.input[1], node.output[0] + '_defuse_phase_0')
             g.node.extend(new_nodes)
@@ -40,6 +45,7 @@ def defuse_Einsum(g):
                                                 node.output[0] + '_defuse_phase_0', node.input[2], node.output[0])
             g.node.extend(new_nodes)
             node_to_remove.append(node)
+        # print(new_nodes)
 
     for node in node_to_remove:
         g.node.remove(node)
@@ -48,53 +54,112 @@ def defuse_Einsum(g):
 def defuse_Einsum_2_inputs(input_a_str, input_b_str, output_str, input_a_name, input_b_name, output_name):
     # For 2 inputs Einsum, do matching.
     new_nodes = []
-    output_str_list = list(output_str)
-    input_a_str_list = list(input_a_str)
-    input_b_str_list = list(input_b_str)
+    
+    # output_str_list = list(output_str)
+    # input_a_str_list = list(input_a_str)
+    # input_b_str_list = list(input_b_str)
+    output_str_list = output_str.split()
+    input_a_str_list = input_a_str.split()
+    input_b_str_list = input_b_str.split()
+
+    print("original shapes!")
+    print("A:", input_a_str_list)
+    print("B:", input_b_str_list)
+    print("C:", output_str_list)
+
     # Find the index to sum on
     sum_letters = []
-    for i in input_a_str:
-        if i in input_b_str and i not in output_str:
-            sum_letters.append(i)
-            index_of_i_in_a = input_a_str.index(i)
-            index_of_i_in_b = input_b_str.index(i)
-            if index_of_i_in_a == 0 and index_of_i_in_b ==0:
-                output_str_list.insert(0, '*')
-            elif index_of_i_in_a == 0:
-                output_str_list.insert(index_of_i_in_b, '*')
-            elif index_of_i_in_b == 0:
-                output_str_list.insert(index_of_i_in_a, '*')
-            else:
-                prev_char_in_a = input_a_str[index_of_i_in_a - 1]
-                prev_char_in_b = input_b_str[index_of_i_in_b - 1]
-                index_prev_a = output_str.index(prev_char_in_a)
-                index_prev_b = output_str.index(prev_char_in_b)
-                output_str_list.insert(max(index_prev_a, index_prev_b) + 1, '*')
-    # Expand inputs
-    for i in range(len(output_str_list)):
-        i_o = output_str_list[i]
-        # A
-        if i >= len(input_a_str_list):
-            input_a_str_list.append('#')
-        elif i_o == input_a_str_list[i]:
-            # Matched
-            pass
-        elif i_o == '*' and input_a_str_list[i] in sum_letters:
-            # Matched
-            pass
-        else:
-            input_a_str_list.insert(i, '#')
-        # B
-        if i >= len(input_b_str_list):
-            input_b_str_list.append('#')
-        elif i_o == input_b_str_list[i]:
-            # Matched
-            pass
-        elif i_o == '*' and input_b_str_list[i] in sum_letters:
-            # Matched
-            pass
-        else:
-            input_b_str_list.insert(i, '#')
+    # for i in input_a_str_list:
+    #     if i in input_a_str_list and i not in output_str_list:
+    #         print("*:'"+i+"'")
+    #         sum_letters.append(i)
+    #         index_of_i_in_a = input_a_str_list.index(i)
+    #         index_of_i_in_b = input_b_str_list.index(i)
+    #         print(index_of_i_in_a, index_of_i_in_b)
+
+    #         if index_of_i_in_a == 0 and index_of_i_in_b ==0:
+    #             output_str_list.insert(0, '*')
+    #         elif index_of_i_in_a == 0:
+    #             output_str_list.insert(index_of_i_in_b, '*')
+    #         elif index_of_i_in_b == 0:
+    #             output_str_list.insert(index_of_i_in_a, '*')
+    #         else:
+    #             prev_char_in_a = input_a_str_list[index_of_i_in_a - 1]
+    #             prev_char_in_b = input_b_str_list[index_of_i_in_b - 1]
+    #             print(prev_char_in_a, prev_char_in_b)
+    #             index_prev_a = output_str.index(prev_char_in_a)
+    #             index_prev_b = output_str.index(prev_char_in_b)
+    #             print(prev_char_in_a, prev_char_in_b)
+    #             print(index_prev_a, index_prev_b)
+    #             output_str_list.insert(max(index_prev_a, index_prev_b) + 1, '*')
+    full_str_list = list(input_b_str_list)
+    # Get full ranks of the equation
+    for i in input_a_str_list:
+        if i in input_a_str_list and i not in input_b_str_list:
+            print("*:'"+i+"'")
+            index_of_i_in_a = input_a_str_list.index(i)
+            prev_char_in_a = input_a_str_list[index_of_i_in_a - 1]
+            print(index_of_i_in_a, prev_char_in_a)
+            index_prev_b = input_b_str_list.index(prev_char_in_a)
+            full_str_list.insert(index_prev_b + 1, i)
+            input_b_str_list.insert(index_prev_b + 1, '#')
+            break
+    print("full:", full_str_list)
+    # Gxpand inputs and outputs
+    for i in full_str_list:
+        if i not in input_a_str_list:
+            index_of_i_in_full = full_str_list.index(i)
+            input_a_str_list.insert(index_of_i_in_full, '#')
+        if i not in output_str_list:
+            index_of_i_in_full = full_str_list.index(i)
+            output_str_list.insert(index_of_i_in_full, '*')
+    
+    # # Expand inputs
+    # for i in range(len(output_str_list)):
+    #     i_o = output_str_list[i]
+    #     # A
+    #     if i >= len(input_a_str_list):
+    #         input_a_str_list.append('#')
+    #     elif i_o == input_a_str_list[i]:
+    #         # Matched
+    #         pass
+    #     elif i_o == '*' and input_a_str_list[i] in sum_letters:
+    #         # Matched
+    #         pass
+    #     else:
+    #         input_a_str_list.insert(i, '#')
+    #     # B
+    #     if i >= len(input_b_str_list):
+    #         input_b_str_list.append('#')
+    #     elif i_o == input_b_str_list[i]:
+    #         # Matched
+    #         pass
+    #     elif i_o == '*' and input_b_str_list[i] in sum_letters:
+    #         # Matched
+    #         pass
+    #     else:
+    #         input_b_str_list.insert(i, '#')
+    
+    # new_input_a_str_list = []
+    # new_input_b_str_list = []
+    # for i in range(len(output_str_list)):
+    #     i_o = output_str_list[i]
+    #     # A
+    #     if i_o in input_a_str_list:
+    #         new_input_a_str_list.append(i_o)
+    #     else:
+    #         new_input_a_str_list.append('#')
+    #     # B
+    #     if i_o in new_input_b_str_list:
+    #         new_input_b_str_list.append(i_o)
+    #     else:
+    #         new_input_b_str_list.append('#')
+
+    print("modified shapes!")
+    print("A:", input_a_str_list)
+    print("B:", input_b_str_list)
+    print("C:", output_str_list)
+
     # Create Unsqueeze Node if needed
     if '#' in input_a_str_list:
         unsqueeze_a_name = input_a_name + '_unsqueezed'
