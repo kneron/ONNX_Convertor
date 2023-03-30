@@ -167,7 +167,11 @@ def scalar_to_constant(name, data, data_type=None):
 
 
 def numpy_to_constant(name, np_array):
-    return list_to_constant(name, np_array.shape, np_array.flatten().tolist())
+    if np_array.dtype in [np.int32, np.int64]:
+        data_type = onnx.helper.TensorProto.INT64
+    else:
+        data_type = None
+    return list_to_constant(name, np_array.shape, np_array.flatten().tolist(), data_type=data_type)
 
 def initializer_to_numpy(tensor):
     """Generate a list from the initializer
@@ -264,6 +268,8 @@ def constant_to_list(node):
     else:
         logger.warn("Not supported data type {} from node {}".format(tensor.data_type, node.name))
         raise RuntimeError
+    if (node.name=="onnx::Concat_444"):
+        print(node)
     if len(tensor.dims) == 0:
         shape = len(data)
     else:
