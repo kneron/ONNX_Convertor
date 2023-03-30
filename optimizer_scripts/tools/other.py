@@ -359,6 +359,8 @@ def inference_shapes(m):
             inferencing_shapes = True
         if inference_add_sub_mul_div_shape(g):
             inferencing_shapes = True
+        if inference_pad_shape(g):
+            inferencing_shapes = True
         if inferencing_shapes:
             topological_sort(g)
             m = infer_shapes(m)
@@ -367,6 +369,34 @@ def inference_shapes(m):
     m = infer_shapes(m)
     eliminating.eliminate_empty_value_infos(m.graph)
     return m
+
+def inference_pad_shape(g):
+    for node in g.node:
+        if node.op_type != 'Pad':
+            continue
+
+        output_value = helper.find_value_by_name(g, node.output[0])
+        output_value = helper.find_output_by_name(g, node.output[0]) if output_value is None else output_value
+        if output_value is not None:
+            continue
+
+        if len(node.input) == 3: # input: data, pads, constant_value
+            pads_node = helper.find_node_by_output_name(g, node.input[1])
+            data_shape =  helper.get_shape_from_value_name(g, node.input[0])
+            _, pads_value = helper.constant_to_list(pads_node)
+            shape_value = []
+            ndim = len(data_shape)
+            for idx, axis_shape in enumerate(data_shape):
+                ns = axis_shape + pads_value[idx] + pads_value[idx+ndim]
+                shape_value.append(ns)
+            output_value = onnx.helper.make_tensor_value_info(
+                    node.output[0],
+                    onnx.TensorProto.FLOAT,
+                    [int(v) for v in shape_value])
+            g.value_info.extend([output_value])
+            return True
+
+    return False
 
 
 def inference_resize_shape(g):

@@ -573,10 +573,14 @@ def add_constant_folding(g, node):
         new_data = np.add(np_data1, np_data2)
     except:
         raise RuntimeError('can\'t broadcast and add two data sets')
-
+        # Special shape for single element.
+    if shape1 == 1 and shape2 == 1:
+        new_shape = []
+    else:
+        new_shape = new_data.shape
     new_node = helper.list_to_constant(
         node.output[0],
-        new_data.shape,
+        new_shape,
         new_data.flatten().tolist(),
         data_type=pre_node_1.attribute[0].t.data_type
     )
@@ -877,11 +881,14 @@ def neg_constant_folding(g, node):
 
     shape, data_list = helper.constant_to_list(pre_node)
     new_data_list = [-num for num in data_list]
-
+    if shape == 1:
+        new_shape = []
+    else:
+        new_shape = shape
     new_tensor = onnx.helper.make_tensor(
         name=pre_node.name+'_neg_tensor',
         data_type=pre_node.attribute[0].t.data_type,
-        dims=shape,
+        dims=new_shape,
         vals=new_data_list
     )
     new_node = onnx.helper.make_node(
@@ -1209,6 +1216,182 @@ def nonzero_constant_folding(g, node):
 
     return True
 
+def equal_constant_folding(g, node):
+    """ Fold constant and equal nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
+    pre_node_2 = helper.find_node_by_output_name(g, node.input[1])
+
+    shape1, data1 = helper.constant_to_list(pre_node_1)
+    shape2, data2 = helper.constant_to_list(pre_node_2)
+    np_data1 = np.reshape(data1, shape1)
+    np_data2 = np.reshape(data2, shape2)
+
+    try:
+        new_data = np.equal(np_data1, np_data2)
+    except:
+        helper.logger.error(f"{node.name}(Equal): Cannot broadcast and equal two data sets.")
+        raise RuntimeError()
+
+    # Special shape for single element.
+    if shape1 == 1 and shape2 == 1:
+        new_shape = []
+    else:
+        new_shape = new_data.shape
+
+    new_tensor = onnx.helper.make_tensor(
+        name=node.output[0]+'_data',
+        data_type=pre_node_1.attribute[0].t.data_type,
+        dims=new_shape,
+        vals=new_data.flatten().tolist()
+    )
+    new_node = onnx.helper.make_node(
+        'Constant',
+        [],
+        [node.output[0]],
+        name=node.output[0],
+        value=new_tensor
+    )
+
+    node_to_del.extend([node, pre_node_1, pre_node_2])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
+def where_constant_folding(g, node):
+    """ Fold constant and where nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node_1 = helper.find_node_by_output_name(g, node.input[0])
+    pre_node_2 = helper.find_node_by_output_name(g, node.input[1])
+    pre_node_3 = helper.find_node_by_output_name(g, node.input[2])
+
+
+    shape1, data1 = helper.constant_to_list(pre_node_1)
+    shape2, data2 = helper.constant_to_list(pre_node_2)
+    shape3, data3 = helper.constant_to_list(pre_node_3)
+
+    np_data1 = np.reshape(data1, shape1)
+    np_data2 = np.reshape(data2, shape2)
+    np_data3 = np.reshape(data3, shape3)
+
+
+    try:
+        new_data = np.where(np_data1, np_data2, np_data3)
+    except:
+        helper.logger.error(f"{node.name}(Where): Cannot broadcast and where two data sets.")
+        raise RuntimeError()
+
+    # Special shape for single element.
+    if shape1 == 1 and shape2 == 1:
+        new_shape = []
+    else:
+        new_shape = new_data.shape
+
+    new_tensor = onnx.helper.make_tensor(
+        name=node.output[0]+'_data',
+        data_type=pre_node_1.attribute[0].t.data_type,
+        dims=new_shape,
+        vals=new_data.flatten().tolist()
+    )
+    new_node = onnx.helper.make_node(
+        'Constant',
+        [],
+        [node.output[0]],
+        name=node.output[0],
+        value=new_tensor
+    )
+
+    node_to_del.extend([node, pre_node_1, pre_node_2])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
+    modhelper.delete_value_with_name_if_exists(g, node.input[2])
+
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
+def relu_constant_folding(g, node):
+    """ Fold constant and Relu nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node = helper.find_node_by_output_name(g, node.input[0])
+
+    shape, data = helper.constant_to_list(pre_node)
+
+    if not isinstance(shape, list):
+        helper.logger.warning("Do not support scalar nonzero constant folding.")
+        return False
+    np_data = np.reshape(data, shape)
+
+    try:
+        result = np.maximum(0, np_data)
+    except:
+        helper.logger.error(f"{node.name}(Equal): Cannot broadcast and equal two data sets.")
+        raise RuntimeError()
+
+    new_node = helper.numpy_to_constant(node.output[0], result)
+
+    node_to_del.extend([node, pre_node])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+def reducemax_constant_folding(g, node):
+    """ Fold constant and ReduceMax nodes to a single constant node.
+    """
+    node_to_del = []
+    pre_node = helper.find_node_by_output_name(g, node.input[0])
+    shape, data = helper.constant_to_list(pre_node)
+    np_data = np.reshape(data, shape)
+    axes = None
+    for att in node.attribute:
+        if att.name == 'axes':
+            axes = list(att.ints)
+        else:
+            keepdims = int(att.i)
+
+    try:
+        result = np.maximum.reduce(np_data, axis=axes, keepdims=keepdims == 1)
+    except:
+        helper.logger.error(f"{node.name}(reducemax)): Cannot broadcast and reducemax data sets.")
+        raise RuntimeError()
+
+    new_node = helper.numpy_to_constant(node.output[0], result)
+
+    node_to_del.extend([node, pre_node])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
 
 # Available constant folding names to function map.
 constant_folding_nodes = {
@@ -1218,6 +1401,7 @@ constant_folding_nodes = {
     'Concat': concat_constant_folding,
     'DequantizeLinear': DequantizeLinear_constant_folding,
     'Div': div_constant_folding,
+    'Equal': equal_constant_folding,
     'Expand': expand_constant_folding,
     'Floor': floor_constant_folding,
     'Gather': gather_constant_folding,
@@ -1229,12 +1413,15 @@ constant_folding_nodes = {
     'Range': range_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
     'ReduceProd': reduceprod_constant_folding,
+    'ReduceMax': reducemax_constant_folding,
+    'Relu': relu_constant_folding,
     'Reshape': reshape_constant_input_folding,
     'Slice': slice_constant_folding,
     'Sqrt': sqrt_constant_folding,
     'Squeeze': squeeze_constant_folding,
     'Transpose': transpose_constant_folding,
     'Unsqueeze': unsqueeze_constant_folding,
+    'Where': where_constant_folding,
     'Sub': sub_constant_folding,
     'Neg': neg_constant_folding
 }
