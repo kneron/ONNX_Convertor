@@ -458,9 +458,10 @@ def replace_ConstantOfShape_with_constant(g):
             value = helper.initializer_to_numpy(value_attr.t)
 
         node_name = node.output[0]
+        target_shape = np.array(target_shape)
+        target_shape.dtype = np.int32
         new_node = helper.numpy_to_constant(node_name, np.full(target_shape, value[0]))
         g.node.extend([new_node])
-
         # remove old node
         node_to_remove.append(node)
 
@@ -1116,11 +1117,18 @@ def replace_constant_input_concat_with_pad(g):
             elif input_2nd_node is not None and input_2nd_node.op_type == 'Constant':
                 mode = 'right'
                 constant_value = helper.constant_to_numpy(input_2nd_node)
-                real_input_name = node.input[0]
-                value = constant_value.flatten()[0].item()
-                # Check if the values are all the same.
-                if np.any(constant_value - value):
-                    continue
+                if len(constant_value) != 0:
+                    real_input_name = node.input[0]
+                    if node.name == "Concat_31":
+                        print(input_2nd_node)
+                        print(constant_value)
+                    value = constant_value.flatten()[0].item()
+                    # Check if the values are all the same.
+                    if np.any(constant_value - value):
+                        continue
+                else:
+                    # zero length input
+                    pass
             else:
                 # No constant input case
                 continue

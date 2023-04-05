@@ -232,7 +232,8 @@ def split_transpose_for_multiple_next_nodes(g):
     
     node_to_del.append(node)
     val_info = helper.find_value_by_name(g, node.output[0])
-    g.value_info.remove(val_info)
+    if val_info:
+      g.value_info.remove(val_info)
 
     splitted = True
   
