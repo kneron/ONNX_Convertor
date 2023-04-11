@@ -483,7 +483,6 @@ def eliminate_empty_value_infos(g):
         if value_info.name in skip_values:
             continue
         if len(value_info.type.tensor_type.shape.dim) == 0:
-            print(value_info)
             to_remove.append(value_info)
         for dim in value_info.type.tensor_type.shape.dim:
             if dim.dim_value == 0:

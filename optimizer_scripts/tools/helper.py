@@ -265,7 +265,6 @@ def constant_to_list(node):
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
         logger.warn("Not supported data type {} from node {}".format(tensor.data_type, node.name))
-        print(node)
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)

@@ -402,6 +402,7 @@ def inference_pad_shape(g):
     for node in g.node:
         if node.op_type != 'Pad':
             continue
+
         output_value = helper.find_value_by_name(g, node.output[0])
         output_value = helper.find_output_by_name(g, node.output[0]) if output_value is None else output_value
         if output_value is not None:
@@ -490,13 +491,11 @@ def inference_add_sub_mul_div_shape(g):
         if input_a_shape is None:
             input_a_node = helper.find_node_by_output_name(g, node.input[0])
             input_a_init = helper.find_initializer_by_name(g, node.input[0])
-
             if input_a_node is None and input_a_init is None:
                 continue
             if input_a_node is not None and input_a_node.op_type != "Constant":
                 continue
             input_a_shape = [1]
-
         if input_b_shape is None:
             input_b_node = helper.find_node_by_output_name(g, node.input[1])
             input_b_init = helper.find_initializer_by_name(g, node.input[1])
@@ -507,12 +506,13 @@ def inference_add_sub_mul_div_shape(g):
             input_b_shape = [1]
 
         output_shape = [None] * max(len(input_a_shape), len(input_b_shape))
-        if len(input_a_shape) == 1 and len(input_a_shape) < len(output_shape):
+
+        if len(input_a_shape) == 1 and len(input_a_shape) < len(input_b_shape):
             input_a_shape = input_b_shape
         elif len(input_a_shape) < len(output_shape):
             input_a_shape = ([1] * (len(output_shape) - len(input_a_shape))) + list(input_a_shape)
 
-        if len(input_b_shape) == 1 and len(input_b_shape) < len(output_shape):
+        if len(input_b_shape) == 1 and len(input_b_shape) < len(input_a_shape):
             input_b_shape = input_a_shape
         elif len(input_b_shape) < len(output_shape):
             input_b_shape = ([1] * (len(output_shape) - len(input_b_shape))) + list(input_b_shape)
