@@ -733,8 +733,9 @@ def mul_constant_folding(g, node):
 
     pre_value_info1 = helper.find_value_by_name(g, node.input[0])
     pre_value_info2 = helper.find_value_by_name(g, node.input[1])
-    if pre_value_info1 is None or pre_value_info2 is None:
-        return False
+
+    # if pre_value_info1 is None or pre_value_info2 is None:
+    #     return False
 
     shape1, data1 = helper.constant_to_list(pre_node_1)
     shape2, data2 = helper.constant_to_list(pre_node_2)
@@ -1408,6 +1409,7 @@ constant_folding_nodes = {
     'Less': Less_constant_folding,
     'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
+    'Neg': neg_constant_folding,
     'NonZero': nonzero_constant_folding,
     'Pow': pow_constant_folding,
     'Range': range_constant_folding,
@@ -1419,9 +1421,8 @@ constant_folding_nodes = {
     'Slice': slice_constant_folding,
     'Sqrt': sqrt_constant_folding,
     'Squeeze': squeeze_constant_folding,
+    'Sub': sub_constant_folding,
     'Transpose': transpose_constant_folding,
     'Unsqueeze': unsqueeze_constant_folding,
-    'Where': where_constant_folding,
-    'Sub': sub_constant_folding,
-    'Neg': neg_constant_folding
+    'Where': where_constant_folding
 }

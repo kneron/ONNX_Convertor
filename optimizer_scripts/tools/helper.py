@@ -114,6 +114,8 @@ def list_to_constant(name, shape, data, data_type=None):
             data_type = onnx.helper.TensorProto.INT64
         elif len(data) > 0 and isinstance(data[0], np.int64):
             data_type = onnx.helper.TensorProto.INT64
+        elif len(data) > 0 and isinstance(data[0], np.int32):
+            data_type = onnx.helper.TensorProto.INT64
         else:
             data_type = onnx.helper.TensorProto.FLOAT
     tensor = onnx.helper.make_tensor(
@@ -263,6 +265,7 @@ def constant_to_list(node):
             data = [i[0] for i in struct.iter_unpack('d', tensor.raw_data)]
     else:
         logger.warn("Not supported data type {} from node {}".format(tensor.data_type, node.name))
+        print(node)
         raise RuntimeError
     if len(tensor.dims) == 0:
         shape = len(data)
