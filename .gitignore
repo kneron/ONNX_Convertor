@@ -5,4 +5,7 @@
 .clang-format
 __pycache__/
 
+# Debug usage
+create_model.py
+extract_model.py
 debug.onnx
