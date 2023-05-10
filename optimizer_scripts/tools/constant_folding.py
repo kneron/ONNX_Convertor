@@ -336,7 +336,7 @@ def reshape_constant_input_folding(g, node):
         value=new_tensor
     )
     g.node.extend([new_node])
-
+    
     modhelper.delete_value_with_name_if_exists(g, pre_data_node.output[0])
     modhelper.delete_value_with_name_if_exists(g, pre_shape_node.output[0])
 
@@ -367,7 +367,13 @@ def concat_constant_folding(g, node):
         node_to_del.append(input_node)
 
     concat_data = np.concatenate(input_data, axis=node.attribute[0].i)
+    # change data type according to node_data_type
     node_data_type = input_node.attribute[0].t.data_type
+    if node_data_type in (6, 7):
+        concat_data = np.array(list(map(int, concat_data)))
+    elif node_data_type == onnx.helper.TensorProto.FLOAT:
+        concat_data = np.array(list(map(float, concat_data)))
+
     if concat_data.dtype in [np.int32, np.int64]:
         node_data_type = onnx.helper.TensorProto.INT64
     elif concat_data.dtype in [np.float32, np.float64]:
@@ -381,7 +387,6 @@ def concat_constant_folding(g, node):
     )
     g.node.extend([new_node])
     node_to_del.append(node)
-
     for input_name in node.input:
         modhelper.delete_value_with_name_if_exists(g, input_name)
 

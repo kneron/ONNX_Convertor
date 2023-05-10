@@ -168,8 +168,8 @@ def scalar_to_constant(name, data, data_type=None):
     return new_w_node
 
 
-def numpy_to_constant(name, np_array):
-    return list_to_constant(name, np_array.shape, np_array.flatten().tolist())
+def numpy_to_constant(name, np_array, data_type=None):
+    return list_to_constant(name, np_array.shape, np_array.flatten().tolist(), data_type=data_type)
 
 def initializer_to_numpy(tensor):
     """Generate a list from the initializer

@@ -1116,7 +1116,146 @@ def fuse_slice_nodes_into_conv(g):
         # Replace node
         g.node.append(weight_node)
         g.node.append(new_conv)
+    # # define pattern checker
+    # def check_is_slice(node):
+    #     if node.op_type != 'Slice':
+    #         return False
+    #     # also check attributes
+    #     # print("input len")
+    #     if len(node.input) < 4 or len(node.input) > 5:
+    #         return False
+        
+    #     # print("input val")
+    #     input_value = helper.find_input_by_name(g, node.input[0])
+    #     if input_value == None:
+    #         return False
+    #     # starts
+    #     # print("starts type")
+    #     starts_node = helper.find_node_by_node_name(g, node.input[1])
+    #     if starts_node.op_type != 'Constant':
+    #         return False
 
+    #     # ends
+    #     # print("ends type")
+    #     ends_node = helper.find_node_by_node_name(g, node.input[2])
+    #     if ends_node.op_type != 'Constant':
+    #         return False
+        
+    #     # axes
+    #     # print("axes type")
+    #     axes_node = helper.find_node_by_node_name(g, node.input[3])
+    #     if axes_node.op_type != 'Constant':
+    #         return False
+        
+    #     # Steps
+    #     # print("steps type")
+    #     if len(node.input) == 5:
+    #         steps_node = helper.find_node_by_node_name(g, node.input[4])
+    #         if steps_node.op_type != 'Constant':
+    #             return False
+    #     return True
+    
+    # # Check pattern from each input
+    # for node in g.node:       
+    #     pattern_matched = True
+    #     if node.op_type != 'Slice':
+    #         pattern_matched = False
+    #     else:
+    #         pattern_matched = check_is_slice(node)
+    #     if not pattern_matched:
+    #         continue
+    #     # Pattern found. Check limitation
+    #     # Get basic information
+    #     input_value = helper.find_input_by_name(g, node.input[0])
+    #     input_shape = helper.get_shape_from_value_info(input_value)
+    #     # Get slice data
+    #     weight_size = np.ones(len(input_shape))
+    #     weight_size = weight_size.astype('int')
+    #     starts_node = helper.find_node_by_node_name(g, node.input[1])
+    #     ends_node = helper.find_node_by_node_name(g, node.input[2])
+    #     axes_node = helper.find_node_by_node_name(g, node.input[3])
+        
+    #     _, starts_list = helper.constant_to_list(starts_node)
+    #     _, ends_list = helper.constant_to_list(ends_node)
+    #     _, axes_list = helper.constant_to_list(axes_node)
+
+    #     if len(node.input) == 5:
+    #         steps_node = helper.find_node_by_node_name(g, node.input[4])
+    #         _, steps_list = helper.constant_to_list(steps_node)
+    #     else:
+    #         steps_list = [1]*len(starts_list)
+        
+    #     # Dict of range for every axis
+    #     idx_dict = {}
+    #     for i in range(len(input_shape)):
+    #         idx_dict[i] = [0, input_shape[i]]
+    #     stride_list = [1]*len(input_shape)
+
+    #     # Construct weight
+    #     for i, axis in enumerate(axes_list):
+    #         weight_size[axis] = int(1 + (input_shape[axis] - (ends_list[i] - starts_list[i])))
+    #         idx_dict[axis] = [starts_list[i], ends_list[i]]
+    #         stride_list[axis] = steps_list[i]
+
+    #     shape_idx = 0
+    #     while weight_size[shape_idx] == 1 and shape_idx < len(weight_size)-2:
+    #         shape_idx += 1
+    #     pads = [0]*(len(input_shape)-shape_idx)*2
+        
+    #     sub_weight = []
+    #     for i in range(len(input_shape)):
+    #         idx = len(input_shape) - i - 1
+    #         if i == 0:
+    #             add_pad = 0
+    #             if weight_size[idx] < 3:
+    #                 kernel_length = min(input_shape[-1], 3)
+    #                 if kernel_length <= 0:
+    #                     return
+    #                 add_pad = kernel_length - weight_size[idx]
+    #             sub_weight = np.zeros(weight_size[idx]+add_pad)
+    #             sub_weight[idx_dict[idx][0]] = 1
+    #             pads[-1] += add_pad       
+    #         else:
+    #             if i == 1:
+    #                 add_pad = 0
+    #                 if weight_size[idx] < 3:
+    #                     kernel_length = min(input_shape[-1], 3)
+    #                     if kernel_length <= 0:
+    #                         return
+    #                     add_pad = kernel_length - weight_size[idx]
+    #                 new_weight_shape = [weight_size[idx]+add_pad]
+    #                 pads[-2] += add_pad
+    #             else:
+    #                 new_weight_shape = [weight_size[idx]]
+    #             new_weight_shape.extend(list(sub_weight.shape))
+    #             new_sub_weight = np.zeros(new_weight_shape)
+    #             new_sub_weight[idx_dict[idx][0]] = sub_weight
+    #             sub_weight = new_sub_weight
+
+    #     kernel_shape = sub_weight.shape[shape_idx:]
+    #     stride_list = stride_list[shape_idx:]
+
+    #     if len(sub_weight.shape) == 1:
+    #         pads = pads[2:]
+
+    #     weight_node = helper.numpy_to_constant(node.name + '_weight', sub_weight)
+
+    #     # Construct Conv node
+    #     new_conv = onnx.helper.make_node(
+    #         'Conv',
+    #         [node.input[0], node.name + '_weight'],
+    #         [node.output[0]],
+    #         name = node.name + '_fused',
+    #         kernel_shape = kernel_shape,
+    #         strides = stride_list,
+    #         pads = pads
+    #     )
+
+    #     # Delete slice node
+    #     g.node.remove(node)
+    #     # Replace node 
+    #     g.node.append(weight_node)
+    #     g.node.append(new_conv)
 
 def fuse_relu_min_into_clip(g):
     node_to_del = []

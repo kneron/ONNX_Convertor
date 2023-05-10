@@ -124,14 +124,39 @@ def replace_Squeeze_with_Reshape(g):
             continue
         # Get the shape and Construct the shape
         output_value = helper.find_value_by_name(g, node.output[0])
-        if output_value is None:
+        input_value = helper.find_value_by_name(g, node.input[0])
+        if output_value is None and input_value is None:
             output_value = helper.find_output_by_name(g, node.output[0])
-        if output_value is None:
+            input_value = helper.find_input_by_name(g, node.input[0])
+        if output_value is None and input_value is None:
             logging.warn("Cannot get shape for Squeeze")
             continue
-        shape = [dim.dim_value for dim in output_value.type.tensor_type.shape.dim]
+        
+        if output_value:
+            data = output_value
+            shape = [dim.dim_value for dim in data.type.tensor_type.shape.dim]
+        else:
+            data = input_value
+            axes = list(node.attribute[0].ints)
+            axes.sort()
+            shape = [dim.dim_value for dim in data.type.tensor_type.shape.dim]
+            if len(axes) > 0:
+                for i in range(len(axes)):
+                    idx = len(axes) - i - 1
+                    if shape[axes[idx]] != 1:
+                        logging.warn("Squeeze dim not equal to one")
+                        continue
+                    shape.pop(axes[idx])
+            else:
+                new_shape = []
+                for dim in shape:
+                    if dim != 1:
+                        new_shape.append(dim)
+                shape = new_shape
+
         if len(shape) == 0:
-            g.value_info.remove(output_value)
+            if output_value:
+                g.value_info.remove(output_value)
             continue
         const_node = helper.list_to_constant(node.name + "_shape", [len(shape)], shape)
         # Construct the Reshape layer with same input, output and name.
@@ -458,9 +483,8 @@ def replace_ConstantOfShape_with_constant(g):
             value = helper.initializer_to_numpy(value_attr.t)
 
         node_name = node.output[0]
-        new_node = helper.numpy_to_constant(node_name, np.full(target_shape, value[0]))
+        new_node = helper.numpy_to_constant(node_name, np.full(target_shape, value[0]), data_type=value_attr.t.data_type)
         g.node.extend([new_node])
-
         # remove old node
         node_to_remove.append(node)
 
@@ -519,17 +543,19 @@ def replace_split_with_slices(g):
                 starts_name = new_node_name + '_starts_' + str(i)
                 ends_name = new_node_name + '_ends_' + str(i)
                 axes_name = new_node_name + '_axes_' + str(i)
+                steps_name = new_node_name + '_steps_' + str(i)
                 starts_node = helper.list_to_constant(starts_name, (1, ), [int(pos-split[i])])
                 ends_node = helper.list_to_constant(ends_name, (1, ), [int(pos)])
                 axes_node = helper.list_to_constant(axes_name, (1, ), [int(axis)])
+                steps_node = helper.list_to_constant(steps_name, (1, ), [int(1)])
                 # Construtc node
                 new_node = onnx.helper.make_node(
                     op_type='Slice',
-                    inputs=[node.input[0], starts_name, ends_name, axes_name],
+                    inputs=[node.input[0], starts_name, ends_name, axes_name, steps_name],
                     outputs=[node.output[i]],
                     name=new_node_name
                 )
-                g.node.extend([starts_node, ends_node, axes_node, new_node])
+                g.node.extend([starts_node, ends_node, axes_node, steps_node, new_node])
             node_to_remove.append(node)
         else:
             n_out = len(output_val_names)

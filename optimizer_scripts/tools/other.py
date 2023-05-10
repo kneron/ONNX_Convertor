@@ -349,12 +349,12 @@ def inference_shapes(m):
     inferencing_shapes = True
     while inferencing_shapes:
         inferencing_shapes = False
-        if inference_cov_shape(g):
-            inferencing_shapes = True
+        # if inference_cov_shape(g):
+        #     inferencing_shapes = True
         if inference_upsample_shape(g):
             inferencing_shapes = True
-        if inference_resize_shape(g):
-            inferencing_shapes = True
+        # if inference_resize_shape(g):
+        #     inferencing_shapes = True
         if inference_split_shape(g):
             inferencing_shapes = True
         if inference_add_sub_mul_div_shape(g):
