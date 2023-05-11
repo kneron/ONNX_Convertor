@@ -349,19 +349,17 @@ def inference_shapes(m):
     inferencing_shapes = True
     while inferencing_shapes:
         inferencing_shapes = False
-        # if inference_cov_shape(g):
-        #     inferencing_shapes = True
+        if inference_cov_shape(g):
+            inferencing_shapes = True
         if inference_upsample_shape(g):
             inferencing_shapes = True
-        # if inference_resize_shape(g):
-        #     inferencing_shapes = True
+        if inference_resize_shape(g):
+            inferencing_shapes = True
         if inference_split_shape(g):
             inferencing_shapes = True
         if inference_add_sub_mul_div_shape(g):
             inferencing_shapes = True
         if inference_pad_shape(g):
-            inferencing_shapes = True
-        if inference_constant_shape(g):
             inferencing_shapes = True
         if inferencing_shapes:
             topological_sort(g)
@@ -371,32 +369,6 @@ def inference_shapes(m):
     m = infer_shapes(m)
     eliminating.eliminate_empty_value_infos(m.graph)
     return m
-
-def inference_constant_shape(g):
-    value_changed = False
-
-    for node in g.node:
-        if node.op_type != 'Constant':
-            continue
-        
-        constant_value = helper.find_value_by_name(g, node.name)
-        constant_value = helper.find_output_by_name(g, node.name) if constant_value is None else constant_value
-        if constant_value is not None:
-            continue
-        
-        tensor = node.attribute[0].t
-        shape_value = []
-        for v in tensor.dims:
-            shape_value.append(int(v))
-
-        constant_value = onnx.helper.make_tensor_value_info(
-                    node.name,
-                    tensor.data_type,
-                    shape_value)
-        g.value_info.extend([constant_value])
-        value_changed =  True
-    
-    return value_changed
 
 def inference_pad_shape(g):
     for node in g.node:

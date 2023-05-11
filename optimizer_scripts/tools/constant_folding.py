@@ -336,7 +336,6 @@ def reshape_constant_input_folding(g, node):
         value=new_tensor
     )
     g.node.extend([new_node])
-    
     modhelper.delete_value_with_name_if_exists(g, pre_data_node.output[0])
     modhelper.delete_value_with_name_if_exists(g, pre_shape_node.output[0])
 
@@ -387,6 +386,7 @@ def concat_constant_folding(g, node):
     )
     g.node.extend([new_node])
     node_to_del.append(node)
+
     for input_name in node.input:
         modhelper.delete_value_with_name_if_exists(g, input_name)
 
@@ -738,7 +738,6 @@ def mul_constant_folding(g, node):
 
     pre_value_info1 = helper.find_value_by_name(g, node.input[0])
     pre_value_info2 = helper.find_value_by_name(g, node.input[1])
-
     if pre_node_1 is None or pre_node_2 is None:
         return False
 
