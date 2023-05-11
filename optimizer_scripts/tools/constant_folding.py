@@ -739,8 +739,8 @@ def mul_constant_folding(g, node):
     pre_value_info1 = helper.find_value_by_name(g, node.input[0])
     pre_value_info2 = helper.find_value_by_name(g, node.input[1])
 
-    # if pre_value_info1 is None or pre_value_info2 is None:
-    #     return False
+    if pre_node_1 is None or pre_node_2 is None:
+        return False
 
     shape1, data1 = helper.constant_to_list(pre_node_1)
     shape2, data2 = helper.constant_to_list(pre_node_2)
