@@ -1117,7 +1117,6 @@ def fuse_slice_nodes_into_conv(g):
         g.node.append(weight_node)
         g.node.append(new_conv)
 
-
 def fuse_relu_min_into_clip(g):
     node_to_del = []
     for node in g.node:

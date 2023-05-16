@@ -336,7 +336,6 @@ def reshape_constant_input_folding(g, node):
         value=new_tensor
     )
     g.node.extend([new_node])
-
     modhelper.delete_value_with_name_if_exists(g, pre_data_node.output[0])
     modhelper.delete_value_with_name_if_exists(g, pre_shape_node.output[0])
 
@@ -369,7 +368,13 @@ def concat_constant_folding(g, node):
         node_to_del.append(input_node)
 
     concat_data = np.concatenate(input_data, axis=node.attribute[0].i)
+    # change data type according to node_data_type
     node_data_type = input_node.attribute[0].t.data_type
+    if node_data_type in (6, 7):
+        concat_data = np.array(list(map(int, concat_data)))
+    elif node_data_type == onnx.helper.TensorProto.FLOAT:
+        concat_data = np.array(list(map(float, concat_data)))
+
     if concat_data.dtype in [np.int32, np.int64]:
         node_data_type = onnx.helper.TensorProto.INT64
     elif concat_data.dtype in [np.float32, np.float64]:
@@ -735,7 +740,7 @@ def mul_constant_folding(g, node):
 
     pre_value_info1 = helper.find_value_by_name(g, node.input[0])
     pre_value_info2 = helper.find_value_by_name(g, node.input[1])
-    if pre_value_info1 is None or pre_value_info2 is None:
+    if pre_node_1 is None or pre_node_2 is None:
         return False
 
     shape1, data1 = helper.constant_to_list(pre_node_1)
@@ -1410,6 +1415,7 @@ constant_folding_nodes = {
     'Less': Less_constant_folding,
     'MatMul': matmul_constant_folding,
     'Mul': mul_constant_folding,
+    'Neg': neg_constant_folding,
     'NonZero': nonzero_constant_folding,
     'Pow': pow_constant_folding,
     'Range': range_constant_folding,
@@ -1421,9 +1427,8 @@ constant_folding_nodes = {
     'Slice': slice_constant_folding,
     'Sqrt': sqrt_constant_folding,
     'Squeeze': squeeze_constant_folding,
+    'Sub': sub_constant_folding,
     'Transpose': transpose_constant_folding,
     'Unsqueeze': unsqueeze_constant_folding,
-    'Where': where_constant_folding,
-    'Sub': sub_constant_folding,
-    'Neg': neg_constant_folding
+    'Where': where_constant_folding
 }

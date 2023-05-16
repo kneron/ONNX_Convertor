@@ -383,15 +383,21 @@ def inference_pad_shape(g):
         if len(node.input) == 3: # input: data, pads, constant_value
             pads_node = helper.find_node_by_output_name(g, node.input[1])
             data_shape =  helper.get_shape_from_value_name(g, node.input[0])
+            data_node = helper.find_value_by_name(g, node.input[0])
+            if pads_node.op_type != "Constant":
+                continue
+            if pads_node == None or data_shape == None:
+                continue
             _, pads_value = helper.constant_to_list(pads_node)
             shape_value = []
+            
             ndim = len(data_shape)
             for idx, axis_shape in enumerate(data_shape):
                 ns = axis_shape + pads_value[idx] + pads_value[idx+ndim]
                 shape_value.append(ns)
             output_value = onnx.helper.make_tensor_value_info(
                     node.output[0],
-                    onnx.TensorProto.FLOAT,
+                    data_node.type.tensor_type.elem_type,
                     [int(v) for v in shape_value])
             g.value_info.extend([output_value])
             return True
@@ -470,15 +476,19 @@ def inference_add_sub_mul_div_shape(g):
             if input_b_node is not None and input_b_node.op_type != "Constant":
                 continue
             input_b_shape = [1]
+
         output_shape = [None] * max(len(input_a_shape), len(input_b_shape))
-        if len(input_a_shape) == 1:
+
+        if len(input_a_shape) == 1 and len(input_a_shape) < len(input_b_shape):
             input_a_shape = input_b_shape
         elif len(input_a_shape) < len(output_shape):
             input_a_shape = ([1] * (len(output_shape) - len(input_a_shape))) + list(input_a_shape)
-        if len(input_b_shape) == 1:
+
+        if len(input_b_shape) == 1 and len(input_b_shape) < len(input_a_shape):
             input_b_shape = input_a_shape
         elif len(input_b_shape) < len(output_shape):
             input_b_shape = ([1] * (len(output_shape) - len(input_b_shape))) + list(input_b_shape)
+
         for i in range(len(output_shape)):
             output_shape[i] = input_a_shape[i] if input_a_shape[i] != 1 else input_b_shape[i]
         output_value = onnx.helper.make_tensor_value_info(

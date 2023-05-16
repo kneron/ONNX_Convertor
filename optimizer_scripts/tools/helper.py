@@ -114,6 +114,8 @@ def list_to_constant(name, shape, data, data_type=None):
             data_type = onnx.helper.TensorProto.INT64
         elif len(data) > 0 and isinstance(data[0], np.int64):
             data_type = onnx.helper.TensorProto.INT64
+        elif len(data) > 0 and isinstance(data[0], np.int32):
+            data_type = onnx.helper.TensorProto.INT64
         else:
             data_type = onnx.helper.TensorProto.FLOAT
     tensor = onnx.helper.make_tensor(
@@ -166,8 +168,10 @@ def scalar_to_constant(name, data, data_type=None):
     return new_w_node
 
 
-def numpy_to_constant(name, np_array):
-    if np_array.dtype in [np.int32, np.int64]:
+def numpy_to_constant(name, np_array, data_type=None):
+    if data_type is not None:
+        pass
+    elif np_array.dtype in [np.int32, np.int64]:
         data_type = onnx.helper.TensorProto.INT64
     else:
         data_type = None
