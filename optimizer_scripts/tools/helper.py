@@ -169,6 +169,12 @@ def scalar_to_constant(name, data, data_type=None):
 
 
 def numpy_to_constant(name, np_array, data_type=None):
+    if data_type is not None:
+        pass
+    elif np_array.dtype in [np.int32, np.int64]:
+        data_type = onnx.helper.TensorProto.INT64
+    else:
+        data_type = None
     return list_to_constant(name, np_array.shape, np_array.flatten().tolist(), data_type=data_type)
 
 def initializer_to_numpy(tensor):

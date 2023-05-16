@@ -116,7 +116,7 @@ def make_UpsamplingBilinear2d_value_info(g, resize_node_name):
     resize_node = helper.find_node_by_node_name(g, resize_node_name)
 
     shape_data_node = helper.find_node_by_output_name(g, resize_node.input[3])
-    if shape_data_node.op_type != "Constant":
+    if shape_data_node is None or shape_data_node.op_type != "Constant":
         return
     shape_data = helper.constant_to_numpy(shape_data_node).astype(int)
     l_shape_data = list(shape_data)
@@ -136,7 +136,7 @@ def polish_RESIZE_input_param_node(g, resize_node_name):
     resize_node = helper.find_node_by_node_name(g, resize_node_name)
 
     shape_data_node = helper.find_node_by_output_name(g, resize_node.input[3])
-    if shape_data_node.op_type != "Constant":
+    if shape_data_node is None or shape_data_node.op_type != "Constant":
         return
     shape_data = helper.constant_to_numpy(shape_data_node).astype(int)
 

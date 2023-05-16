@@ -458,7 +458,9 @@ def replace_ConstantOfShape_with_constant(g):
             value = helper.initializer_to_numpy(value_attr.t)
 
         node_name = node.output[0]
-        new_node = helper.numpy_to_constant(node_name, np.full(target_shape, value[0]), data_type=value_attr.t.data_type)
+        target_shape = np.array(target_shape)
+        target_shape.dtype = np.int64
+        new_node = helper.numpy_to_constant(node_name, np.full(target_shape, value[0]))
         g.node.extend([new_node])
         
         # remove old node

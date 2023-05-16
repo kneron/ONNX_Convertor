@@ -360,6 +360,8 @@ def concat_constant_folding(g, node):
     for input_name in node.input:
         input_node = helper.find_node_by_output_name(g, input_name)
         s, d = helper.constant_to_list(input_node)
+        if len(d) == 0:
+            continue
         d = np.reshape(d, s)
         input_data.append(d)
         input_shapes.append(s)
