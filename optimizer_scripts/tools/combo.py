@@ -103,6 +103,7 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     eliminating.eliminate_Expand_followed_by_broadcast_nodes(g)
     other.format_value_info_shape(g)
     other.topological_sort(g)
+    replacing.replace_unsupported_float16_constant_nodes(g)
     m = other.inference_shapes_until_complete_all(m)
     g = m.graph
     replacing.replace_split_with_slices(g)
