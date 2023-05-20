@@ -196,6 +196,12 @@ def initializer_to_numpy(tensor):
             data = list(tensor.int64_data)
         else:
             data = [i[0] for i in struct.iter_unpack('q', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.FLOAT16:
+        logger.warning(f"Data type FLOAT16 from {tensor.name} is not fully supported. Treating it as FLOAT32.")
+        if len(tensor.int32_data) != 0:
+            logger.error("Cannot infer FLOAT16 from int32 data")
+        else:
+            data = [i[0] for i in struct.iter_unpack('e', tensor.raw_data)]
     elif tensor.data_type == onnx.helper.TensorProto.FLOAT:
         if len(tensor.float_data) != 0:
             data = list(tensor.float_data)
@@ -264,6 +270,12 @@ def constant_to_list(node):
             data = list(tensor.float_data)
         else:
             data = [i[0] for i in struct.iter_unpack('f', tensor.raw_data)]
+    elif tensor.data_type == onnx.helper.TensorProto.FLOAT16:
+        logger.warning(f"Data type FLOAT16 from {node.name} is not fully supported. Treating it as FLOAT32.")
+        if len(tensor.int32_data) != 0:
+            logger.error("Cannot infer FLOAT16 from int32 data")
+        else:
+            data = [i[0] for i in struct.iter_unpack('e', tensor.raw_data)]
     elif tensor.data_type == onnx.helper.TensorProto.DOUBLE:
         if len(tensor.double_data) != 0:
             data = list(tensor.double_data)
