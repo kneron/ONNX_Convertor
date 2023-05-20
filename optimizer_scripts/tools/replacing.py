@@ -1402,3 +1402,21 @@ def replace_Expand_with_Reshape(g):
         g.node.remove(node)
     # Topological sort
     topological_sort(g)
+
+
+def replace_unsupported_float16_constant_nodes(g):
+    for node in g.node:
+        if node.op_type != 'Constant':
+            continue
+        tensor = node.attribute[0].t
+        if tensor.data_type != onnx.helper.TensorProto.FLOAT16:
+            continue
+        helper.logger.info(f"Data type FLOAT16 from {node.name} is not fully supported. Converting it as FLOAT32.")
+        if len(tensor.int32_data) != 0:
+            helper.logger.error("Cannot infer FLOAT16 from int32 data")
+            exit(1)
+        data = [i[0] for i in struct.iter_unpack('e', tensor.raw_data)]
+        tensor.data_type = onnx.helper.TensorProto.FLOAT
+        tensor.raw_data = struct.pack('f' * len(data), *data)
+        modhelper.delete_value_with_name_if_exists(g, node.output[0])
+
