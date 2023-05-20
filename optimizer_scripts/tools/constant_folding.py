@@ -371,9 +371,9 @@ def concat_constant_folding(g, node):
     # change data type according to node_data_type
     node_data_type = input_node.attribute[0].t.data_type
     if node_data_type in (6, 7):
-        concat_data = np.array(list(map(int, concat_data)))
+        concat_data = np.array(concat_data, dtype=np.int64)
     elif node_data_type == onnx.helper.TensorProto.FLOAT:
-        concat_data = np.array(list(map(float, concat_data)))
+        concat_data = np.array(concat_data, dtype=np.float32)
 
     if concat_data.dtype in [np.int32, np.int64]:
         node_data_type = onnx.helper.TensorProto.INT64
