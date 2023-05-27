@@ -66,8 +66,8 @@ def preprocess(model_proto, disable_fuse_bn=False, duplicate_shared_weights=True
     other.convert_opset12_constants(model_proto.graph)
     defusing.defuse_Einsum(model_proto.graph)
     defusing.defuse_ReduceSum(model_proto.graph)
-    defusing.defuse_div_with_reciprocal_and_mul(model_proto.graph)
     defusing.defuse_Conv3D(model_proto.graph)
+    other.change_input_output_float16_to_float32(model_proto.graph)
     replacing.replace_initializer_with_Constant(model_proto.graph)
     other.topological_sort(model_proto.graph)
     model_proto = onnx.utils.polish_model(model_proto)
@@ -269,6 +269,7 @@ def postprocess(m):
     other.topological_sort(m.graph)
 
     # fuse some nodes
+    defusing.defuse_div_with_reciprocal_and_mul(m.graph)
     fusing.fuse_mul_and_add_into_bn(m.graph)
     m = onnx.utils.polish_model(m)
     fusing.fuse_mul_and_add_into_gemm(m.graph)

@@ -1420,3 +1420,15 @@ def move_4D_to_5D_Reshape(g):
         while True:
             if not swap_reshape_and_following_node(g, reshape_node):
                 break
+
+
+def change_input_output_float16_to_float32(g):
+    def change_value_info_to_float32(value_info):
+        value_info.type.tensor_type.elem_type = onnx.TensorProto.FLOAT
+        helper.logger.warn(f"Changing {value_info.name}'s type to float32.")
+    for input_value in g.input:
+        if input_value.type.tensor_type.elem_type == onnx.TensorProto.FLOAT16:
+            change_value_info_to_float32(input_value)
+    for output_value in g.output:
+        if output_value.type.tensor_type.elem_type == onnx.TensorProto.FLOAT16:
+            change_value_info_to_float32(output_value)

@@ -35,6 +35,7 @@ def constant_folding(g):
     """
     keep_folding = True  # Keep the while loop
     folded = False      # Return value
+    i = 0
     try:
         # Before constant folding, duplicate the constant nodes.
         while keep_folding:
@@ -56,6 +57,7 @@ def constant_folding(g):
                 else:
                     logger.debug(
                         "Constant nodes and %s %s are skipped.", node.op_type, node.name)
+            i += 1
     except Exception as e:
         logger.error("An exception is raised while constant folding.")
         logger.error(traceback.format_exc())
@@ -1304,6 +1306,10 @@ def where_constant_folding(g, node):
     else:
         new_shape = new_data.shape
 
+    if pre_node_1.attribute[0].t.data_type == 1:
+        new_data = new_data.astype('float32')
+    elif pre_node_1.attribute[0].t.data_type == 7:
+        new_data = new_data.astype('int64')
     new_tensor = onnx.helper.make_tensor(
         name=node.output[0]+'_data',
         data_type=pre_node_1.attribute[0].t.data_type,
@@ -1399,6 +1405,60 @@ def reducemax_constant_folding(g, node):
     return True
 
 
+def ScatterND_constant_folding(g, node):
+    """ Fold constant and ScatterND nodes to a single constant node.
+    """
+    node_to_del = []
+    data_node = helper.find_node_by_output_name(g, node.input[0])
+    indices_node = helper.find_node_by_output_name(g, node.input[1])
+    updates_node = helper.find_node_by_output_name(g, node.input[2])
+
+    data_np = helper.constant_to_numpy(data_node)
+    indices_np = helper.constant_to_numpy(indices_node)
+    updates_np = helper.constant_to_numpy(updates_node)
+
+    output_np = np.copy(data_np)
+    update_indices = indices_np.shape[:-1]
+    for idx in np.ndindex(update_indices):
+        output_np[tuple(indices_np[idx])] = updates_np[idx]
+
+    new_node = helper.numpy_to_constant(node.output[0], output_np)
+
+    node_to_del.extend([node, data_node, indices_node, updates_node])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
+    modhelper.delete_value_with_name_if_exists(g, node.input[2])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
+
+def Not_constant_folding(g, node):
+    """ Fold constant and Not nodes to a single constant node.
+    """
+    node_to_del = []
+    data_node = helper.find_node_by_output_name(g, node.input[0])
+    data_np = helper.constant_to_numpy(data_node)
+
+    output_np = np.logical_not(data_np)
+
+    new_node = helper.numpy_to_constant(node.output[0], output_np)
+    node_to_del.extend([node, data_node])
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
 
 # Available constant folding names to function map.
 constant_folding_nodes = {
@@ -1417,6 +1477,7 @@ constant_folding_nodes = {
     'Mul': mul_constant_folding,
     'Neg': neg_constant_folding,
     'NonZero': nonzero_constant_folding,
+    'Not': Not_constant_folding,
     'Pow': pow_constant_folding,
     'Range': range_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
@@ -1424,6 +1485,7 @@ constant_folding_nodes = {
     'ReduceMax': reducemax_constant_folding,
     'Relu': relu_constant_folding,
     'Reshape': reshape_constant_input_folding,
+    'ScatterND': ScatterND_constant_folding,
     'Slice': slice_constant_folding,
     'Sqrt': sqrt_constant_folding,
     'Squeeze': squeeze_constant_folding,
