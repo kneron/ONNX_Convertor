@@ -271,9 +271,14 @@ def eliminate_Cast_after_input(g):
             continue
         next_val_info = helper.find_value_by_name(g, node.output[0])
         shape = helper.get_shape_from_value_info(next_val_info)
+        if node.attribute[0].i == 10:
+            helper.logger.warning("Cast to float16 is not supported. Convert to float32 instead.")
+            target_type = 1
+        else:
+            target_type = node.attribute[0].i
         new_val_info = onnx.helper.make_tensor_value_info(
             next_val_info.name,
-            node.attribute[0].i,
+            target_type,
             shape
         )
         # Delete old value_info
@@ -483,6 +488,8 @@ def eliminate_empty_value_infos(g):
         if value_info.name in skip_values:
             continue
         if len(value_info.type.tensor_type.shape.dim) == 0:
+            to_remove.append(value_info)
+        if value_info.type.tensor_type.elem_type == 10 or value_info.type.tensor_type.elem_type == 0:
             to_remove.append(value_info)
         for dim in value_info.type.tensor_type.shape.dim:
             if dim.dim_value == 0:

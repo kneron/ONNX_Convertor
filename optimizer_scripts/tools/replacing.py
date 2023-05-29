@@ -40,14 +40,18 @@ def replace_initializer_with_Constant(g, duplicate_shared_weights=False):
                 # Add node to lists
                 g.node.extend([new_node])
         else:
-            new_name = tensor.name
-            new_node = onnx.helper.make_node(
-                "Constant",
-                [],
-                [new_name],
-                name=new_name,
-                value=tensor
-            )
+            if tensor.data_type == 10:
+                data_np = helper.initializer_to_numpy(tensor)
+                new_node = helper.numpy_to_constant(tensor.name, data_np)
+            else:
+                new_name = tensor.name
+                new_node = onnx.helper.make_node(
+                    "Constant",
+                    [],
+                    [new_name],
+                    name=new_name,
+                    value=tensor
+                )
             # Add node to lists
             g.node.extend([new_node])
 
@@ -458,8 +462,7 @@ def replace_ConstantOfShape_with_constant(g):
             value = helper.initializer_to_numpy(value_attr.t)
 
         node_name = node.output[0]
-        target_shape = np.array(target_shape)
-        target_shape.dtype = np.int64
+        target_shape = np.array(target_shape, dtype=np.int64)
         new_node = helper.numpy_to_constant(node_name, np.full(target_shape, value[0]))
         g.node.extend([new_node])
         
