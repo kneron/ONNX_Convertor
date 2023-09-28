@@ -1459,6 +1459,48 @@ def Not_constant_folding(g, node):
 
     return True
 
+def Pad_constant_folding(g, node):
+    """ Fold constant and Pad nodes to a single constant node.
+    """
+    node_to_del = []
+    data_node = helper.find_node_by_output_name(g, node.input[0])
+    pads_node = helper.find_node_by_output_name(g, node.input[1])
+    data_np = helper.constant_to_numpy(data_node)
+    pads_np = helper.constant_to_numpy(pads_node)
+
+    # Check attribute mode
+    mode = helper.get_var_attribute_by_name(node, 'mode', 'string')
+    if mode is None:
+        mode = 'constant'
+    # Check if the 3rd input exists for constant value
+    constant_value = None
+    constant_node =None
+    if len(node.input) > 2:
+        constant_node = helper.find_node_by_output_name(g, node.input[2])
+        constant_value = helper.constant_to_numpy(constant_node)
+
+    if mode == "constant" and constant_value is not None:
+        output_np = np.pad(data_np, tuple(pads_np), mode='constant', constant_values=constant_value)
+    else:
+        output_np = np.pad(data_np, tuple(pads_np), mode=mode)
+
+    output_np = output_np.astype(data_np.dtype)
+
+    new_node = helper.numpy_to_constant(node.output[0], output_np)
+    node_to_del.extend([node, data_node, pads_node])
+    if constant_node is not None:
+        node_to_del.append(constant_node)
+    g.node.extend([new_node])
+
+    modhelper.delete_value_with_name_if_exists(g, node.input[0])
+    modhelper.delete_value_with_name_if_exists(g, node.input[1])
+
+    while node_to_del:
+        node = node_to_del.pop()
+        g.node.remove(node)
+
+    return True
+
 
 # Available constant folding names to function map.
 constant_folding_nodes = {
@@ -1478,6 +1520,7 @@ constant_folding_nodes = {
     'Neg': neg_constant_folding,
     'NonZero': nonzero_constant_folding,
     'Not': Not_constant_folding,
+    'Pad': Pad_constant_folding,
     'Pow': pow_constant_folding,
     'Range': range_constant_folding,
     'Reciprocal': reciprocal_constant_folding,
