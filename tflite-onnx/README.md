@@ -91,7 +91,8 @@ We test our script using:
 
 
 ## *Note 1:
-* "./example/example.tflite" and "./onnx_tflite/flatc/flatc" are large file and not necessary. So we let them being tracked with GIT-LFS. You can use 'git lfs pull' to download them.
+* "./example/example.tflite" and "./onnx_tflite/flatc/flatc" are large file and not necessary. So we let them being tracked with GIT-LFS. You can use 'git lfs pull' to download them. Since the limit of lfs transfer size. They will not be available in the master branch. You can checkout the branch 'lfs' to get them.
+    git checkout lfs
 
 ## *Note 2 (convert tensorflow to tflite):
 * Here is the official guide to convert tensorflow model and keras model to tflite:
