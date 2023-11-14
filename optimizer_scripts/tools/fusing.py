@@ -646,6 +646,15 @@ def fuse_mul_and_add_into_bn(g):
         # only allow data input dimension larger than 3
         if previous_node_output_shape is None or len(previous_node_output_shape) < 3:
             continue
+        # only allow input channel dimension matching
+        only_one_valid = True
+        for i in range(len(previous_node_output_shape)):
+            if i == 1:
+                continue
+            if previous_node_output_shape[i] == c_dim:
+                only_one_valid = False
+        if not only_one_valid:
+            continue
 
         # check if mul's dim and input channel dimension are matched
         transpose_perm = None
